@@ -2,11 +2,12 @@ const express = require("express");
 const fs = require("fs");
 const path = require("path");
 const { run, all, get, auth, audit, upload, UPLOAD_DIR } = require("../db");
+const { requirePermission } = require("../middleware/roles");
 
 const router = express.Router();
 
 function canSeeAll(role) {
-  return ["director", "chief_engineer"].includes(role);
+  return ["director", "chief_engineer", "safety"].includes(role);
 }
 
 // ── Asset Events (work-logs) ─────────────────────────────────
@@ -15,12 +16,14 @@ router.get("/work-logs", auth, async (req, res) => {
   const where = canSeeAll(req.user.role) ? "" : "WHERE w.created_by=? OR w.assigned_to=?";
   const params = canSeeAll(req.user.role) ? [] : [req.user.id, req.user.id];
   res.json(await all(`SELECT w.*, u.full_name created_name, a.full_name assigned_name,
-    c.full_name confirmed_name,
+    c.full_name confirmed_name, hp.full_name habea_pre_name, hpo.full_name habea_post_name,
     (SELECT COUNT(*) FROM work_photos p WHERE p.work_log_id=w.id) photo_count
     FROM asset_events w
-    LEFT JOIN users u ON u.id=w.created_by
-    LEFT JOIN users a ON a.id=w.assigned_to
-    LEFT JOIN users c ON c.id=w.confirmed_by
+    LEFT JOIN users u   ON u.id=w.created_by
+    LEFT JOIN users a   ON a.id=w.assigned_to
+    LEFT JOIN users c   ON c.id=w.confirmed_by
+    LEFT JOIN users hp  ON hp.id=w.habea_pre_by
+    LEFT JOIN users hpo ON hpo.id=w.habea_post_by
     ${where}
     ORDER BY w.work_date DESC, w.id DESC`, params));
 });
@@ -44,9 +47,7 @@ router.post("/work-logs", auth, async (req, res) => {
   res.json({ id: r.id });
 });
 
-router.put("/work-logs/:id", auth, async (req, res) => {
-  const canEdit = ["director", "chief_engineer", "engineer", "camera_engineer"].includes(req.user.role);
-  if (!canEdit) return res.status(403).json({ error: "Эрх хүрэхгүй" });
+router.put("/work-logs/:id", auth, requirePermission("operations_write"), async (req, res) => {
   const b = req.body;
   await run(`UPDATE asset_events SET title=?,category=?,department=?,location=?,description=?,
     status=?,progress=?,assigned_to=?,work_date=?,start_date=?,end_date=?,cost_amount=?,
@@ -63,70 +64,187 @@ router.put("/work-logs/:id", auth, async (req, res) => {
 });
 
 // Зөвхөн огноо шинэчлэх (Gantt drag)
-router.patch("/work-logs/:id/dates", auth, async (req, res) => {
-  const canEdit = ["director", "chief_engineer", "engineer", "camera_engineer"].includes(req.user.role);
-  if (!canEdit) return res.status(403).json({ error: "Эрх хүрэхгүй" });
+router.patch("/work-logs/:id/dates", auth, requirePermission("operations_write"), async (req, res) => {
   const { start_date, end_date } = req.body;
   await run("UPDATE asset_events SET start_date=?,end_date=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
     [start_date, end_date, req.params.id]);
   res.json({ ok: true });
 });
 
-router.patch("/executions/:id/dates", auth, async (req, res) => {
-  const canEdit = ["director", "chief_engineer", "engineer", "camera_engineer"].includes(req.user.role);
-  if (!canEdit) return res.status(403).json({ error: "Эрх хүрэхгүй" });
+router.patch("/executions/:id/dates", auth, requirePermission("operations_write"), async (req, res) => {
   const { start_date, end_date } = req.body;
   await run("UPDATE work_executions SET start_date=?,end_date=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
     [start_date, end_date, req.params.id]);
   res.json({ ok: true });
 });
 
-router.delete("/work-logs/:id", auth, async (req, res) => {
-  const canDel = ["director", "chief_engineer"].includes(req.user.role);
-  if (!canDel) return res.status(403).json({ error: "Устгах эрх хүрэхгүй" });
+router.delete("/work-logs/:id", auth, requirePermission("operations_delete"), async (req, res) => {
   await run("DELETE FROM asset_events WHERE id=?", [req.params.id]);
   await audit(req.user.id, "DELETE", "asset_events", req.params.id, "Ажил устгагдсан");
   res.json({ ok: true });
 });
 
-// ── Work completion confirmation ──────────────────────────────
+// ── Submit done (engineer → "Дууссан гэж илгээсэн") ──────────
 
-router.post("/work-logs/:id/confirm", auth, upload.single("confirm_image"), async (req, res) => {
-  const canConfirm = ["director", "chief_engineer"].includes(req.user.role);
-  if (!canConfirm) return res.status(403).json({ error: "Батлах эрх хүрэхгүй" });
+router.post("/work-logs/:id/submit-done", auth, async (req, res) => {
   const row = await get("SELECT * FROM asset_events WHERE id=?", [req.params.id]);
   if (!row) return res.status(404).json({ error: "Олдсонгүй" });
-  if (row.status !== "Дууссан")
-    return res.status(400).json({ error: "Зөвхөн 'Дууссан' ажлыг батлах боломжтой" });
-  const note      = req.body.confirm_note || "";
+  const blocked = ["Дууссан гэж илгээсэн", "Инженер баталсан", "Хаагдсан"];
+  if (blocked.includes(row.status))
+    return res.status(400).json({ error: `Ажил аль хэдийн "${row.status}" төлөвтэй байна` });
+  const note = req.body.note || "";
+  await run(
+    `UPDATE asset_events SET status='Дууссан гэж илгээсэн', progress=100,
+     confirm_status='', reject_note='', updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+    [req.params.id]
+  );
+  await audit(req.user.id, "SUBMIT_DONE", "asset_events", req.params.id, `${row.title}${note?" — "+note:""}`);
+  res.json({ ok: true });
+});
+
+// ── Chief engineer confirmation ───────────────────────────────
+
+router.post("/work-logs/:id/confirm", auth, requirePermission("operations_confirm"), upload.single("confirm_image"), async (req, res) => {
+  const row = await get("SELECT * FROM asset_events WHERE id=?", [req.params.id]);
+  if (!row) return res.status(404).json({ error: "Олдсонгүй" });
+  const allowed = ["Дууссан гэж илгээсэн", "Дууссан"];
+  if (!allowed.includes(row.status))
+    return res.status(400).json({ error: "Зөвхөн илгээгдсэн ажлыг батлах боломжтой" });
+  const note      = (req.body.confirm_note || "").trim();
+  if (!note) return res.status(400).json({ error: "Баталгааны тэмдэглэл заавал бичих шаардлагатай" });
   const image_url = req.file ? `/uploads/${req.file.filename}` : "";
   await run(
-    `UPDATE asset_events SET confirm_status='confirmed', confirmed_by=?, confirmed_at=CURRENT_TIMESTAMP,
+    `UPDATE asset_events SET status='Инженер баталсан', confirm_status='eng_confirmed',
+     confirmed_by=?, confirmed_at=CURRENT_TIMESTAMP,
      confirm_note=?, confirm_image_url=?, reject_note='', updated_at=CURRENT_TIMESTAMP WHERE id=?`,
     [req.user.id, note, image_url, req.params.id]
   );
   await audit(req.user.id, "CONFIRM", "asset_events", req.params.id, `${row.title}${note?" — "+note:""}`);
   const updated = await get(
-    `SELECT w.*, u.full_name confirmed_name
-     FROM asset_events w LEFT JOIN users u ON u.id=w.confirmed_by WHERE w.id=?`,
+    `SELECT w.*, u.full_name confirmed_name FROM asset_events w
+     LEFT JOIN users u ON u.id=w.confirmed_by WHERE w.id=?`,
     [req.params.id]
   );
   res.json(updated);
 });
 
-router.post("/work-logs/:id/reject", auth, async (req, res) => {
-  const canConfirm = ["director", "chief_engineer"].includes(req.user.role);
-  if (!canConfirm) return res.status(403).json({ error: "Буцаах эрх хүрэхгүй" });
+router.post("/work-logs/:id/reject", auth, requirePermission("operations_confirm"), async (req, res) => {
   const { note } = req.body;
   const row = await get("SELECT * FROM asset_events WHERE id=?", [req.params.id]);
   if (!row) return res.status(404).json({ error: "Олдсонгүй" });
   await run(
     `UPDATE asset_events SET confirm_status='rejected', confirmed_by=?, confirmed_at=CURRENT_TIMESTAMP,
-     reject_note=?, status='Явцтай', progress=90, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
-    [req.user.id, note || "Буцаагдсан", req.params.id]
+     reject_note=?, status='Буцаагдсан', progress=90, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+    [req.user.id, note || "Нэмэлт засвар шаардлагатай", req.params.id]
   );
   await audit(req.user.id, "REJECT", "asset_events", req.params.id, `${row.title} — ${note || ""}`);
   res.json({ ok: true });
+});
+
+// ── ХАБЭА pre-work sign-off ───────────────────────────────────
+
+router.post("/work-logs/:id/habea-pre", auth, requirePermission("safety_confirm"), async (req, res) => {
+  const row = await get("SELECT * FROM asset_events WHERE id=?", [req.params.id]);
+  if (!row) return res.status(404).json({ error: "Олдсонгүй" });
+  const { note, risks, measures } = req.body;
+  await run(
+    `UPDATE asset_events SET habea_pre_status='approved', habea_pre_by=?,
+     habea_pre_at=CURRENT_TIMESTAMP, habea_pre_note=?, habea_pre_risks=?,
+     habea_pre_measures=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+    [req.user.id, note || "", risks || "", measures || "", req.params.id]
+  );
+  // Create linked PTW record in safety_reports (once per work order)
+  const existingPtw = await get("SELECT id FROM safety_reports WHERE work_log_id=?", [req.params.id]);
+  if (!existingPtw) {
+    const riskDesc = [risks, note].filter(Boolean).join(" / ");
+    await run(
+      `INSERT INTO safety_reports
+         (report_date, title, risk_type, risk_level, location,
+          risk_description, pre_work_note,
+          probability, consequence_score, risk_score,
+          workflow_status, status, work_log_id, created_by)
+       VALUES(date('now'),?,?,?,?,?,?,3,3,9,?,?,?,?)`,
+      [`PTW — ${row.title}`, "Цахилгааны эрсдэл", "Дунд", row.location || row.title,
+       riskDesc || "", measures || "",
+       "Хэрэгжиж байна", "Батлагдсан", Number(req.params.id), req.user.id]
+    );
+  }
+  await audit(req.user.id, "HABEA_PRE", "asset_events", req.params.id, row.title);
+  res.json({ ok: true });
+});
+
+// ── ХАБЭА post-work approval → "Хаагдсан" ────────────────────
+
+router.post("/work-logs/:id/habea-post", auth, requirePermission("safety_confirm"), async (req, res) => {
+  const row = await get("SELECT * FROM asset_events WHERE id=?", [req.params.id]);
+  if (!row) return res.status(404).json({ error: "Олдсонгүй" });
+  if (row.status !== "Инженер баталсан")
+    return res.status(400).json({ error: "Зөвхөн ерөнхий инженер баталсан ажлыг ХАБЭА батлах боломжтой" });
+  const note = ((req.body.note || "")).trim();
+  if (!note) return res.status(400).json({ error: "Шалгалтын дүгнэлт заавал бичих шаардлагатай" });
+  await run(
+    `UPDATE asset_events SET status='Хаагдсан', habea_post_status='approved',
+     habea_post_by=?, habea_post_at=CURRENT_TIMESTAMP,
+     habea_post_note=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+    [req.user.id, note || "", req.params.id]
+  );
+  // Close the linked PTW record in safety_reports
+  await run(
+    `UPDATE safety_reports SET status='Хаагдсан', workflow_status='Хаасан'
+     WHERE work_log_id=? AND status != 'Хаагдсан'`,
+    [req.params.id]
+  ).catch(() => {});
+  await audit(req.user.id, "HABEA_POST", "asset_events", req.params.id, `${row.title}${note?" — "+note:""}`);
+  res.json({ ok: true });
+});
+
+router.post("/work-logs/:id/habea-post-reject", auth, requirePermission("safety_confirm"), async (req, res) => {
+  const row = await get("SELECT * FROM asset_events WHERE id=?", [req.params.id]);
+  if (!row) return res.status(404).json({ error: "Олдсонгүй" });
+  if (row.status !== "Инженер баталсан")
+    return res.status(400).json({ error: "Зөвхөн ерөнхий инженер баталсан ажлыг буцаах боломжтой" });
+  const { note } = req.body;
+  await run(
+    `UPDATE asset_events SET status='Буцаагдсан', habea_post_status='rejected',
+     habea_post_by=?, habea_post_at=CURRENT_TIMESTAMP,
+     reject_note=?, confirm_status='rejected', updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+    [req.user.id, note || "ХАБЭА буцаасан", req.params.id]
+  );
+  await audit(req.user.id, "HABEA_REJECT", "asset_events", req.params.id, `${row.title} — ${note || ""}`);
+  res.json({ ok: true });
+});
+
+// ── Approval sheet data ───────────────────────────────────────
+
+router.get("/work-logs/:id/approval-sheet", auth, async (req, res) => {
+  const row = await get(
+    `SELECT w.*,
+            u.full_name   created_name,
+            a.full_name   assigned_name,
+            c.full_name   confirmed_name,
+            hp.full_name  habea_pre_name,
+            hpo.full_name habea_post_name,
+            (SELECT COUNT(*) FROM work_photos p WHERE p.work_log_id=w.id) photo_count
+     FROM asset_events w
+     LEFT JOIN users u   ON u.id = w.created_by
+     LEFT JOIN users a   ON a.id = w.assigned_to
+     LEFT JOIN users c   ON c.id = w.confirmed_by
+     LEFT JOIN users hp  ON hp.id = w.habea_pre_by
+     LEFT JOIN users hpo ON hpo.id = w.habea_post_by
+     WHERE w.id = ?`, [req.params.id]);
+  if (!row) return res.status(404).json({ error: "Олдсонгүй" });
+  res.json(row);
+});
+
+// ── Linked PTW records for a work order ──────────────────────
+
+router.get("/work-logs/:id/safety-reports", auth, async (req, res) => {
+  res.json(await all(
+    `SELECT s.*, u.full_name creator_name
+     FROM safety_reports s
+     LEFT JOIN users u ON u.id=s.created_by
+     WHERE s.work_log_id=?
+     ORDER BY s.created_at DESC`, [req.params.id]));
 });
 
 // ── Work Executions ──────────────────────────────────────────
@@ -141,9 +259,7 @@ router.get("/work-logs/:id/executions", auth, async (req, res) => {
     ORDER BY e.start_date ASC, e.id ASC`, [req.params.id]));
 });
 
-router.post("/work-logs/:id/executions", auth, async (req, res) => {
-  const canEdit = ["director", "chief_engineer", "engineer", "camera_engineer"].includes(req.user.role);
-  if (!canEdit) return res.status(403).json({ error: "Эрх хүрэхгүй" });
+router.post("/work-logs/:id/executions", auth, requirePermission("operations_write"), async (req, res) => {
   const b = req.body;
   const r = await run(
     `INSERT INTO work_executions
@@ -183,9 +299,7 @@ router.get("/executions", auth, async (req, res) => {
   res.json(await all(sql, params));
 });
 
-router.put("/executions/:id", auth, async (req, res) => {
-  const canEdit = ["director", "chief_engineer", "engineer", "camera_engineer"].includes(req.user.role);
-  if (!canEdit) return res.status(403).json({ error: "Эрх хүрэхгүй" });
+router.put("/executions/:id", auth, requirePermission("operations_write"), async (req, res) => {
   const b = req.body;
   await run(`UPDATE work_executions SET
     title=?,start_date=?,end_date=?,status=?,progress=?,
@@ -196,9 +310,7 @@ router.put("/executions/:id", auth, async (req, res) => {
   res.json({ ok: true });
 });
 
-router.delete("/executions/:id", auth, async (req, res) => {
-  const canDel = ["director", "chief_engineer"].includes(req.user.role);
-  if (!canDel) return res.status(403).json({ error: "Устгах эрх хүрэхгүй" });
+router.delete("/executions/:id", auth, requirePermission("operations_delete"), async (req, res) => {
   await run("DELETE FROM work_executions WHERE id=?", [req.params.id]);
   await audit(req.user.id, "DELETE", "work_executions", req.params.id, "Гүйцэтгэл устгагдсан");
   res.json({ ok: true });
@@ -227,9 +339,7 @@ router.post("/executions/:id/photos", auth, upload.single("photo"), async (req, 
   res.json({ id: r.id, file_path: relative });
 });
 
-router.delete("/execution-photos/:id", auth, async (req, res) => {
-  const canDel = ["director", "chief_engineer", "engineer", "camera_engineer"].includes(req.user.role);
-  if (!canDel) return res.status(403).json({ error: "Эрх хүрэхгүй" });
+router.delete("/execution-photos/:id", auth, requirePermission("operations_write"), async (req, res) => {
   const photo = await get("SELECT * FROM execution_photos WHERE id=?", [req.params.id]);
   if (photo) {
     fs.unlink(path.join(UPLOAD_DIR, path.basename(photo.file_path)), () => {});

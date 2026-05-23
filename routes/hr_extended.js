@@ -1,4 +1,5 @@
 const express = require("express");
+const crypto = require("crypto");
 const { run, all, get, auth, audit, upload } = require("../db");
 const { requirePermission } = require("../middleware/roles");
 
@@ -237,6 +238,36 @@ router.get("/kpi-evaluations/:id/approver", auth, async (req, res) => {
 });
 
 // ── Surveys ───────────────────────────────────────────────────
+router.get("/public-surveys/:token", async (req, res) => {
+  const token = String(req.params.token || "").trim();
+  const s = await get(
+    "SELECT id,title,description,type,questions,deadline,status,anonymous FROM surveys WHERE public_token=?",
+    [token]
+  );
+  if (!s) return res.status(404).json({ error: "Судалгаа олдсонгүй" });
+  if (s.status !== "Идэвхтэй") return res.status(400).json({ error: "Судалгаа хаагдсан байна" });
+  if (s.deadline && s.deadline < new Date().toISOString().slice(0, 10)) {
+    return res.status(400).json({ error: "Судалгааны хугацаа дууссан байна" });
+  }
+  res.json(s);
+});
+
+router.post("/public-survey-responses", async (req, res) => {
+  const b = req.body || {};
+  const token = String(b.token || "").trim();
+  const s = await get("SELECT id,status,deadline FROM surveys WHERE public_token=?", [token]);
+  if (!s) return res.status(404).json({ error: "Судалгаа олдсонгүй" });
+  if (s.status !== "Идэвхтэй") return res.status(400).json({ error: "Судалгаа хаагдсан байна" });
+  if (s.deadline && s.deadline < new Date().toISOString().slice(0, 10)) {
+    return res.status(400).json({ error: "Судалгааны хугацаа дууссан байна" });
+  }
+  await run(
+    `INSERT INTO survey_responses(survey_id,user_id,answers) VALUES(?,?,?)`,
+    [s.id, null, JSON.stringify(b.answers || {})]
+  );
+  res.json({ ok: true });
+});
+
 router.get("/surveys", auth, async (req, res) => {
   res.json(await all("SELECT * FROM surveys ORDER BY created_at DESC"));
 });
@@ -244,11 +275,11 @@ router.get("/surveys", auth, async (req, res) => {
 router.post("/surveys", auth, requirePermission("hr_write"), async (req, res) => {
   const b = req.body;
   const r = await run(
-    `INSERT INTO surveys(title,description,type,questions,deadline,status,anonymous,created_by)
-     VALUES(?,?,?,?,?,?,?,?)`,
+    `INSERT INTO surveys(title,description,type,questions,deadline,status,anonymous,public_token,created_by)
+     VALUES(?,?,?,?,?,?,?,?,?)`,
     [b.title, b.description||"", b.type||"Сэтгэл ханамж",
      JSON.stringify(b.questions||[]), b.deadline||"",
-     b.status||"Идэвхтэй", b.anonymous?1:0, req.user.id]
+     b.status||"Идэвхтэй", b.anonymous?1:0, crypto.randomBytes(16).toString("hex"), req.user.id]
   );
   await audit(req.user.id, "CREATE", "surveys", r.id, b.title);
   res.json({ id: r.id });
@@ -265,6 +296,16 @@ router.put("/surveys/:id", auth, requirePermission("hr_write"), async (req, res)
   res.json({ ok: true });
 });
 
+router.post("/surveys/:id/public-token", auth, requirePermission("hr_write"), async (req, res) => {
+  const row = await get("SELECT id, public_token FROM surveys WHERE id=?", [req.params.id]);
+  if (!row) return res.status(404).json({ error: "Судалгаа олдсонгүй" });
+  const token = row.public_token || crypto.randomBytes(16).toString("hex");
+  if (!row.public_token) {
+    await run("UPDATE surveys SET public_token=? WHERE id=?", [token, req.params.id]);
+  }
+  res.json({ token });
+});
+
 router.delete("/surveys/:id", auth, requirePermission("hr_write"), async (req, res) => {
   await run("DELETE FROM survey_responses WHERE survey_id=?", [req.params.id]);
   await run("DELETE FROM surveys WHERE id=?", [req.params.id]);
@@ -272,12 +313,13 @@ router.delete("/surveys/:id", auth, requirePermission("hr_write"), async (req, r
 });
 
 router.get("/survey-responses/:surveyId", auth, async (req, res) => {
+  const survey = await get("SELECT anonymous FROM surveys WHERE id=?", [req.params.surveyId]);
   const rows = await all(
     `SELECT sr.*, u.full_name FROM survey_responses sr
      LEFT JOIN users u ON u.id=sr.user_id WHERE sr.survey_id=? ORDER BY sr.submitted_at DESC`,
     [req.params.surveyId]
   );
-  res.json(rows);
+  res.json((survey?.anonymous ? rows.map(r => ({ ...r, full_name: "" })) : rows));
 });
 
 router.get("/survey-responses/:surveyId/mine", auth, async (req, res) => {

@@ -5,17 +5,22 @@ const router = express.Router();
 
 // ── Safety Reports ───────────────────────────────────────────
 
-router.get("/safety-reports", auth, async (_req, res) => {
-  const rows = await all(
-    `SELECT s.*, u.full_name creator_name, a.full_name assigned_name,
-            ack.full_name acknowledged_name
+router.get("/safety-reports", auth, async (req, res) => {
+  const { ref_type, ref_id } = req.query;
+  let sql = `SELECT s.*, u.full_name creator_name, a.full_name assigned_name,
+            ack.full_name acknowledged_name, w.title work_title
      FROM safety_reports s
      LEFT JOIN users u ON u.id = s.created_by
      LEFT JOIN users a ON a.id = s.assigned_to
      LEFT JOIN users ack ON ack.id = s.acknowledged_by
-     ORDER BY s.report_date DESC, s.created_at DESC`
-  );
-  res.json(rows);
+     LEFT JOIN asset_events w ON w.id = s.work_log_id`;
+  const params = [];
+  if (ref_type && ref_id) {
+    sql += " WHERE s.location_ref_type=? AND s.location_ref_id=?";
+    params.push(ref_type, Number(ref_id));
+  }
+  sql += " ORDER BY s.report_date DESC, s.created_at DESC";
+  res.json(await all(sql, params));
 });
 
 router.post("/safety-reports", auth, async (req, res) => {
@@ -23,9 +28,24 @@ router.post("/safety-reports", auth, async (req, res) => {
   if (!b.location)    return res.status(400).json({ error: "Байршил шаардлагатай" });
   if (!b.report_date) return res.status(400).json({ error: "Огноо шаардлагатай" });
 
-  const prob = Number(b.probability) || 1;
-  const cons = Number(b.consequence_score) || 1;
+  const prob  = Number(b.probability) || 1;
+  const cons  = Number(b.consequence_score) || 1;
   const score = prob * cons;
+
+  // Resolve assigned engineer: explicit > asset assigned_to > loc-supplied
+  let assignedTo = b.assigned_to || null;
+  const refType = b.location_ref_type || null;
+  const refId   = Number(b.location_ref_id) || null;
+  if (!assignedTo && refId) {
+    if (refType === 'sl_ger_inventory') {
+      const loc = await get("SELECT assigned_to FROM sl_ger_inventory WHERE id=?", [refId]).catch(()=>null);
+      if (loc?.assigned_to) assignedTo = loc.assigned_to;
+    } else if (refType === 'assets') {
+      const asset = await get("SELECT assigned_to FROM assets WHERE id=?", [refId]).catch(()=>null);
+      if (asset?.assigned_to) assignedTo = asset.assigned_to;
+    }
+  }
+  if (!assignedTo && b._loc_assigned) assignedTo = b._loc_assigned;
 
   const r = await run(
     `INSERT INTO safety_reports
@@ -35,21 +55,23 @@ router.post("/safety-reports", auth, async (req, res) => {
         probability, consequence_score, risk_score,
         workflow_status, deadline, action_note, action_plan,
         priority, gps_lat, gps_lng, status,
-        image_url, before_image_url, after_image_url, created_by)
-     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        image_url, before_image_url, after_image_url,
+        location_ref_type, location_ref_id, created_by)
+     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [b.report_date, b.risk_time || null,
      b.location, b.risk_type || null,
      b.risk_level || riskScoreLevel(score), b.location,
      b.risk_description || null, b.risk_condition || null,
      b.possible_consequence || null, b.pre_work_note || null,
-     b.ppe_checklist || "[]", b.assigned_to || null,
+     b.ppe_checklist || "[]", assignedTo,
      prob, cons, score,
      b.workflow_status || "Шинэ",
      b.deadline || null, b.action_note || null, b.action_plan || null,
      b.priority || "Дунд",
      b.gps_lat || null, b.gps_lng || null,
      b.status || "Нээлттэй",
-     b.image_url || "", b.before_image_url || "", b.after_image_url || "", req.user.id]
+     b.image_url || "", b.before_image_url || "", b.after_image_url || "",
+     refType, refId, req.user.id]
   );
   await audit(req.user.id, "CREATE", "safety_reports", r.id, b.location);
   res.json({ id: r.id });

@@ -5,12 +5,34 @@ const jwt     = require("jsonwebtoken");
 const crypto  = require("crypto");
 const fs      = require("fs");
 const path    = require("path");
+const os      = require("os");
+
+function loadEnvFile() {
+  const envPath = path.join(__dirname, ".env");
+  if (!fs.existsSync(envPath)) return;
+  const lines = fs.readFileSync(envPath, "utf8").split(/\r?\n/);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eq = trimmed.indexOf("=");
+    if (eq < 1) continue;
+    const key = trimmed.slice(0, eq).trim();
+    let val = trimmed.slice(eq + 1).trim();
+    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+      val = val.slice(1, -1);
+    }
+    if (!process.env[key]) process.env[key] = val;
+  }
+}
+
+loadEnvFile();
 
 const APP_PORT   = process.env.PORT       || 4000;
 const JWT_SECRET = process.env.JWT_SECRET || "CHANGE_THIS_SECRET_2026_CHOIBALSAN";
 const UPLOAD_DIR = path.join(__dirname, "uploads");
 const APP_URL    = process.env.APP_URL    || `http://localhost:${APP_PORT}`;
 const EMAIL_FROM = process.env.EMAIL_FROM || '"Чойбалсан хөгжил ERP" <choibalsankhugjil@gmail.com>';
+const ASSISTANT_LOG_RETENTION_DAYS = Math.max(7, Number(process.env.ASSISTANT_LOG_RETENTION_DAYS || 180));
 
 fs.mkdirSync(path.join(__dirname, "data"), { recursive: true });
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -31,8 +53,25 @@ const mailer = (_nm && process.env.SMTP_HOST && process.env.SMTP_USER)
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "20mb" }));
-app.use("/uploads", express.static(UPLOAD_DIR));
+app.use("/uploads", express.static(UPLOAD_DIR, {
+  setHeaders: (res) => {
+    res.setHeader("Content-Disposition", "inline");
+  }
+}));
 app.use(express.static(path.join(__dirname, "public")));
+
+function lanBaseUrl() {
+  if (process.env.APP_URL) return process.env.APP_URL.replace(/\/+$/, "");
+  const nets = os.networkInterfaces();
+  for (const list of Object.values(nets)) {
+    for (const net of list || []) {
+      if (net.family === "IPv4" && !net.internal) {
+        return `http://${net.address}:${APP_PORT}`;
+      }
+    }
+  }
+  return APP_URL.replace(/\/+$/, "");
+}
 
 async function initDb() {
   // ── Legacy renames ────────────────────────────────────────
@@ -64,6 +103,12 @@ async function initDb() {
   await run(`ALTER TABLE users ADD COLUMN contract_type      TEXT DEFAULT 'Байнгын'`).catch(() => {});
   await run(`ALTER TABLE users ADD COLUMN contract_end       TEXT`).catch(() => {});
   await run(`ALTER TABLE users ADD COLUMN salary             REAL DEFAULT 0`).catch(() => {});
+  await run(`ALTER TABLE users ADD COLUMN skill_allowance_rate REAL DEFAULT 0`).catch(() => {});
+  await run(`ALTER TABLE users ADD COLUMN skill_allowance    REAL DEFAULT 0`).catch(() => {});
+  await run(`ALTER TABLE users ADD COLUMN tenure_years       REAL DEFAULT 0`).catch(() => {});
+  await run(`ALTER TABLE users ADD COLUMN tenure_allowance_rate REAL DEFAULT 0`).catch(() => {});
+  await run(`ALTER TABLE users ADD COLUMN tenure_allowance   REAL DEFAULT 0`).catch(() => {});
+  await run(`ALTER TABLE users ADD COLUMN meal_allowance     REAL DEFAULT 0`).catch(() => {});
   await run(`ALTER TABLE users ADD COLUMN status_hr          TEXT DEFAULT 'Идэвхтэй'`).catch(() => {});
   await run(`ALTER TABLE users ADD COLUMN job_category       TEXT DEFAULT 'Захиргааны ажилтан'`).catch(() => {});
   await run(`ALTER TABLE users ADD COLUMN education          TEXT`).catch(() => {});
@@ -72,6 +117,7 @@ async function initDb() {
   await run(`ALTER TABLE users ADD COLUMN nationality        TEXT DEFAULT 'Монгол'`).catch(() => {});
   await run(`ALTER TABLE users ADD COLUMN emergency_contact  TEXT`).catch(() => {});
   await run(`ALTER TABLE users ADD COLUMN permissions        TEXT`).catch(() => {});
+  await run(`ALTER TABLE users ADD COLUMN can_login          INTEGER DEFAULT 1`).catch(() => {});
 
   await run(`CREATE TABLE IF NOT EXISTS hr_history (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -131,6 +177,16 @@ async function initDb() {
   await run(`ALTER TABLE asset_events ADD COLUMN reject_note        TEXT DEFAULT ''`).catch(() => {});
   await run(`ALTER TABLE asset_events ADD COLUMN confirm_note       TEXT DEFAULT ''`).catch(() => {});
   await run(`ALTER TABLE asset_events ADD COLUMN confirm_image_url  TEXT DEFAULT ''`).catch(() => {});
+  await run(`ALTER TABLE asset_events ADD COLUMN habea_pre_status   TEXT DEFAULT ''`).catch(() => {});
+  await run(`ALTER TABLE asset_events ADD COLUMN habea_pre_by       INTEGER`).catch(() => {});
+  await run(`ALTER TABLE asset_events ADD COLUMN habea_pre_at       TEXT`).catch(() => {});
+  await run(`ALTER TABLE asset_events ADD COLUMN habea_pre_note     TEXT DEFAULT ''`).catch(() => {});
+  await run(`ALTER TABLE asset_events ADD COLUMN habea_pre_risks    TEXT DEFAULT ''`).catch(() => {});
+  await run(`ALTER TABLE asset_events ADD COLUMN habea_pre_measures TEXT DEFAULT ''`).catch(() => {});
+  await run(`ALTER TABLE asset_events ADD COLUMN habea_post_status  TEXT DEFAULT ''`).catch(() => {});
+  await run(`ALTER TABLE asset_events ADD COLUMN habea_post_by      INTEGER`).catch(() => {});
+  await run(`ALTER TABLE asset_events ADD COLUMN habea_post_at      TEXT`).catch(() => {});
+  await run(`ALTER TABLE asset_events ADD COLUMN habea_post_note    TEXT DEFAULT ''`).catch(() => {});
 
   await run(`CREATE TABLE IF NOT EXISTS work_executions (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -326,6 +382,9 @@ async function initDb() {
   await run(`ALTER TABLE safety_reports ADD COLUMN action_plan          TEXT`).catch(() => {});
   await run(`ALTER TABLE safety_reports ADD COLUMN before_image_url     TEXT DEFAULT ''`).catch(() => {});
   await run(`ALTER TABLE safety_reports ADD COLUMN after_image_url      TEXT DEFAULT ''`).catch(() => {});
+  await run(`ALTER TABLE safety_reports ADD COLUMN work_log_id          INTEGER`).catch(() => {});
+  await run(`ALTER TABLE safety_reports ADD COLUMN location_ref_type    TEXT`).catch(() => {});
+  await run(`ALTER TABLE safety_reports ADD COLUMN location_ref_id      INTEGER`).catch(() => {});
 
   await run(`CREATE TABLE IF NOT EXISTS safety_comments (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -334,48 +393,6 @@ async function initDb() {
     comment    TEXT NOT NULL,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
   )`).catch(() => {});
-
-  // ── Daily Feed (operational timeline / group log) ────────────
-  await run(`CREATE TABLE IF NOT EXISTS daily_feed (
-    id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id          INTEGER NOT NULL,
-    content          TEXT NOT NULL,
-    image_url        TEXT DEFAULT '',
-    before_image_url TEXT DEFAULT '',
-    status           TEXT DEFAULT '',
-    location         TEXT DEFAULT '',
-    category         TEXT DEFAULT '',
-    feed_date        TEXT NOT NULL,
-    created_at       TEXT DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(user_id) REFERENCES users(id)
-  )`);
-  await run(`ALTER TABLE daily_feed ADD COLUMN before_image_url TEXT DEFAULT ''`).catch(() => {});
-  await run(`ALTER TABLE daily_feed ADD COLUMN status           TEXT DEFAULT ''`).catch(() => {});
-  await run(`ALTER TABLE daily_feed ADD COLUMN location         TEXT DEFAULT ''`).catch(() => {});
-  await run(`ALTER TABLE daily_feed ADD COLUMN category         TEXT DEFAULT ''`).catch(() => {});
-
-  await run(`CREATE TABLE IF NOT EXISTS daily_feed_reactions (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    feed_id    INTEGER NOT NULL,
-    user_id    INTEGER NOT NULL,
-    reaction   TEXT NOT NULL,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(feed_id, user_id, reaction),
-    FOREIGN KEY(feed_id)  REFERENCES daily_feed(id),
-    FOREIGN KEY(user_id)  REFERENCES users(id)
-  )`);
-
-  await run(`CREATE TABLE IF NOT EXISTS shift_logs (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id      INTEGER NOT NULL,
-    shift_date   TEXT NOT NULL,
-    clock_in     TEXT,
-    clock_out    TEXT,
-    summary_json TEXT DEFAULT '{}',
-    created_at   TEXT DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(user_id, shift_date),
-    FOREIGN KEY(user_id) REFERENCES users(id)
-  )`);
 
   // ── Vehicles & Maintenance ─────────────────────────────────
   await run(`CREATE TABLE IF NOT EXISTS vehicles (
@@ -399,6 +416,30 @@ async function initDb() {
     vehicle_id INTEGER NOT NULL,
     insp_date TEXT NOT NULL,
     inspector_id INTEGER,
+    driver_id INTEGER,
+    items_json TEXT DEFAULT '[]',
+    overall_ok INTEGER DEFAULT 1,
+    review_status TEXT DEFAULT 'ХАБЭА хүлээгдэж байна',
+    reviewer_id INTEGER,
+    reviewed_at TEXT,
+    review_note TEXT DEFAULT '',
+    work_permit INTEGER DEFAULT 0,
+    note TEXT DEFAULT '',
+    created_by INTEGER,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  )`);
+  await run(`ALTER TABLE vehicle_daily_inspections ADD COLUMN driver_id INTEGER`).catch(() => {});
+  await run(`ALTER TABLE vehicle_daily_inspections ADD COLUMN review_status TEXT DEFAULT 'ХАБЭА хүлээгдэж байна'`).catch(() => {});
+  await run(`ALTER TABLE vehicle_daily_inspections ADD COLUMN reviewer_id INTEGER`).catch(() => {});
+  await run(`ALTER TABLE vehicle_daily_inspections ADD COLUMN reviewed_at TEXT`).catch(() => {});
+  await run(`ALTER TABLE vehicle_daily_inspections ADD COLUMN review_note TEXT DEFAULT ''`).catch(() => {});
+  await run(`ALTER TABLE vehicle_daily_inspections ADD COLUMN work_permit INTEGER DEFAULT 0`).catch(() => {});
+
+  await run(`CREATE TABLE IF NOT EXISTS vehicle_weekly_inspections (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    vehicle_id INTEGER NOT NULL,
+    week_start TEXT NOT NULL,
+    hse_id INTEGER,
     items_json TEXT DEFAULT '[]',
     overall_ok INTEGER DEFAULT 1,
     note TEXT DEFAULT '',
@@ -415,10 +456,18 @@ async function initDb() {
     engineer_id INTEGER,
     items_json TEXT DEFAULT '[]',
     overall_ok INTEGER DEFAULT 1,
+    approval_status TEXT DEFAULT 'Ерөнхий инженер хүлээгдэж байна',
+    approved_by INTEGER,
+    approved_at TEXT,
+    approval_note TEXT DEFAULT '',
     note TEXT DEFAULT '',
     created_by INTEGER,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
   )`);
+  await run(`ALTER TABLE vehicle_monthly_inspections ADD COLUMN approval_status TEXT DEFAULT 'Ерөнхий инженер хүлээгдэж байна'`).catch(() => {});
+  await run(`ALTER TABLE vehicle_monthly_inspections ADD COLUMN approved_by INTEGER`).catch(() => {});
+  await run(`ALTER TABLE vehicle_monthly_inspections ADD COLUMN approved_at TEXT`).catch(() => {});
+  await run(`ALTER TABLE vehicle_monthly_inspections ADD COLUMN approval_note TEXT DEFAULT ''`).catch(() => {});
 
   await run(`CREATE TABLE IF NOT EXISTS vehicle_repairs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -979,9 +1028,12 @@ async function initDb() {
     deadline    TEXT DEFAULT '',
     status      TEXT DEFAULT 'Идэвхтэй',
     anonymous   INTEGER DEFAULT 1,
+    public_token TEXT,
     created_by  INTEGER,
     created_at  TEXT DEFAULT CURRENT_TIMESTAMP
   )`);
+  await run(`ALTER TABLE surveys ADD COLUMN public_token TEXT`).catch(() => {});
+  await run(`UPDATE surveys SET public_token=lower(hex(randomblob(16))) WHERE public_token IS NULL OR public_token=''`).catch(() => {});
 
   await run(`CREATE TABLE IF NOT EXISTS survey_responses (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1031,6 +1083,35 @@ async function initDb() {
     uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(asset_id)    REFERENCES assets(id),
     FOREIGN KEY(uploaded_by) REFERENCES users(id)
+  )`);
+
+  // ── Улсын үзлэг, тооллого ────────────────────────────────
+  await run(`CREATE TABLE IF NOT EXISTS asset_inventory_sessions (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    title       TEXT NOT NULL,
+    year        INTEGER NOT NULL,
+    start_date  TEXT,
+    end_date    TEXT,
+    status      TEXT DEFAULT 'Явцтай',
+    notes       TEXT DEFAULT '',
+    created_by  INTEGER NOT NULL,
+    created_at  TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(created_by) REFERENCES users(id)
+  )`);
+
+  await run(`CREATE TABLE IF NOT EXISTS asset_inventory_items (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id   INTEGER NOT NULL,
+    ledger_id    INTEGER NOT NULL,
+    inv_status   TEXT DEFAULT 'Хүлээгдэж буй',
+    actual_qty   REAL DEFAULT 1,
+    note         TEXT DEFAULT '',
+    checked_by   INTEGER,
+    checked_at   TEXT,
+    UNIQUE(session_id, ledger_id),
+    FOREIGN KEY(session_id) REFERENCES asset_inventory_sessions(id),
+    FOREIGN KEY(ledger_id)  REFERENCES fixed_assets_ledger(id),
+    FOREIGN KEY(checked_by) REFERENCES users(id)
   )`);
 
   // ── Employee extended profiles ────────────────────────────
@@ -1476,6 +1557,23 @@ async function initDb() {
   )`);
   try { await run("ALTER TABLE sl_faults ADD COLUMN location_type TEXT"); } catch(_) {}
 
+  // Гэрлэн дохионы цагийн нарийвчлалтай төлөвийн журнал
+  await run(`CREATE TABLE IF NOT EXISTS traffic_signal_status_logs (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    asset_id       INTEGER NOT NULL,
+    status         TEXT NOT NULL,
+    started_at     TEXT NOT NULL,
+    ended_at       TEXT,
+    source         TEXT DEFAULT '',
+    evidence_no    TEXT DEFAULT '',
+    notes          TEXT DEFAULT '',
+    recorded_by    INTEGER,
+    created_at     TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at     TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(asset_id)    REFERENCES assets(id),
+    FOREIGN KEY(recorded_by) REFERENCES users(id)
+  )`);
+
   // Гудамжны гэрэлтүүлгийн паспорт баримт (PDF, зураг)
   await run(`CREATE TABLE IF NOT EXISTS sl_point_docs (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1526,6 +1624,121 @@ async function initDb() {
       }
     }
   } catch (_) { /* sl_bills may not have data yet */ }
+
+  // ── AI Туслахын лог ба feedback ───────────────────────────────
+  await run(`CREATE TABLE IF NOT EXISTS assistant_logs (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER,
+    question   TEXT,
+    intent     TEXT,
+    mode       TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id)
+  )`);
+
+  await run(`CREATE TABLE IF NOT EXISTS assistant_feedback (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    log_id     INTEGER,
+    user_id    INTEGER,
+    rating     INTEGER,
+    comment    TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(log_id)  REFERENCES assistant_logs(id),
+    FOREIGN KEY(user_id) REFERENCES users(id)
+  )`);
+  await run(`CREATE INDEX IF NOT EXISTS idx_assistant_logs_created ON assistant_logs(created_at)`).catch(() => {});
+  await run(`DELETE FROM assistant_feedback
+             WHERE id NOT IN (
+               SELECT MAX(id) FROM assistant_feedback
+               WHERE log_id IS NOT NULL AND user_id IS NOT NULL
+               GROUP BY log_id,user_id
+             )`).catch(() => {});
+  await run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_assistant_feedback_once ON assistant_feedback(log_id,user_id)`).catch(() => {});
+
+  await run(`CREATE TABLE IF NOT EXISTS assistant_dev_requests (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id        INTEGER,
+    module         TEXT,
+    request_type   TEXT,
+    severity       TEXT,
+    title          TEXT,
+    description    TEXT,
+    page_url       TEXT,
+    user_agent     TEXT,
+    status         TEXT DEFAULT 'Шинэ',
+    assigned_to    INTEGER,
+    created_at     TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at     TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id)     REFERENCES users(id),
+    FOREIGN KEY(assigned_to) REFERENCES users(id)
+  )`);
+  await run(`CREATE INDEX IF NOT EXISTS idx_assistant_dev_requests_status ON assistant_dev_requests(status,created_at)`).catch(() => {});
+
+  // ── assistant_dev_requests column migrations ──────────────────
+  for (const col of [
+    `ALTER TABLE assistant_dev_requests ADD COLUMN priority TEXT DEFAULT 'medium'`,
+    `ALTER TABLE assistant_dev_requests ADD COLUMN admin_note TEXT`,
+    `ALTER TABLE assistant_dev_requests ADD COLUMN ai_impact TEXT`,
+    `ALTER TABLE assistant_dev_requests ADD COLUMN ai_risk TEXT`,
+    `ALTER TABLE assistant_dev_requests ADD COLUMN ai_effort TEXT`,
+    `ALTER TABLE assistant_dev_requests ADD COLUMN suggested_files TEXT`,
+    `ALTER TABLE assistant_dev_requests ADD COLUMN decision TEXT`,
+    `ALTER TABLE assistant_dev_requests ADD COLUMN closed_at TEXT`,
+  ]) { await run(col).catch(() => {}); }
+
+  // ── Knowledge Base ────────────────────────────────────────────
+  await run(`CREATE TABLE IF NOT EXISTS kb_articles (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    module     TEXT NOT NULL DEFAULT 'general',
+    category   TEXT NOT NULL DEFAULT 'FAQ',
+    title      TEXT NOT NULL,
+    body       TEXT NOT NULL,
+    keywords   TEXT,
+    role_min   TEXT NOT NULL DEFAULT 'worker',
+    active     INTEGER NOT NULL DEFAULT 1,
+    sort_order INTEGER NOT NULL DEFAULT 100,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+  )`);
+  await run(`CREATE VIRTUAL TABLE IF NOT EXISTS kb_fts
+    USING fts5(title, body, keywords, content='kb_articles', content_rowid='id')`).catch(() => {});
+  await run(`CREATE TRIGGER IF NOT EXISTS kb_fts_insert AFTER INSERT ON kb_articles BEGIN
+    INSERT INTO kb_fts(rowid,title,body,keywords) VALUES(new.id,new.title,new.body,COALESCE(new.keywords,''));
+  END`).catch(() => {});
+  await run(`CREATE TRIGGER IF NOT EXISTS kb_fts_delete AFTER DELETE ON kb_articles BEGIN
+    INSERT INTO kb_fts(kb_fts,rowid,title,body,keywords) VALUES('delete',old.id,old.title,old.body,COALESCE(old.keywords,''));
+  END`).catch(() => {});
+  await run(`CREATE TRIGGER IF NOT EXISTS kb_fts_update AFTER UPDATE ON kb_articles BEGIN
+    INSERT INTO kb_fts(kb_fts,rowid,title,body,keywords) VALUES('delete',old.id,old.title,old.body,COALESCE(old.keywords,''));
+    INSERT INTO kb_fts(rowid,title,body,keywords) VALUES(new.id,new.title,new.body,COALESCE(new.keywords,''));
+  END`).catch(() => {});
+  try {
+    const { seedKb } = require("./scripts/seed_kb");
+    await seedKb();
+    await run(`INSERT INTO kb_fts(kb_fts) VALUES('rebuild')`).catch(() => {});
+  } catch (e) {
+    console.error("[kb seed]", e.message);
+  }
+}
+
+async function cleanupAssistantLogs() {
+  const cutoff = `-${ASSISTANT_LOG_RETENTION_DAYS} days`;
+  try {
+    await run(
+      `DELETE FROM assistant_feedback
+       WHERE log_id IN (
+         SELECT id FROM assistant_logs WHERE created_at < datetime('now','localtime',?)
+       )`,
+      [cutoff]
+    );
+    await run(
+      `DELETE FROM assistant_logs
+       WHERE created_at < datetime('now','localtime',?)`,
+      [cutoff]
+    );
+  } catch (e) {
+    console.error("[assistant cleanup]", e.message);
+  }
 }
 
 // ── Request logger ───────────────────────────────────────────
@@ -1542,12 +1755,12 @@ app.post("/api/login", async (req, res) => {
   if (!loginId || !password)
     return res.status(400).json({ error: "Мэдэлэл дутуу байна" });
   const user = await get(
-    "SELECT * FROM users WHERE (LOWER(email)=? OR LOWER(username)=?) AND active=1",
+    "SELECT * FROM users WHERE (LOWER(email)=? OR LOWER(username)=?) AND active=1 AND COALESCE(can_login,1)=1",
     [loginId, loginId]);
   if (!user || !bcrypt.compareSync(password, user.password_hash))
     return res.status(401).json({ error: "И-мэйл эсвэл нууц үг буруу байна" });
   const token = jwt.sign(
-    { id: user.id, username: user.username, role: user.role, full_name: user.full_name },
+    { id: user.id, username: user.username, role: user.role, full_name: user.full_name, permissions: user.permissions || null },
     JWT_SECRET, { expiresIn: "12h" });
   res.json({
     token,
@@ -1561,7 +1774,7 @@ app.post("/api/login", async (req, res) => {
 app.post("/api/forgot-password", async (req, res) => {
   const email = ((req.body.email) || "").trim().toLowerCase();
   if (!email) return res.status(400).json({ error: "И-мэйл хаяг оруулна уу" });
-  const user = await get("SELECT * FROM users WHERE LOWER(email)=? AND active=1", [email]);
+  const user = await get("SELECT * FROM users WHERE LOWER(email)=? AND active=1 AND COALESCE(can_login,1)=1", [email]);
   if (!user) return res.json({ ok: true }); // don't reveal existence
   const token   = crypto.randomBytes(32).toString("hex");
   const expires = new Date(Date.now() + 3_600_000).toISOString();
@@ -1609,6 +1822,10 @@ app.post("/api/reset-password", async (req, res) => {
   res.json({ ok: true });
 });
 
+app.get("/api/public-base-url", (_req, res) => {
+  res.json({ baseUrl: lanBaseUrl() });
+});
+
 // ── Route modules ─────────────────────────────────────────────
 app.use("/api", require("./routes/assets"));
 app.use("/api", require("./routes/operations"));
@@ -1622,9 +1839,9 @@ app.use("/api", require("./routes/admin_hub"));
 app.use("/api", require("./routes/smart_import"));
 app.use("/api", require("./routes/vehicle"));
 app.use("/api", require("./routes/reports"));
+app.use("/api", require("./routes/assistant"));
 app.use("/api", require("./routes/streetlights"));
 app.use("/api", require("./routes/electricity"));
-app.use("/api", require("./routes/timetable"));
 app.use("/api", require("./routes/lighting_schedule"));
 app.use("/api", require("./routes/lora"));
 app.use("/api", require("./routes/hr_extended"));
@@ -1633,6 +1850,8 @@ app.use("/api", require("./routes/hr_extended"));
 app.get("*", (_, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
 
 initDb().then(() => {
+  cleanupAssistantLogs();
+  setInterval(cleanupAssistantLogs, 24 * 60 * 60 * 1000).unref();
   app.listen(APP_PORT, "0.0.0.0", () => {
     console.log(`Choibalsan internal app running: http://0.0.0.0:${APP_PORT}`);
   });

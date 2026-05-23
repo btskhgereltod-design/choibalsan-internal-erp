@@ -43,9 +43,9 @@ let _slHubData = null;
 async function sl_dashboard() {
   main.innerHTML = `<div style="padding:40px;text-align:center;color:#64748b">Ачааллаж байна...</div>`;
 
-  let workLogs=[], faults=[], schedules=[], assetSummary=[], gerInv=[], slPoints=[], gerStats={};
+  let workLogs=[], faults=[], schedules=[], assetSummary=[], gerInv=[], slPoints=[], gerStats={}, safetyRisks=[];
   try {
-    [workLogs, faults, schedules, assetSummary, gerInv, slPoints, gerStats] = await Promise.all([
+    [workLogs, faults, schedules, assetSummary, gerInv, slPoints, gerStats, safetyRisks] = await Promise.all([
       api("/api/work-logs"),
       api("/api/sl-faults"),
       api("/api/light-schedules"),
@@ -53,6 +53,7 @@ async function sl_dashboard() {
       api("/api/sl-ger-inventory").catch(()=>[]),
       api("/api/mp").catch(()=>[]),
       api("/api/sl-ger-stats").catch(()=>({})),
+      api("/api/safety-reports").catch(()=>[]),
     ]);
   } catch(e) { main.innerHTML = `<div class="alert alert-danger">${e.message}</div>`; return; }
 
@@ -67,7 +68,7 @@ async function sl_dashboard() {
   const doneWork   = slWork.filter(w => w.status === "Дууссан");
   const openFaults = faults.filter(f => (f.status||"Нээлттэй") !== "Дууссан");
   const today      = new Date().toISOString().slice(0,10);
-  const todaySched = schedules.filter(s=>s.effective_date<=today).sort((a,b)=>b.effective_date.localeCompare(a.effective_date))[0];
+  const todaySched = schedules.filter(s=>(s.adjusted_date||s.valid_from)<=today).sort((a,b)=>b.valid_from.localeCompare(a.valid_from)||b.id-a.id)[0];
   const gerCount   = {
     "Гэр хорооллын гэрэл": gerStats.ger_locations || gerInv.filter(r=>r.category==="Гэр хороолол").length,
     "Цамхагийн гэрэл":     gerStats.camhag_locations || gerInv.filter(r=>r.category==="Цамхаг").length,
@@ -81,7 +82,16 @@ async function sl_dashboard() {
     { name:"Шит/Самбар",          icon:"⚡", color:"#ef4444", bg:"#fef2f2", fn:"sl_asset_panel",  count: (assetSummary.find(x=>x.category==="Шит/Самбар")||{}).total  || 0 },
   ];
 
-  _slHubData = { slWork, openWork, doneWork, openFaults, todaySched, slPoints, gerInv, gerCount, SL_ASSET_CATS, faults, schedules };
+  // Open risks relevant to the electric engineer: linked to sl_ger_inventory, or electrical type, or all new
+  const slRisks = safetyRisks.filter(r =>
+    (r.workflow_status || 'Шинэ') !== 'Хаасан' && (
+      r.location_ref_type === 'sl_ger_inventory' ||
+      (r.risk_type || '').includes('Цахилгаан') ||
+      (r.workflow_status || 'Шинэ') === 'Шинэ'
+    )
+  );
+
+  _slHubData = { slWork, openWork, doneWork, openFaults, todaySched, slPoints, gerInv, gerCount, SL_ASSET_CATS, faults, schedules, slRisks };
 
   const isFinance = ["director","accountant"].includes(state.me?.role);
   const tab = window._slHubTab || "home";
@@ -91,13 +101,16 @@ async function sl_dashboard() {
     { key:"work",     icon:"📅", label:"Ажлын явц" },
     { key:"faults",   icon:"⚡", label:"Гэмтэл" },
     { key:"points",   icon:"📍", label:"Тоолуур" },
-    { key:"sched",    icon:"🌙", label:"Хуваарь" },
+    { key:"sched",    icon:"🌙", label:"Цаг тохиргоо" },
     { key:"readings", icon:"📊", label:"Уншилт" },
+    { key:"analytics", icon:"📈", label:"Судалгаа" },
     { key:"lora",     icon:"📡", label:"LoRa" },
-    ...(isFinance ? [{ key:"finance", icon:"💰", label:"Санхүү" }] : []),
+    ...(isFinance ? [{ key:"finance", icon:"💰", label:"Цахилгааны төлбөр" }] : []),
   ];
 
-  const totalAssets = SL_ASSET_CATS.reduce((s,c)=>s+c.count, 0);
+  const totalObjects = SL_ASSET_CATS
+    .filter(c => c.name !== "Шит/Самбар")
+    .reduce((s,c)=>s+c.count, 0);
 
   main.innerHTML = `
   <div style="margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
@@ -108,7 +121,7 @@ async function sl_dashboard() {
   </div>
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-bottom:16px">
     ${[
-      { icon:"📦", val:totalAssets,           label:"Нийт хөрөнгө",    bg:"#f8fafc", color:"#475569" },
+      { icon:"📦", val:totalObjects,          label:"Нийт объект",     bg:"#f8fafc", color:"#475569" },
       { icon:"⚡", val:openWork.length,        label:"Нээлттэй ажил",   bg:openWork.length?"#fff7ed":"#f0fdf4",   color:openWork.length?"#c2410c":"#15803d" },
       { icon:"✅", val:doneWork.length,        label:"Дууссан ажил",    bg:"#f0fdf4", color:"#15803d" },
       { icon:"🔧", val:openFaults.length,      label:"Нээлттэй гэмтэл", bg:openFaults.length?"#fee2e2":"#f0fdf4", color:openFaults.length?"#dc2626":"#15803d" },
@@ -135,6 +148,9 @@ async function sl_dashboard() {
 
 async function slHubTab(tab) {
   window._slHubTab = tab;
+  if (tab !== "points") window._pointsEmbedTarget = "";
+  if (tab !== "sched") window._lightingScheduleEmbedTarget = "";
+  if (tab !== "work") window._workEmbedTarget = "";
   const d = _slHubData;
   if (!d) { sl_dashboard(); return; }
 
@@ -151,18 +167,19 @@ async function slHubTab(tab) {
   if (!el) return;
 
   if      (tab === "home")     el.innerHTML = _slTabHome(d);
-  else if (tab === "assets")   el.innerHTML = _slTabAssets(d);
-  else if (tab === "work")     el.innerHTML = _slTabWork(d);
+  else if (tab === "assets")   return slHubAsset("Авто замын гэрэл");
+  else if (tab === "work")     return slHubWork();
   else if (tab === "faults")   el.innerHTML = _slTabFaults(d);
   else if (tab === "points")   await _slTabPoints(el);
-  else if (tab === "sched")    _slTabSched(el, d);
+  else if (tab === "sched")    return slHubLightSched();
   else if (tab === "readings") await _slTabReadings(el);
+  else if (tab === "analytics") await _slTabAnalytics(el);
   else if (tab === "lora")     _slTabLora(el);
   else if (tab === "finance")  await _slTabFinance(el);
 }
 
 function _slTabHome(d) {
-  const { openWork, openFaults, todaySched, slPoints, gerInv, gerCount } = d;
+  const { openWork, openFaults, todaySched, slPoints, gerInv, gerCount, slRisks = [] } = d;
   function wfBadge(s) {
     const cfg = { "Явцтай":"#2563eb","Дууссан":"#16a34a","Хойшлогдсон":"#dc2626","Төлөвлөсөн":"#64748b" };
     const col = cfg[s]||"#64748b";
@@ -213,6 +230,37 @@ function _slTabHome(d) {
       <div class="table-wrap"><table><thead><tr><th>Төрөл</th><th>Байршил</th><th>Асахгүй</th></tr></thead><tbody>${faultRows}</tbody></table></div>
     </div>
   </div>
+  ${slRisks.length ? `
+  <div class="panel" style="margin-bottom:14px;padding:0;border-top:3px solid #ea580c">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #f1f5f9">
+      <div style="font-size:13px;font-weight:700;color:#c2410c">⚠️ Эрсдэл мэдээлэл — ХАБЭА мэдэгдэл</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:11px;padding:2px 10px;border-radius:20px;background:#fff7ed;color:#c2410c;font-weight:700">${slRisks.length} нээлттэй</span>
+        <button onclick="show('safety')" class="btn secondary" style="font-size:11px;padding:4px 10px">Бүгд →</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table><thead><tr>
+        <th>Түвшин</th><th>Байршил</th><th>Эрсдэлийн төрөл</th><th>Огноо</th><th>Мэдэгдсэн</th><th>Workflow</th>
+      </tr></thead><tbody>
+        ${slRisks.slice(0,8).map((r,i) => {
+          const RCOL = {'Маш өндөр':'#dc2626','Өндөр':'#ea580c','Дунд':'#ca8a04','Бага':'#16a34a'};
+          const WFCOL = {'Шинэ':'#2563eb','Танилцсан':'#16a34a','Арга хэмжээ өгсөн':'#ca8a04','Хэрэгжиж байна':'#ea580c','Хаасан':'#374151'};
+          const rc = RCOL[r.risk_level]||'#64748b';
+          const wc = WFCOL[r.workflow_status||'Шинэ']||'#64748b';
+          return `<tr style="background:${i%2?'#fafafa':'#fff'}${(r.workflow_status||'Шинэ')==='Шинэ'?';font-weight:600':''}">
+            <td><span style="font-size:10px;padding:2px 9px;border-radius:20px;background:${rc}18;color:${rc};font-weight:800">${r.risk_level||'—'}</span></td>
+            <td style="font-size:12px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.location||'—'}</td>
+            <td style="font-size:11px;color:#475569">${r.risk_type||'—'}</td>
+            <td style="font-size:11px;color:#64748b;white-space:nowrap">${(r.report_date||'').slice(0,10)}</td>
+            <td style="font-size:11px;color:#64748b">${r.creator_name||'—'}</td>
+            <td><span style="font-size:10px;padding:2px 8px;border-radius:20px;background:${wc}18;color:${wc};font-weight:700">${r.workflow_status||'Шинэ'}</span></td>
+          </tr>`;
+        }).join('')}
+      </tbody></table>
+    </div>
+  </div>` : ''}
+
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
     <div class="panel" style="padding:14px">
       <div style="font-size:12px;font-weight:700;margin-bottom:10px">🌙 Өнөөдрийн хуваарь</div>
@@ -332,76 +380,200 @@ function _slTabFaults(d) {
   </div>`;
 }
 
-async function _slTabPoints(el) {
-  el.innerHTML = `<div style="text-align:center;padding:40px;color:#64748b">Ачааллаж байна...</div>`;
+async function _slTabAnalytics(el) {
+  const year = window._slAnalyticsYear || new Date().getFullYear();
+  el.innerHTML = `<div style="padding:30px;text-align:center;color:#64748b">Судалгаа ачааллаж байна...</div>`;
+  let data;
   try {
-    const rows = await api("/api/mp");
-    const stats = [
-      {label:"Нийт цэг",       bg:"#f8fafc",color:"#475569",val:rows.length},
-      {label:"Баталгаажсан",   bg:"#f0fdf4",color:"#15803d",val:rows.filter(r=>r.verified).length},
-      {label:"Манайх",         bg:"#eff6ff",color:"#2563eb",val:rows.filter(r=>r.owner_status==="OURS"&&r.verified).length},
-      {label:"Баталгаажаагүй", bg:"#fef9c3",color:"#a16207",val:rows.filter(r=>!r.verified).length},
-    ];
-    el.innerHTML = `
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
-      ${stats.map(s=>`<div style="background:${s.bg};border-radius:10px;padding:12px 20px;flex:1;text-align:center">
-        <div style="font-size:22px;font-weight:800;color:${s.color}">${s.val}</div>
-        <div style="font-size:11px;color:#64748b">${s.label}</div>
-      </div>`).join("")}
+    data = await api(`/api/sl-analytics?year=${year}`);
+  } catch(e) {
+    el.innerHTML = `<div class="alert alert-danger">${e.message}</div>`;
+    return;
+  }
+
+  const pct = v => v == null ? "—" : `${Number(v).toFixed(1)}%`;
+  const catColor = c => c==="Авто замын гэрэл"?"#f59e0b":c==="Гэр хорооллын гэрэл"?"#0ea5e9":c==="Цамхагийн гэрэл"?"#8b5cf6":c==="Гэрлэн дохио"?"#10b981":"#64748b";
+  const maxReported = Math.max(1, ...data.months.map(m => m.reported_heads || 0));
+  const maxOpen = Math.max(1, ...data.months.map(m => m.open_heads || 0));
+  const monthRows = data.months.map(m => `
+    <tr>
+      <td style="font-weight:700;white-space:nowrap">${m.label}</td>
+      <td style="text-align:center">${fmt(m.fault_count)}</td>
+      <td style="text-align:center;color:#dc2626;font-weight:800">${fmt(m.reported_heads)}</td>
+      <td style="text-align:center;color:#16a34a;font-weight:800">${fmt(m.repaired_heads)}</td>
+      <td style="text-align:center;color:${m.open_heads ? "#d97706" : "#16a34a"};font-weight:800">${fmt(m.open_heads)}</td>
+      <td style="text-align:center;font-weight:800;color:#2563eb">${pct(m.availability_pct)}</td>
+      <td>
+        <div style="height:8px;background:#f1f5f9;border-radius:999px;overflow:hidden;min-width:160px">
+          <div style="height:100%;width:${Math.min(100, (m.reported_heads || 0) / maxReported * 100)}%;background:#ef4444"></div>
+        </div>
+        <div style="height:8px;background:#f1f5f9;border-radius:999px;overflow:hidden;min-width:160px;margin-top:4px">
+          <div style="height:100%;width:${Math.min(100, (m.open_heads || 0) / maxOpen * 100)}%;background:#f59e0b"></div>
+        </div>
+      </td>
+    </tr>`).join("");
+
+  const catRows = data.by_category.map(r => {
+    const col = catColor(r.category);
+    return `<tr>
+      <td><span style="font-size:11px;padding:3px 9px;border-radius:20px;background:${col}18;color:${col};font-weight:800">${r.category}</span></td>
+      <td style="text-align:center;font-weight:700">${fmt(r.capacity)}</td>
+      <td style="text-align:center;color:#dc2626;font-weight:800">${fmt(r.reported_heads)}</td>
+      <td style="text-align:center;color:#16a34a;font-weight:800">${fmt(r.repaired_heads)}</td>
+      <td style="text-align:center;color:${r.open_heads ? "#d97706" : "#16a34a"};font-weight:800">${fmt(r.open_heads)}</td>
+      <td style="text-align:center;font-weight:800;color:#2563eb">${pct(r.availability_pct)}</td>
+    </tr>`;
+  }).join("");
+
+  el.innerHTML = `
+  <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+    <div>
+      <div style="font-size:16px;font-weight:800;color:#1e293b">📈 Гэмтэл ба асалтын жилийн судалгаа</div>
+      <div style="font-size:12px;color:#64748b;margin-top:3px">Сар бүрийн гэмтэл, засвар, сарын эцсийн асахгүй үлдэгдэл</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input id="slAnalyticsYear" class="input" type="number" min="2020" max="2100" value="${data.year}" style="width:100px;margin:0">
+      <button class="btn" style="padding:8px 14px" onclick="slAnalyticsReload()">Харах</button>
+      <button class="btn secondary" style="padding:8px 14px" onclick="window.print()">Хэвлэх</button>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px">
+    ${[
+      ["Нийт толгой", data.summary.capacity, "#475569", "#f8fafc"],
+      ["Жилд бүртгэсэн", data.summary.reported_heads, "#dc2626", "#fef2f2"],
+      ["Жилд зассан", data.summary.repaired_heads, "#16a34a", "#f0fdf4"],
+      ["Одоо асахгүй", data.summary.open_heads, "#d97706", "#fff7ed"],
+      ["Одоогийн асалт", pct(data.summary.availability_pct), "#2563eb", "#eff6ff"],
+    ].map(c => `<div style="background:${c[3]};border-radius:10px;padding:13px 16px">
+      <div style="font-size:22px;font-weight:800;color:${c[2]};line-height:1.1">${typeof c[1] === "number" ? fmt(c[1]) : c[1]}</div>
+      <div style="font-size:11px;color:#64748b;margin-top:5px;font-weight:700">${c[0]}</div>
+    </div>`).join("")}
+  </div>
+
+  <div style="display:grid;grid-template-columns:minmax(0,1.25fr) minmax(320px,.75fr);gap:14px">
+    <div class="panel">
+      <div style="padding:12px 16px;border-bottom:1px solid #e2e6ed;font-size:13px;font-weight:800">Сарын явц</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Сар</th><th style="text-align:center">Бүртгэл</th><th style="text-align:center">Гэмтсэн</th>
+            <th style="text-align:center">Зассан</th><th style="text-align:center">Үлдсэн</th>
+            <th style="text-align:center">Асалт</th><th>График</th>
+          </tr></thead>
+          <tbody>${monthRows}</tbody>
+        </table>
+      </div>
     </div>
     <div class="panel">
-      <div style="padding:10px 16px;border-bottom:1px solid #e2e6ed;display:flex;align-items:center;justify-content:space-between">
-        <div style="font-size:13px;font-weight:700">📍 Тоолуурын жагсаалт</div>
-        <button class="btn" style="font-size:11px;padding:4px 10px" onclick="sl_points()">Дэлгэрэнгүй →</button>
+      <div style="padding:12px 16px;border-bottom:1px solid #e2e6ed;font-size:13px;font-weight:800">Төрлөөр жилийн дүн</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Төрөл</th><th style="text-align:center">Нийт</th><th style="text-align:center">Гэмтсэн</th><th style="text-align:center">Зассан</th><th style="text-align:center">Одоо</th><th style="text-align:center">Асалт</th></tr></thead>
+          <tbody>${catRows}</tbody>
+        </table>
       </div>
-      <div class="table-wrap" style="max-height:400px;overflow-y:auto">
-        <table><thead><tr><th>Код</th><th>Байршил</th><th>Өмчлөл</th><th>Тоолуур №</th><th>Баталгаа</th></tr></thead>
-        <tbody>${rows.slice(0,60).map((r,i)=>`
-          <tr style="background:${i%2?"#fafafa":"#fff"}">
-            <td style="font-family:monospace;font-size:12px;font-weight:600;color:#2563eb">${r.code||"—"}</td>
-            <td style="font-size:12px">${r.location||"—"}</td>
-            <td>${ownerBadge(r.owner_status)}</td>
-            <td style="font-family:monospace;font-size:11px;color:#64748b">${r.meter_no||"—"}</td>
-            <td style="text-align:center">${r.verified?'<span style="color:#16a34a">✓</span>':'<span style="color:#f59e0b">❓</span>'}</td>
-          </tr>`).join("")}
-        </tbody></table>
-      </div>
-    </div>`;
-  } catch(e) { el.innerHTML = `<div style="color:#dc2626;padding:20px">${e.message}</div>`; }
+    </div>
+  </div>`;
+}
+
+function slAnalyticsReload() {
+  const y = parseInt(document.getElementById("slAnalyticsYear")?.value) || new Date().getFullYear();
+  window._slAnalyticsYear = y;
+  slHubTab("analytics");
+}
+
+async function _slTabPoints(el) {
+  window._pointsEmbedTarget = "slHubContent";
+  await sl_points();
 }
 
 function _slTabSched(el, d) {
-  const { schedules, todaySched } = d;
-  const schedHtml = todaySched
-    ? `<div style="display:flex;gap:14px;margin-bottom:16px">
-        <div style="background:#fef9c3;border-radius:12px;padding:20px;flex:1;text-align:center">
-          <div style="font-size:11px;color:#a16207;font-weight:700;margin-bottom:4px">АСАХ ЦАГ</div>
-          <div style="font-size:36px;font-weight:800;color:#854d0e">${todaySched.on_time||"—"}</div>
+  const { schedules } = d;
+  const today = new Date().toISOString().slice(0,10);
+  const SCHED_CATS = ["Авто замын гэрэл", "Гэр хорооллын гэрэл", "Цамхагийн гэрэл"];
+
+  function effectiveFor(cat) {
+    const catSched = schedules.filter(s => s.category === cat);
+    // Schedule is "current" from the day it was configured (adjusted_date <= today)
+    const current = catSched
+      .filter(s => (s.adjusted_date || s.valid_from) <= today)
+      .sort((a,b) => b.valid_from.localeCompare(a.valid_from) || b.id - a.id)[0];
+    if (current) return { rec: current, upcoming: false };
+    // Nothing configured yet — show nearest future record with ⏳ badge
+    const next = catSched
+      .filter(s => s.valid_from > today)
+      .sort((a,b) => a.valid_from.localeCompare(b.valid_from) || a.id - b.id)[0];
+    return next ? { rec: next, upcoming: true } : null;
+  }
+
+  const catCards = SCHED_CATS.map(cat => {
+    const found = effectiveFor(cat);
+    if (!found) return `
+      <div style="background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px;padding:16px;flex:1;min-width:160px">
+        <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:8px">${cat}</div>
+        <div style="font-size:12px;color:#94a3b8;font-style:italic">Тохиргоо алга</div>
+      </div>`;
+    const { rec: s, upcoming } = found;
+    const upcomingBadge = upcoming
+      ? `<div style="font-size:10px;color:#d97706;font-weight:700;background:#fef9c3;border-radius:20px;padding:1px 8px;display:inline-block;margin-bottom:6px">⏳ ${s.valid_from}-аас хүчинтэй</div>`
+      : "";
+    if (s.is_always_off) return `
+      <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:16px;flex:1;min-width:160px">
+        <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:6px">${cat}</div>
+        ${upcomingBadge}
+        <div style="font-size:18px;font-weight:800;color:#dc2626">🔴 Унтраасан</div>
+        <div style="font-size:10px;color:#94a3b8;margin-top:6px">${s.adjusted_by_name||""}</div>
+      </div>`;
+    const borderColor = upcoming ? "#fde68a" : "#e2e8f0";
+    const bgColor     = upcoming ? "#fffbeb" : "#f8fafc";
+    return `
+      <div style="background:${bgColor};border:1px solid ${borderColor};border-radius:12px;padding:16px;flex:1;min-width:160px">
+        <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:6px">${cat}</div>
+        ${upcomingBadge}
+        <div style="display:flex;gap:10px;align-items:center">
+          <div style="text-align:center">
+            <div style="font-size:10px;color:#a16207;font-weight:700;margin-bottom:2px">АСАХ</div>
+            <div style="font-size:26px;font-weight:800;color:#854d0e;line-height:1">${s.on_time||"—"}</div>
+          </div>
+          <div style="color:#cbd5e1;font-size:18px">–</div>
+          <div style="text-align:center">
+            <div style="font-size:10px;color:#1d4ed8;font-weight:700;margin-bottom:2px">УНТРАХ</div>
+            <div style="font-size:26px;font-weight:800;color:#1e40af;line-height:1">${s.off_time||"—"}</div>
+          </div>
         </div>
-        <div style="background:#eff6ff;border-radius:12px;padding:20px;flex:1;text-align:center">
-          <div style="font-size:11px;color:#1d4ed8;font-weight:700;margin-bottom:4px">УНТРАХ ЦАГ</div>
-          <div style="font-size:36px;font-weight:800;color:#1e40af">${todaySched.off_time||"—"}</div>
-        </div>
-      </div>
-      <div style="font-size:12px;color:#64748b;margin-bottom:16px">${todaySched.name||""} · ${todaySched.effective_date||""}</div>`
-    : `<div style="color:#94a3b8;font-size:13px;padding:20px 0">Цагийн хуваарь тохируулаагүй байна</div>`;
-  const histRows = schedules.slice(0,10).map((s,i)=>`
+        <div style="font-size:10px;color:#94a3b8;margin-top:8px">${s.adjusted_by_name||""}</div>
+      </div>`;
+  }).join("");
+
+  const histRows = schedules.slice(0,20).map((s,i) => `
     <tr style="background:${i%2?"#fafafa":"#fff"}">
-      <td style="font-size:12px;font-weight:600">${s.name||"—"}</td>
-      <td style="font-family:monospace;color:#854d0e;font-weight:700">${s.on_time||"—"}</td>
-      <td style="font-family:monospace;color:#1e40af;font-weight:700">${s.off_time||"—"}</td>
-      <td style="font-size:11px;color:#64748b">${s.effective_date||"—"}</td>
-    </tr>`).join("") || `<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:20px">Хуваарь байхгүй</td></tr>`;
+      <td style="font-size:12px;font-weight:600;color:#334155">${s.category||"—"}</td>
+      <td style="font-family:monospace;font-size:12px;color:#854d0e;font-weight:700">
+        ${s.is_always_off ? `<span style="color:#dc2626">🔴 Унтраасан</span>` : (s.on_time||"—")}
+      </td>
+      <td style="font-family:monospace;font-size:12px;color:#1e40af;font-weight:700">${s.is_always_off?"": (s.off_time||"—")}</td>
+      <td style="font-size:11px;color:#64748b">${s.valid_from||"—"}</td>
+      <td style="font-size:11px;color:#94a3b8">${s.adjusted_by_name||"—"}</td>
+    </tr>`).join("") || `<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:20px">Хуваарь байхгүй</td></tr>`;
+
   el.innerHTML = `
-  <div class="panel" style="margin-bottom:14px;padding:20px">
-    <div style="font-size:14px;font-weight:700;margin-bottom:14px">🌙 Өнөөдрийн хуваарь</div>
-    ${schedHtml}
-    <button class="btn" onclick="sl_light_sched()">Тохиргоо хийх →</button>
+  <div class="panel" style="margin-bottom:14px;overflow:hidden">
+    <div style="padding:18px 20px;border-bottom:1px solid #e2e6ed;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;background:linear-gradient(135deg,#fff7ed,#eff6ff)">
+      <div>
+        <div style="font-size:16px;font-weight:900;color:#0f172a">🌙 Өнөөдрийн хуваарь</div>
+        <div style="font-size:12px;color:#64748b;margin-top:4px">Өдрийн тохиромжтой асаах цаг, ±10 минутын бүс, түүхтэй тохиргооны дэлгэрэнгүй самбар</div>
+      </div>
+      <button class="btn" style="font-size:13px;padding:10px 18px;border-radius:10px;box-shadow:0 8px 18px rgba(37,99,235,.18)" onclick="sl_light_sched()">+ Дахин тааруулах / Timeline харах</button>
+    </div>
+    <div style="padding:20px;display:flex;gap:12px;flex-wrap:wrap">${catCards}</div>
   </div>
   <div class="panel">
     <div style="padding:12px 16px;border-bottom:1px solid #e2e6ed;font-size:13px;font-weight:700">Хуваарийн түүх</div>
     <div class="table-wrap">
-      <table><thead><tr><th>Нэр</th><th>Асах</th><th>Унтрах</th><th>Хүчинтэй</th></tr></thead>
+      <table><thead><tr>
+        <th>Ангилал</th><th>Асах</th><th>Унтрах</th><th>Хүчинтэй</th><th>Тохирч. хүн</th>
+      </tr></thead>
       <tbody>${histRows}</tbody></table>
     </div>
   </div>`;
@@ -496,9 +668,13 @@ async function _slTabFinance(el) {
 
 // ── Meter Points ─────────────────────────────────────────────────
 async function sl_points() {
-  main.innerHTML = `<div class="text-center py-5"><div class="spinner-border text-primary"></div></div>`;
+  const embedTargetId = window._pointsEmbedTarget || "";
+  const renderTarget = embedTargetId ? document.getElementById(embedTargetId) : main;
+  const embedded = !!embedTargetId && !!renderTarget;
+  if (!embedded) window._pointsEmbedTarget = "";
+  renderTarget.innerHTML = `<div class="text-center py-5"><div class="spinner-border text-primary"></div></div>`;
   let rows;
-  try { rows = await api("/api/mp"); } catch(e) { main.innerHTML = `<div class="alert alert-danger">${e.message}</div>`; return; }
+  try { rows = await api("/api/mp"); } catch(e) { renderTarget.innerHTML = `<div class="alert alert-danger">${e.message}</div>`; return; }
 
   // Tab state
   const tab = window._mpTab || "unverified";
@@ -528,7 +704,7 @@ async function sl_points() {
     </button>`;
   }
 
-  main.innerHTML = `
+  renderTarget.innerHTML = `
   <div class="panel">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #e2e6ed;flex-wrap:wrap;gap:8px">
       <div>
@@ -1742,16 +1918,17 @@ async function gerDoAdd() {
 // ГЭМТЭЛ / ЗАСВАРЫН БҮРТГЭЛ
 // ═══════════════════════════════════════════════════════════════
 
-const FAULT_CATS = ["Гэр хорооллын гэрэл", "Авто замын гэрэл", "Цамхагийн гэрэл"];
+const FAULT_CATS = ["Гэр хорооллын гэрэл", "Авто замын гэрэл", "Цамхагийн гэрэл", "Гэрлэн дохио"];
 
 let _faultData = [];       // cached faults
 let _faultLocations = {};  // {cat: [{id, name, total_heads}]}
 
 async function sl_faults() {
-  const [faults, gerInv, slPts] = await Promise.all([
+  const [faults, gerInv, slPts, signals] = await Promise.all([
     api("/api/sl-faults"),
     api("/api/sl-ger-inventory").catch(()=>[]),
     api("/api/sl-points").catch(()=>[]),
+    api("/api/assets?category=Гэрлэн дохио").catch(()=>[]),
   ]);
   _faultData = faults;
   _faultLocations = {
@@ -1764,6 +1941,8 @@ async function sl_faults() {
     "Цамхагийн гэрэл": gerInv
       .filter(r=>r.category==="Цамхаг")
       .map(r=>({ id:r.id, name:r.location_name, total_heads:r.total_count, type:"ger" })),
+    "Гэрлэн дохио": signals
+      .map(r=>({ id:r.id, name:r.name || r.asset_code, total_heads:1, type:"asset" })),
   };
 
   const byStatus = { "Нээлттэй":0, "Засварт":0, "Дууссан":0 };
@@ -2164,6 +2343,7 @@ async function faultDelete(id) {
 
 Object.assign(window, {
   sl_dashboard, slHubTab, sl_points, sl_readings, sl_bills,
+  slAnalyticsReload,
   sl_readings_for,
   sl_points_tab, sl_points_add, sl_points_edit, sl_points_save, sl_points_del,
   sl_points_filter, sl_points_toggle_all, sl_points_select_all, sl_points_deselect,

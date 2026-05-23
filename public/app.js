@@ -1,4 +1,4 @@
-import { state, api, toast } from './modules/common.js';
+import { state, api, toast, initFloatingScrollbar } from './modules/common.js';
 import './modules/dashboard.js';
 import './modules/assets.js';
 import './modules/operations.js';
@@ -13,33 +13,38 @@ import './modules/admin_hub.js';
 import './modules/streetlights.js';
 import './modules/lighting_schedule.js';
 import './modules/lora_monitor.js';
-import { timetable } from './modules/timetable.js';
 import './modules/settings.js';
+import './modules/eng_hub.js';
+import './modules/habea_hub.js';
+import { initErpAssistant } from './modules/assistant.js';
+import { dev_requests } from './modules/dev_requests.js';
+
+const LIGHTING_MENUS = ["sl_dashboard"];
+const FINANCE_MENUS = ["fin_dashboard","cash_journal","payables","receivables","fixed_ledger","payroll","fin_reports"];
+const WAREHOUSE_MENUS = ["nyarav_dash","nyarav_intake","nyarav_issue","nyarav_stock","nyarav_order","nyarav_report"];
+const CAMERA_MENUS = ["camera_assets"];
 
 const roleMenus = {
-  director:       ["dashboard","timetable","assets","attendance","work","hr","safety","plans","reports","report_schedule","audit",
-                   "fin_dashboard","cash_journal","payables","receivables","fixed_ledger","payroll","fin_reports",
-                   "nyarav_dash","nyarav_intake","nyarav_issue","nyarav_stock","nyarav_order","nyarav_report",
-                   "sl_dashboard","settings"],
-  chief_engineer: ["dashboard","timetable","assets","attendance","work","docs","safety","plans","reports",
-                   "nyarav_dash","nyarav_intake","nyarav_issue","nyarav_stock","nyarav_order","nyarav_report",
-                   "sl_dashboard","settings"],
-  engineer:       ["dashboard","timetable","attendance","work","docs","reports","sl_dashboard","settings"],
-  storekeeper:    ["dashboard","timetable","assets","attendance","reports",
-                   "nyarav_dash","nyarav_intake","nyarav_issue","nyarav_stock","nyarav_order","nyarav_report",
-                   "settings"],
-  accountant:     ["dashboard","timetable","attendance","reports","report_schedule",
-                   "fin_dashboard","cash_journal","payables","receivables","fixed_ledger","payroll","fin_reports",
-                   "sl_dashboard","settings"],
-  hr:             ["dashboard","timetable","attendance","hr","reports","report_schedule","payroll","settings"],
-  safety:         ["dashboard","timetable","attendance","hr","safety","reports","settings"],
-  camera_engineer:["dashboard","timetable","assets","attendance","work","docs","reports","settings"],
-  worker:         ["dashboard","timetable","work","settings"]
+  director:       ["eng_hub","habea_hub","dashboard","assets","attendance","work","hr","plans","reports","report_schedule","audit","dev_requests",
+                   ...FINANCE_MENUS, ...WAREHOUSE_MENUS, ...LIGHTING_MENUS, ...CAMERA_MENUS, "settings"],
+  chief_engineer: ["eng_hub","habea_hub","dashboard","assets","attendance","work","docs","plans","reports","dev_requests",
+                   ...WAREHOUSE_MENUS, ...LIGHTING_MENUS, ...CAMERA_MENUS, "settings"],
+  engineer:       ["dashboard","attendance","work","docs","reports", ...LIGHTING_MENUS, "settings"],
+  storekeeper:    ["dashboard","assets","attendance","reports",
+                   ...WAREHOUSE_MENUS, "settings"],
+  accountant:     ["dashboard","attendance","reports","report_schedule",
+                   ...FINANCE_MENUS, ...LIGHTING_MENUS, "settings"],
+  hr:             ["dashboard","attendance","hr","reports","report_schedule","payroll","settings"],
+  safety:         ["habea_hub","dashboard","attendance","hr","reports","settings"],
+  electric:       ["dashboard","attendance","work","reports", ...LIGHTING_MENUS, "settings"],
+  camera_engineer:["dashboard","attendance","work","docs","reports", ...CAMERA_MENUS, "settings"],
+  worker:         ["dashboard","work","settings"]
 };
 
 const menuNames = {
+  eng_hub:       "🔧 Инженерийн самбар",
+  habea_hub:     "🦺 ХАБЭА самбар",
   dashboard:     "📊 Нэгдсэн дэлгэц",
-  timetable:     "📡 Ажлын өдрийн лог",
   assets:        "🏗 Объектийн бүртгэл",
   attendance:    "⏱ Ирц / цагийн бүртгэл",
   work:          "📅 Ажлын явц (Gantt)",
@@ -53,6 +58,7 @@ const menuNames = {
   reports:         "📑 Тайлан",
   report_schedule: "📋 Тайлангийн хуваарь",
   audit:           "🛡 Audit log",
+  dev_requests:    "🛠 ERP хөгжүүлэлт",
   settings:        "⚙️ Тохиргоо",
   // Нягтлан
   fin_dashboard: "💼 Санхүүгийн самбар",
@@ -81,21 +87,23 @@ const menuNames = {
   sl_readings:   "📊 Сарын уншилт",
   sl_bills:      "🧾 Нэхэмжлэл / Харьцуулалт",
   sl_budget:     "📊 Төлөвлөгөө / Гүйцэтгэл",
-  sl_ger_list:   "🏘️ Гэр/цамхаг бүртгэл",
   sl_faults:     "⚡ Гэмтэл / Засварын бүртгэл",
   sl_light_sched: "🌙 Гэрэлтүүлгийн цаг тохиргоо",
-  lora_monitor:   "📡 LoRaWAN хяналтын систем"
+  lora_monitor:   "📡 LoRaWAN хяналтын систем",
+  // Камер
+  camera_assets:  "🎥 Камерын бүртгэл"
 };
 
 const menuGroups = [
   { label: "ХЯНАХ САМБАР",        items: ["dashboard"] },
-  { label: "АЖЛЫН ӨДРИЙН ЛОГ",    items: ["timetable"] },
   { label: "ОБЪЕКТИЙН БҮРТГЭЛ",  items: ["assets"] },
   { label: "ҮЙЛДЛИЙН УДИРДЛАГА", items: ["attendance","work"] },
-  { label: "БАЙГУУЛЛАГА",         items: ["hr","safety","plans","sl_dashboard"] },
-  { label: "САНХҮҮ · НЯГТЛАН",   items: ["fin_dashboard","cash_journal","payables","receivables","fixed_ledger","payroll","fin_reports"] },
-  { label: "САНХҮҮ · НЯРАВ",     items: ["nyarav_dash","nyarav_intake","nyarav_issue","nyarav_stock","nyarav_order","nyarav_report"] },
+  { label: "БАЙГУУЛЛАГА",         items: ["hr","eng_hub","habea_hub","safety","plans","sl_dashboard"] },
+  { label: "КАМЕР",               items: CAMERA_MENUS, collapsed: true },
+  { label: "САНХҮҮ · НЯГТЛАН",   items: FINANCE_MENUS, collapsed: true },
+  { label: "САНХҮҮ · НЯРАВ",     items: WAREHOUSE_MENUS, collapsed: true },
   { label: "ТАЙЛАН & ХЯНАЛТ",    items: ["reports","report_schedule","audit"] },
+  { label: "ERP ХӨГЖҮҮЛЭЛТ",   items: ["dev_requests"] },
   { label: "ТОХИРГОО",    items: ["settings"] },
 ];
 
@@ -304,25 +312,42 @@ async function init() {
     return renderLogin();
   }
   renderShell();
+  initFloatingScrollbar();
+  initErpAssistant();
   show("dashboard");
 }
 
 function renderSidebar(allowedMenus) {
   let html = '<div class="menu">';
-  menuGroups.forEach(({ label, items }) => {
+  menuGroups.forEach(({ label, items, collapsed }, idx) => {
     const visible = items.filter(m => allowedMenus.includes(m));
     if (!visible.length) return;
-    html += `<div class="side-label">${label}</div>`;
+    const isOpen = !collapsed || visible.includes(state.current);
+    const groupId = `side_group_${idx}`;
+    html += collapsed
+      ? `<button type="button" class="side-group-btn ${isOpen ? "open" : ""}" onclick="toggleSideGroup('${groupId}', this)">
+          <span>${label}</span><span class="side-group-count">${visible.length}</span><span class="side-group-caret">▾</span>
+        </button><div id="${groupId}" class="side-group-items" style="display:${isOpen ? "block" : "none"}">`
+      : `<div class="side-label">${label}</div>`;
     visible.forEach(m => {
       const [icon, ...nameParts] = (menuNames[m] || m).split(" ");
       html += `<button onclick="show('${m}')" id="menu_${m}" class="${state.current === m ? 'active' : ''}">
         <span class="menu-icon">${icon}</span>${nameParts.join(" ")}
       </button>`;
     });
+    if (collapsed) html += '</div>';
     html += '<div class="side-divider"></div>';
   });
   html += '</div>';
   return html;
+}
+
+function toggleSideGroup(id, btn) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const open = el.style.display === "none";
+  el.style.display = open ? "block" : "none";
+  btn?.classList.toggle("open", open);
 }
 
 const PERM_TO_MENUS = {
@@ -332,9 +357,8 @@ const PERM_TO_MENUS = {
   operations:   ["work"],
   reports:      ["reports","report_schedule"],
   docs:         ["docs"],
-  streetlights: ["sl_dashboard","sl_asset_road","sl_asset_ger","sl_asset_tower","sl_asset_signal","sl_asset_panel","sl_points","sl_readings","sl_bills","sl_budget","sl_ger_list","sl_faults","sl_light_sched","lora_monitor"],
-  ger_camhag:   ["sl_ger_list"],
-  timetable:    ["timetable"],
+  streetlights: LIGHTING_MENUS,
+  camera:      CAMERA_MENUS,
   lora:         ["lora_monitor"],
   nyagtlan:     ["fin_dashboard","cash_journal","payables","receivables","fixed_ledger","payroll","fin_reports"],
   habea:        ["safety"],
@@ -412,9 +436,8 @@ async function show(m) {
 }
 
 Object.assign(window, {
-  login, logout, renderLogin, show,
-  showForgotPassword, showLoginView, forgotPassword, resetPassword,
-  timetable
+  login, logout, renderLogin, show, toggleSideGroup,
+  showForgotPassword, showLoginView, forgotPassword, resetPassword
 });
 
 init();

@@ -3,10 +3,11 @@ import { state, api, toast, escapeHtml } from './common.js';
 const ROLES = [
   { value: "director",       label: "Захирал" },
   { value: "chief_engineer", label: "Ерөнхий инженер" },
-  { value: "engineer",       label: "Инженер" },
+  { value: "engineer",       label: "Цахилгааны инженер" },
   { value: "accountant",     label: "Нягтлан бодогч" },
   { value: "hr",             label: "Хүний нөөц" },
   { value: "safety",          label: "ХАБЭА ажилтан" },
+  { value: "electric",        label: "Цахилгаанчин" },
   { value: "camera_engineer", label: "Камерийн инженер" },
   { value: "storekeeper",    label: "Нярав" },
   { value: "worker",         label: "Ажилтан" },
@@ -19,11 +20,28 @@ const ROLE_COLORS = {
   accountant:     "#0891b2",
   hr:             "#db2777",
   safety:          "#ea580c",
+  electric:        "#f59e0b",
   camera_engineer: "#0d9488",
   storekeeper:     "#65a30d",
   worker:          "#475569",
 };
 
+const ROLE_HELP = {
+  director:       "Бүх систем, батлах, тохиргоо, устгалын дээд эрх.",
+  chief_engineer: "Ажлын явц, инженерийн модуль, гэрэлтүүлэг, тайлан хянах эрх.",
+  engineer:       "Цахилгааны чиглэлийн ажил, объект, тайлангийн үндсэн хэрэглээ.",
+  accountant:     "Санхүү, нэхэмжлэл, цалин, санхүүгийн тайлан.",
+  hr:             "Ажилчдын бүртгэл, гэрээ, ирц, цалингийн суурь мэдээлэл.",
+  safety:         "ХАБЭА бүртгэл, тээврийн хэрэгсэл, холбогдох тайлан.",
+  electric:       "Гэрэлтүүлэг, цахилгааны засвар, уншилттай холбоотой ажил.",
+  camera_engineer:"Камер, сүлжээ, объект болон ажлын явцын бүртгэл.",
+  storekeeper:    "Агуулах, орлого, зарлага, үлдэгдэл, захиалга.",
+  worker:         "Ердийн ажилтан. Анхдагчаар хязгаарлагдмал харах эрхтэй.",
+};
+
+window._roleSearch = window._roleSearch || "";
+window._roleLoginFilter = window._roleLoginFilter || "login";
+window._roleRoleFilter = window._roleRoleFilter || "";
 let _stab = "org";
 
 async function settings() {
@@ -141,8 +159,7 @@ const PERM_MODULES = [
   { key: "reports",      label: "Тайлан",                         icon: "📊" },
   { key: "docs",         label: "Баримт бичиг",                   icon: "📄" },
   { key: "streetlights", label: "Гудамжны гэрэл",                icon: "💡" },
-  { key: "ger_camhag",   label: "Гэр/цамхаг бүртгэл",           icon: "🏘️" },
-  { key: "timetable",    label: "Гэрэлтүүлгийн цаг тохиргоо",  icon: "🌙" },
+  { key: "camera",       label: "Камер",                         icon: "🎥" },
   { key: "lora",         label: "LoRaWAN хяналт",                icon: "📡" },
   { key: "nyagtlan",     label: "Нягтлан / Нэхэмжлэл",          icon: "💰" },
   { key: "habea",        label: "ХАБЭА",                         icon: "🦺" },
@@ -157,6 +174,23 @@ async function stabRoles() {
 
   const roleLabel = r => ROLES.find(x => x.value === r)?.label || r;
   const roleColor = r => ROLE_COLORS[r] || "#64748b";
+  const canLogin = u => Number(u.can_login) !== 0;
+  const loginUsers = users.filter(canLogin).length;
+  const noLoginUsers = users.length - loginUsers;
+  const customUsers = users.filter(u => {
+    try { return Object.keys(JSON.parse(u.permissions || "{}")).length > 0; }
+    catch { return false; }
+  }).length;
+  const filteredUsers = users.filter(u => {
+    const q = (window._roleSearch || "").trim().toLowerCase();
+    const hay = [u.full_name, u.username, u.email, u.position, u.department, u.role].join(" ").toLowerCase();
+    const matchesSearch = !q || hay.includes(q);
+    const matchesLogin = window._roleLoginFilter === "all"
+      || (window._roleLoginFilter === "login" && canLogin(u))
+      || (window._roleLoginFilter === "nologin" && !canLogin(u));
+    const matchesRole = !window._roleRoleFilter || u.role === window._roleRoleFilter;
+    return matchesSearch && matchesLogin && matchesRole;
+  });
 
   const permSummary = u => {
     try {
@@ -168,13 +202,39 @@ async function stabRoles() {
   };
 
   document.getElementById("stab_content").innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:14px">
+      ${[
+        ["Нийт ажилтан", users.length, "#2563eb", "#eff6ff"],
+        ["Нэвтрэх эрхтэй", loginUsers, "#16a34a", "#f0fdf4"],
+        ["Нэвтрэх эрхгүй", noLoginUsers, "#f97316", "#fff7ed"],
+        ["Тусгай эрхтэй", customUsers, "#7c3aed", "#f5f3ff"],
+      ].map(([l,v,c,bg]) => `
+        <div style="background:${bg};border:1px solid ${c}22;border-radius:10px;padding:12px 14px">
+          <div style="font-size:11px;color:${c};font-weight:800;text-transform:uppercase">${l}</div>
+          <div style="font-size:24px;font-weight:900;color:${c};line-height:1;margin-top:6px">${v}</div>
+        </div>`).join("")}
+    </div>
     <div class="panel" style="padding:0;overflow:hidden">
       <div style="padding:16px 20px;border-bottom:1px solid #e2e6ed;display:flex;align-items:center;justify-content:space-between">
         <div>
           <div style="font-size:14px;font-weight:700">👥 Хэрэглэгчийн эрх удирдлага</div>
-          <div style="font-size:11px;color:#94a3b8;margin-top:2px">Нийт ${users.length} хэрэглэгч</div>
+          <div style="font-size:11px;color:#94a3b8;margin-top:2px">Ажилчдын бүртгэлээс тусдаа зөвхөн нэвтрэх эрх, role, нэмэлт module эрхийг удирдана</div>
         </div>
         ${isDirector ? `<div style="font-size:11px;color:#94a3b8">Эрхийг өөрчилсний дараа хэрэглэгч дахин нэвтрэх шаардлагатай</div>` : ""}
+      </div>
+      <div style="padding:12px 16px;border-bottom:1px solid #eef2f7;display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#fbfdff">
+        <input class="input" value="${escapeHtml(window._roleSearch)}" placeholder="Нэр, нэвтрэх нэр, албан тушаал хайх..."
+          oninput="window._roleSearch=this.value;stabRoles()" style="max-width:320px;margin:0">
+        <select class="input" onchange="window._roleLoginFilter=this.value;stabRoles()" style="width:150px;margin:0">
+          <option value="login" ${window._roleLoginFilter==="login"?"selected":""}>Нэвтрэх эрхтэй</option>
+          <option value="nologin" ${window._roleLoginFilter==="nologin"?"selected":""}>Нэвтрэх эрхгүй</option>
+          <option value="all" ${window._roleLoginFilter==="all"?"selected":""}>Бүгд</option>
+        </select>
+        <select class="input" onchange="window._roleRoleFilter=this.value;stabRoles()" style="width:170px;margin:0">
+          <option value="">Бүх role</option>
+          ${ROLES.map(r => `<option value="${r.value}" ${window._roleRoleFilter===r.value?"selected":""}>${r.label}</option>`).join("")}
+        </select>
+        <div style="margin-left:auto;font-size:12px;color:#94a3b8">${filteredUsers.length} / ${users.length}</div>
       </div>
       <table style="width:100%;border-collapse:collapse;font-size:13px">
         <thead>
@@ -187,7 +247,7 @@ async function stabRoles() {
           </tr>
         </thead>
         <tbody>
-          ${users.map(u => `
+          ${filteredUsers.length ? filteredUsers.map(u => `
             <tr style="border-top:1px solid #f0f2f5;${u.active===0?'opacity:.45':''}">
               <td style="padding:10px 16px">
                 <div style="display:flex;align-items:center;gap:10px">
@@ -196,7 +256,13 @@ async function stabRoles() {
                   </div>
                   <div>
                     <div style="font-weight:600;color:#1e293b">${escapeHtml(u.full_name)}</div>
-                    <div style="font-size:11px;color:#94a3b8">${u.active===0?'<span style="color:#ef4444">Идэвхгүй</span>':'Идэвхтэй'}</div>
+                    <div style="font-size:11px;color:#94a3b8">
+                      ${u.active===0
+                        ? '<span style="color:#ef4444">Идэвхгүй</span>'
+                        : Number(u.can_login) === 0
+                          ? '<span style="color:#f97316">Нэвтрэх эрхгүй</span>'
+                          : 'Нэвтрэх эрхтэй'}
+                    </div>
                   </div>
                 </div>
               </td>
@@ -224,7 +290,8 @@ async function stabRoles() {
                   </div>` : `
                   <span style="font-size:11px;color:#94a3b8">Өөрийн бүртгэл</span>`}
               </td>` : ""}
-            </tr>`).join("")}
+            </tr>`).join("") : `
+            <tr><td colspan="${isDirector ? 5 : 4}" style="padding:28px;text-align:center;color:#94a3b8">Илэрц олдсонгүй</td></tr>`}
         </tbody>
       </table>
     </div>
@@ -247,12 +314,22 @@ async function stabRoles() {
           <!-- Role -->
           <div style="margin-bottom:18px;padding:14px 16px;background:#f8f9fb;border-radius:10px;border:1px solid #e2e6ed">
             <div style="font-size:12px;font-weight:700;color:#344054;margin-bottom:8px">🎖️ Үндсэн эрх (Role)</div>
-            <select id="permRoleSelect" class="input" style="font-size:13px;max-width:260px">
+            <select id="permRoleSelect" class="input" onchange="permSyncRoleHelp()" style="font-size:13px;max-width:260px">
               ${ROLES.map(r => `<option value="${r.value}">${r.label}</option>`).join("")}
             </select>
+            <div id="permRoleHelp" style="font-size:11px;color:#64748b;margin-top:8px"></div>
           </div>
 
+          <label style="margin-bottom:18px;padding:12px 14px;border:1px solid #e2e8f0;border-radius:10px;display:flex;align-items:flex-start;gap:10px;cursor:pointer">
+            <input type="checkbox" id="permCanLogin" onchange="permSyncLoginControls()" style="width:18px;height:18px;margin-top:1px;accent-color:#2563eb">
+            <span>
+              <span style="display:block;font-size:12px;font-weight:800;color:#344054">Системд нэвтрэх эрхтэй</span>
+              <span style="display:block;font-size:11px;color:#64748b;margin-top:2px">Унтраалттай бол ажилтны бүртгэл хэвээр үлдэнэ, гэхдээ login хийж чадахгүй.</span>
+            </span>
+          </label>
+
           <!-- Module permissions -->
+          <div id="permModuleBlock">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
             <div style="font-size:12px;font-weight:700;color:#344054">📋 Хэсэг тус бүрийн эрх</div>
             <div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -292,6 +369,8 @@ async function stabRoles() {
               </tbody>
             </table>
           </div>
+          <div style="font-size:11px;color:#64748b;margin-top:8px">Анхаарах: үндсэн role-ийн эрх дээр нэмэлт module эрх нэмж ажиллана. Role-оор өгөгдсөн үндсэн эрхийг эндээс хасахгүй.</div>
+          </div>
         </div>
 
         <div style="padding:14px 24px;border-top:1px solid #e2e6ed;display:flex;gap:10px">
@@ -311,6 +390,21 @@ async function stabRoles() {
     row.style.background = edit ? "#f0fdf4" : view ? "#eff6ff" : "";
   };
 
+  window.permSyncRoleHelp = () => {
+    const role = document.getElementById("permRoleSelect")?.value;
+    const help = document.getElementById("permRoleHelp");
+    if (help) help.textContent = ROLE_HELP[role] || "";
+  };
+
+  window.permSyncLoginControls = () => {
+    const enabled = document.getElementById("permCanLogin")?.checked;
+    const block = document.getElementById("permModuleBlock");
+    if (block) {
+      block.style.opacity = enabled ? "1" : ".45";
+      block.style.pointerEvents = enabled ? "auto" : "none";
+    }
+  };
+
   window.openPermModal = (userId) => {
     const u = users.find(x => x.id === userId);
     if (!u) return;
@@ -318,6 +412,10 @@ async function stabRoles() {
     document.getElementById("permModalTitle").textContent = `⚙️ Эрх тохируулах — ${u.full_name}`;
     const roleSelect = document.getElementById("permRoleSelect");
     if (roleSelect) roleSelect.value = u.role;
+    const canLogin = document.getElementById("permCanLogin");
+    if (canLogin) canLogin.checked = Number(u.can_login) !== 0;
+    permSyncRoleHelp();
+    permSyncLoginControls();
 
     let perms = {};
     try { perms = JSON.parse(u.permissions || "{}"); } catch(e) {}
@@ -357,13 +455,16 @@ async function stabRoles() {
     const u = users.find(x => x.id === _permUserId);
     if (!u) return;
     const newRole = document.getElementById("permRoleSelect")?.value || u.role;
+    const allowLogin = document.getElementById("permCanLogin")?.checked || false;
 
     const perms = {};
-    PERM_MODULES.forEach(m => {
-      const view = document.getElementById(`perm_view_${m.key}`)?.checked || false;
-      const edit = document.getElementById(`perm_edit_${m.key}`)?.checked || false;
-      if (view || edit) perms[m.key] = { view, edit };
-    });
+    if (allowLogin) {
+      PERM_MODULES.forEach(m => {
+        const view = document.getElementById(`perm_view_${m.key}`)?.checked || false;
+        const edit = document.getElementById(`perm_edit_${m.key}`)?.checked || false;
+        if (view || edit) perms[m.key] = { view, edit };
+      });
+    }
 
     try {
       await api(`/api/users/${_permUserId}`, {
@@ -378,6 +479,7 @@ async function stabRoles() {
           department:  u.department  || "",
           email:       u.email       || null,
           active:      u.active !== 0,
+          can_login:   allowLogin,
           permissions: JSON.stringify(perms),
         })
       });

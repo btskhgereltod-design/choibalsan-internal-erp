@@ -64,7 +64,7 @@ export async function hr() {
       <option value="director">Захирал</option>
       <option value="hr">Хүний нөөц</option>
       <option value="chief_engineer">Ерөнхий инженер</option>
-      <option value="engineer">Инженер</option>
+      <option value="engineer">Цахилгааны инженер</option>
       <option value="accountant">Нягтлан</option>
       <option value="safety">ХАБЭА</option>
       <option value="storekeeper">Нярав</option>      

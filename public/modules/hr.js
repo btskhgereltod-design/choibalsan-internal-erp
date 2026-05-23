@@ -1448,7 +1448,7 @@ async function hr() {
       ${[
         ["employees","👤","Хүний нөөц"],
         ["docs","📋","Гэрээ / Баримт"],
-        ["nd","🏦","НД тооцоо"],
+        ["nd","🏦","Цалингийн тооцоо"],
         ["reports","📊","Тайлан"],
       ].map(([k,ic,l])=>`
         <button onclick="hrSwTab('${k}')" id="hrtab_${k}"
@@ -1714,6 +1714,19 @@ function hrOpenForm(userId) {
             <input class="input" id="hf_salary" type="number" value="${u.salary||""}"></div>
         </div>
         <div class="row">
+          <div><div class="small muted">Ур чадварын нэмэгдэл (%)</div>
+            <input class="input" id="hf_skill_allowance_rate" type="number" min="0" max="25" step="1" value="${u.skill_allowance_rate ? Math.floor(Number(u.skill_allowance_rate)) : ""}" placeholder="0 - 25"></div>
+          <div><div class="small muted">Ажилласан жил</div>
+            <input class="input" id="hf_tenure_years" type="number" min="0" step="1" value="${u.tenure_years ? Math.floor(Number(u.tenure_years)) : ""}" placeholder="Жилээр"></div>
+        </div>
+        <div class="row">
+          <div><div class="small muted">Хоолны мөнгө</div>
+            <div style="padding:8px 12px;border:1px solid #e2e6ed;border-radius:8px;background:#f8f9fb;font-size:12px;color:#64748b">
+              Цалингийн тооцоо хэсэгт ажилласан хоногоор автоматаар бодогдоно
+            </div></div>
+          <div></div>
+        </div>
+        <div class="row">
           <div><div class="small muted">Гэрээний төрөл</div>
             <select class="input" id="hf_ctype" onchange="hrContractChg()">
               ${HR_CONTRACT_TYPES.map(t=>`<option ${(u.contract_type||"Байнгын")===t?"selected":""}>${t}</option>`).join("")}
@@ -1722,10 +1735,8 @@ function hrOpenForm(userId) {
             <input class="input" id="hf_cend" type="date" value="${u.contract_end||""}"></div>
         </div>
         ${isNew ? `
-        <div class="row">
-          <div><div class="small muted">Нууц үг *</div>
-            <input class="input" id="hf_pass" type="password" placeholder="8+ тэмдэгт"></div>
-          <div></div>
+        <div style="padding:10px 12px;border:1px solid #dbeafe;border-radius:8px;background:#eff6ff;font-size:12px;color:#1d4ed8">
+          Энэ хэсгээс зөвхөн ажилтны бүртгэл үүснэ. Системд нэвтрэх эрхийг Тохиргоо → Хэрэглэгчийн эрх хэсгээс тусад нь олгоно.
         </div>` : ""}
       </div>
 
@@ -1757,6 +1768,11 @@ async function hrSaveEmp() {
   const email = document.getElementById("hf_email")?.value.trim();
   if (!name)  { toast("Нэр шаардлагатай"); return; }
   if (!email) { toast("И-мэйл шаардлагатай"); return; }
+  const skillRate = Math.floor(Number(document.getElementById("hf_skill_allowance_rate")?.value || 0));
+  if (skillRate < 0 || skillRate > 25) { toast("Ур чадварын нэмэгдлийн хувь 0-25 хооронд байх ёстой"); return; }
+  const tenureYears = Math.floor(Number(document.getElementById("hf_tenure_years")?.value || 0));
+  if (tenureYears < 0) { toast("Ажилласан жил 0-ээс бага байж болохгүй"); return; }
+  const tenureRate = hrTenureAllowanceRate(tenureYears);
 
   const body = {
     full_name:         name,
@@ -1771,6 +1787,12 @@ async function hrSaveEmp() {
     education:         document.getElementById("hf_edu")?.value || null,
     hire_date:         document.getElementById("hf_hire")?.value || null,
     salary:            Number(document.getElementById("hf_salary")?.value || 0),
+    skill_allowance_rate: skillRate,
+    skill_allowance:   Number(document.getElementById("hf_salary")?.value || 0) * skillRate / 100,
+    tenure_years:      tenureYears,
+    tenure_allowance_rate: tenureRate,
+    tenure_allowance:  Number(document.getElementById("hf_salary")?.value || 0) * tenureRate / 100,
+    meal_allowance:    Number(_hrUsers?.find(x=>x.id===editingEmployeeId)?.meal_allowance || 0),
     contract_type:     document.getElementById("hf_ctype")?.value,
     contract_end:      document.getElementById("hf_cend")?.value || null,
     status_hr:         document.getElementById("hf_status")?.value
@@ -1780,9 +1802,7 @@ async function hrSaveEmp() {
     await api(`/api/users/${editingEmployeeId}/hr`, { method: "PUT", body: JSON.stringify(body) });
     toast("Мэдээлэл шинэчлэгдлээ");
   } else {
-    const pass = document.getElementById("hf_pass")?.value;
-    if (!pass || pass.length < 8) { toast("Нууц үг хамгийн багадаа 8 тэмдэгт байх ёстой"); return; }
-    body.password = pass;
+    body.can_login = false;
     await api("/api/users", { method: "POST", body: JSON.stringify(body) });
     toast("Ажилтан нэмэгдлээ");
   }
@@ -1876,6 +1896,10 @@ async function hrLoadProfTab() {
         ["Ажилд орсон", u.hire_date],
         ["Ажилсан хугацаа", tenureTxt(u.hire_date)],
         ["Цалин", u.salary ? Number(u.salary).toLocaleString()+"₮" : "—"],
+        ["Ур чадварын нэмэгдэл", u.skill_allowance ? `${Number(u.skill_allowance).toLocaleString()}₮ (${Number(u.skill_allowance_rate||0)}%)` : "—"],
+        ["Ажилласан жилийн нэмэгдэл", u.tenure_allowance ? `${Number(u.tenure_allowance).toLocaleString()}₮ (${Number(u.tenure_allowance_rate||0)}%)` : "—"],
+        ["Хоолны нэмэгдэл", u.meal_allowance ? Number(u.meal_allowance).toLocaleString()+"₮" : "—"],
+        ["НД тооцох дүн", (Number(u.salary||0)+Number(u.skill_allowance||0)+Number(u.tenure_allowance||0)+Number(u.meal_allowance||0)) ? (Number(u.salary||0)+Number(u.skill_allowance||0)+Number(u.tenure_allowance||0)+Number(u.meal_allowance||0)).toLocaleString()+"₮" : "—"],
         ["Гэрээний төрөл", u.contract_type],
         ["Гэрээ дуусах", u.contract_end || "—"],
         ["Статус", hrStatusBadge(u.status_hr||"Идэвхтэй")],
@@ -2063,7 +2087,8 @@ function hdRenderEmployment(cont) {
           <span style="color:#dc2626;font-weight:600">${contractWarnDays(u.contract_end)}х хоног · ${u.contract_end}</span>
         </div>`).join("")}
     </div>` : ""}
-    <table style="width:100%;border-collapse:collapse;font-size:13px">
+    <div style="overflow-x:auto">
+    <table style="width:100%;min-width:980px;border-collapse:collapse;font-size:13px">
       <thead>
         <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0">
           <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#475569">АЖИЛТАН</th>
@@ -2071,7 +2096,7 @@ function hdRenderEmployment(cont) {
           <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#475569">ЭХЭЛСЭН</th>
           <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#475569">ДУУСАХ</th>
           <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#475569">СТАТУС</th>
-          <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#475569"></th>
+          <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#475569">ҮЙЛДЭЛ</th>
         </tr>
       </thead>
       <tbody>
@@ -2096,12 +2121,14 @@ function hdRenderEmployment(cont) {
               ${u.contract_end || (u.contract_type==="Байнгын"?"Байнгын":"—")}
             </td>
             <td style="padding:11px 12px">${hrStatusBadge(u.status_hr||"Идэвхтэй")}</td>
-            <td style="padding:11px 12px;white-space:nowrap;display:flex;gap:4px;align-items:center">
-              ${u.contract_scan_url ? `<button class="btn secondary sm" title="Гэрээ харах" onclick="hdViewContractScan('${u.contract_scan_url}','${escapeHtml(u.full_name)}')">📄 Харах</button>` : ""}
+            <td style="padding:11px 12px;white-space:nowrap;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+              ${u.contract_scan_url ? `
+                <span style="padding:3px 8px;border-radius:999px;background:#dcfce7;color:#15803d;font-size:11px;font-weight:700">Скантай</span>
+                <button class="btn secondary sm" title="Оруулсан гэрээний скан харах" onclick="hdViewContractScan('${u.contract_scan_url}','${escapeHtml(u.full_name)}')">📄 Скан харах</button>` : ""}
               ${canEdit ? `
-              <button class="btn secondary sm" title="Скан оруулах" onclick="hdUploadEmploymentScan(${u.id},'${escapeHtml(u.full_name)}')">📎</button>
-              <button class="btn secondary sm" onclick="hrOpenForm(${u.id})">✏</button>
-              <button class="btn secondary sm" style="color:#dc2626" onclick="hrDeleteEmployee(${u.id},'${escapeHtml(u.full_name)}')">🗑</button>` : ""}
+              <button class="btn secondary sm" title="Хөдөлмөрийн гэрээний скан оруулах эсвэл солих" onclick="hdUploadEmploymentScan(${u.id},'${escapeHtml(u.full_name)}','${u.contract_scan_url || ""}')">📎 ${u.contract_scan_url ? "Скан солих" : "Скан оруулах"}</button>
+              <button class="btn secondary sm" title="Ажилтны мэдээлэл засах" onclick="hrOpenForm(${u.id})">✏ Засах</button>
+              <button class="btn secondary sm" title="Ажилтан устгах" style="color:#dc2626" onclick="hrDeleteEmployee(${u.id},'${escapeHtml(u.full_name)}')">🗑 Устгах</button>` : ""}
             </td>
           </tr>`;
         }).join("")}
@@ -2154,7 +2181,7 @@ async function hdRenderOrgContracts(cont, type) {
           <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#475569">ЭХЭЛСЭН</th>
           <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#475569">ДУУСАХ</th>
           <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#475569">СТАТУС</th>
-          <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#475569"></th>
+          <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#475569">ҮЙЛДЭЛ</th>
         </tr>
       </thead>
       <tbody>
@@ -2177,12 +2204,12 @@ async function hdRenderOrgContracts(cont, type) {
                            background:${r.status==="Хүчинтэй"?"#dcfce7":r.status==="Хэлэлцэж байна"?"#fff7ed":"#f1f5f9"};
                            color:${statusColor}">${r.status||"Хүчинтэй"}</span>
             </td>
-            <td style="padding:10px 12px;white-space:nowrap;display:flex;gap:4px;align-items:center">
+            <td style="padding:10px 12px;white-space:nowrap;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
               <button class="btn secondary sm" onclick="hdViewContract(${r.id})">👁 Харах</button>
-              <button class="btn secondary sm" title="Скан файлууд" onclick="hdUploadContractScan(${r.id},'${escapeHtml(r.title)}')">📎 Скан</button>
+              <button class="btn secondary sm" title="Скан файл харах, нэмэх, устгах" onclick="hdUploadContractScan(${r.id},'${escapeHtml(r.title)}')">📎 Скан файлууд</button>
               ${canEdit ? `
-              <button class="btn secondary sm" onclick="hdEditContract(${r.id})">✏</button>
-              <button class="btn secondary sm" style="color:#dc2626" onclick="hdDeleteContract(${r.id},'${escapeHtml(r.title)}')">🗑</button>` : ""}
+              <button class="btn secondary sm" title="Гэрээний мэдээлэл засах" onclick="hdEditContract(${r.id})">✏ Засах</button>
+              <button class="btn secondary sm" title="Гэрээ устгах" style="color:#dc2626" onclick="hdDeleteContract(${r.id},'${escapeHtml(r.title)}')">🗑 Устгах</button>` : ""}
             </td>
           </tr>`;
         }).join("")}
@@ -2597,9 +2624,9 @@ function _hdScanCardHtml(s, canEdit) {
            <span style="font-size:30px">📄</span>
            <span style="font-size:10px;color:#64748b;text-align:center;padding:0 6px;word-break:break-all;max-width:100%">${escapeHtml(s.filename||"PDF")}</span>
          </div>`}
-    ${canEdit ? `<button onclick="hdDelContractScan(${s.contract_id},'${escapeHtml(_scanContractTitle)}',${s.id})"
+    ${canEdit ? `<button title="Энэ скан файлыг устгах" aria-label="Скан устгах" onclick="hdDelContractScan(${s.contract_id},'${escapeHtml(_scanContractTitle)}',${s.id})"
         style="position:absolute;top:4px;right:4px;background:rgba(220,38,38,.85);color:#fff;border:none;border-radius:50%;
-               width:22px;height:22px;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>` : ""}
+                width:22px;height:22px;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>` : ""}
     <div style="padding:4px 6px;font-size:10px;color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(s.filename||"")}</div>
   </div>`;
 }
@@ -2633,7 +2660,7 @@ function _hdRenderPendingGrid() {
             : `<div style="height:100px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px">
                  <span style="font-size:28px">📄</span>
                </div>`}
-          <button onclick="hdRemovePendingFile(${i})"
+          <button title="Сонгосон файлыг жагсаалтаас хасах" aria-label="Сонгосон файлыг хасах" onclick="hdRemovePendingFile(${i})"
             style="position:absolute;top:4px;right:4px;background:rgba(220,38,38,.9);color:#fff;border:none;border-radius:50%;
                    width:20px;height:20px;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
           <div style="padding:3px 5px;font-size:10px;color:#1d4ed8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(p.file.name)}</div>
@@ -2777,24 +2804,32 @@ async function hdDoUploadScan(id) {
   } catch(e) { toast("Алдаа: " + e.message); }
 }
 
-function hdUploadEmploymentScan(userId, name) {
+function hdUploadEmploymentScan(userId, name, currentUrl = "") {
   document.getElementById("hdEmpScanModal")?.remove();
   const html = `
   <div id="hdEmpScanModal" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1001;display:flex;align-items:center;justify-content:center">
     <div style="background:#fff;border-radius:16px;padding:28px 32px;width:440px;box-shadow:0 20px 60px rgba(0,0,0,.25)">
       <div style="font-weight:800;font-size:16px;margin-bottom:6px">📎 Хөдөлмөрийн гэрээний скан</div>
       <div style="font-size:13px;color:#64748b;margin-bottom:18px">${escapeHtml(name)}</div>
+      ${currentUrl ? `
+        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+          <div>
+            <div style="font-size:12px;font-weight:800;color:#15803d">Одоогийн скан файл байна</div>
+            <div style="font-size:11px;color:#64748b;margin-top:2px">Шинэ файл хуулбал одоогийн скан солигдоно.</div>
+          </div>
+          <button class="btn secondary sm" onclick="hdViewContractScan('${currentUrl}','${escapeHtml(name)}')">📄 Харах</button>
+        </div>` : ""}
       <div style="border:2px dashed #cbd5e1;border-radius:10px;padding:24px;text-align:center;cursor:pointer;margin-bottom:16px"
            onclick="document.getElementById('hdEmpScanFile').click()">
         <div style="font-size:28px;margin-bottom:8px">📁</div>
-        <div style="font-size:13px;color:#475569">Файл сонгох (зураг эсвэл PDF)</div>
+        <div style="font-size:13px;color:#475569">${currentUrl ? "Шинэ scan файл сонгох" : "Scan файл сонгох"} (зураг эсвэл PDF)</div>
         <div id="hdEmpScanFileName" style="font-size:12px;color:#1d4ed8;margin-top:6px;font-weight:600"></div>
       </div>
       <input type="file" id="hdEmpScanFile" accept="image/*,.pdf" style="display:none"
              onchange="document.getElementById('hdEmpScanFileName').textContent=this.files[0]?.name||''">
       <div style="display:flex;gap:8px;justify-content:flex-end">
         <button class="btn secondary" onclick="document.getElementById('hdEmpScanModal').remove()">Болих</button>
-        <button class="btn" onclick="hdDoUploadEmploymentScan(${userId})">Хуулах</button>
+        <button class="btn" onclick="hdDoUploadEmploymentScan(${userId})">${currentUrl ? "Солих" : "Хуулах"}</button>
       </div>
     </div>
   </div>`;
@@ -2826,18 +2861,23 @@ async function hdDoUploadEmploymentScan(userId) {
 function hdViewContractScan(url, title) {
   document.getElementById("hdScanViewModal")?.remove();
   const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(url);
+  const isPdf = /\.pdf(?:$|\?)/i.test(url);
+  const previewUrl = isPdf && !url.includes("#") ? `${url}#toolbar=0&navpanes=0&scrollbar=1` : url;
   const html = `
   <div id="hdScanViewModal" style="position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1001;display:flex;flex-direction:column;align-items:center;justify-content:center"
        onclick="if(event.target===this)this.remove()">
     <div style="background:#1e293b;border-radius:12px;padding:12px 18px;margin-bottom:10px;display:flex;align-items:center;gap:12px;width:90%;max-width:900px">
       <span style="color:#f8fafc;font-weight:700;font-size:14px;flex:1">📄 ${escapeHtml(title)}</span>
-      <a href="${url}" target="_blank" style="color:#93c5fd;font-size:12px;text-decoration:none">↗ Шинэ цонхонд нээх</a>
       <button onclick="document.getElementById('hdScanViewModal').remove()" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer;padding:0 4px">✕</button>
     </div>
     <div style="width:90%;max-width:900px;max-height:80vh;background:#fff;border-radius:8px;overflow:auto">
       ${isImage
         ? `<img src="${url}" style="width:100%;display:block">`
-        : `<iframe src="${url}" style="width:100%;height:80vh;border:none"></iframe>`}
+        : isPdf
+          ? `<iframe src="${previewUrl}" style="width:100%;height:80vh;border:none"></iframe>`
+          : `<div style="padding:32px;text-align:center;color:#475569;font-size:13px">
+               Энэ төрлийн файлыг дэлгэц дээр шууд preview хийх боломжгүй байна.
+             </div>`}
     </div>
   </div>`;
   document.body.insertAdjacentHTML("beforeend", html);
@@ -3214,6 +3254,7 @@ async function hrRenderTraining(tc) {
         }).join("")}
       </tbody>
     </table>
+    </div>
   </div>`;
 }
 
@@ -3749,6 +3790,50 @@ Object.assign(window, { hrRenderEvaluation, kpiAddEval, kpiCalcScore, kpiSaveEva
 
 let _surveyQuestions = [];
 
+function surveyTemplateAbbd() {
+  const rating = ["Бүрэн хангалттай", "Хангалттай", "Дунд", "Хангалтгүй", "Маш хангалтгүй"];
+  return {
+    title: "Ажлын байрны бэлгийн дарамттай холбоотой санал асуумж",
+    type: "АББД судалгаа",
+    status: "Идэвхтэй",
+    anonymous: 1,
+    description: "Байгууллага нийт ажилтанд ажлын байрны бэлгийн дарамт, хүчирхийллээс ангид орчны баталгааг хангах зорилгоор нууцлалтай санал асуумж авч байна.",
+    questions: [
+      { text: "Таны хүйс", type: "Нэг сонголт", options: ["Эрэгтэй", "Эмэгтэй", "Хариулахгүй"] },
+      { text: "Нас", type: "Текст", options: [] },
+      { text: "АББД-д дараах үйлдлүүд багтах ба эдгээр үйлдлээс аль нь танд тохиолдож байсан бэ? /хэдэн ч хариултыг сонгож болно/", type: "Олон сонголт", options: [
+        "Хүсээгүй байхад биед хүрэх, илэх, барих",
+        "Бэлгийн сэдэлтэй яриа гаргах, үүсгэх",
+        "Бэлгийн шинжтэй зурагт хуудас, фото зураг, бичлэг үзүүлэх",
+        "Хамтран ажиллагчаас бэлгийн хандлагын талаар асуух",
+        "Ажлын бус цагаар хамт ажиллагч руу яриа, и-мэйл, мессеж илгээх",
+        "Албан тушаал дэвших боломж амлан бэлгийн шинжтэй үйлдэл хийхийг шаардах",
+        "Ажлын нөхцөл сайжруулах болзол тавьж хүчээр болзохыг шаардах",
+        "Тохиолдож байгаагүй",
+        "Бусад"
+      ] },
+      { text: "Хэзээ тохиолдсон бэ?", type: "Нэг сонголт", options: ["Сүүлийн өдрүүдэд /30-аас доош хоног/", "Сүүлийн саруудад", "1-2 жилд", "2-оос дээш жилд", "Тохиолдож байгаагүй"] },
+      { text: "АББД үйлдэгч хэн байсан бэ?", type: "Нэг сонголт", options: ["Дарга", "Дээд удирдлагын албан тушаалтан", "Хамтран ажиллагч", "Хариулахгүй", "Бусад"] },
+      { text: "АББД-д өртсөний дараа ямар хариу арга хэмжээ авсан бэ?", type: "Олон сонголт", options: [
+        "Хаана хандахаа мэдээгүй тул гомдол гаргаагүй",
+        "Ажлаасаа халагдах байх гэсэн айдастай байсан тул гомдол гаргаагүй",
+        "Бэлгийн хүчирхийлэл үйлдэгч этгээдийн дарамт шахалт, сүрдүүлгээс эмээсэн тул гомдол гаргаагүй",
+        "Өөрийн ажил, албаны нэр хүндийг харгалзан гомдол гаргаагүй",
+        "Өөрийн гэр бүлийн нэр хүнд, гэр бүлийн зөрчлөөс эмээн гомдол гаргаагүй",
+        "Холбогдох байгууллагад гомдол гаргаж шийдвэрлүүлсэн",
+        "Тохиолдож байгаагүй",
+        "Бусад"
+      ] },
+      { text: "АББД-тай тэмцэх, түүнээс урьдчилан сэргийлэх чиглэлээр байгууллагаас ямар арга хэмжээ авсан бэ?", type: "Текст", options: [] },
+      { text: "Жендерийн ялгаварлан гадуурхалт, АББД, түүнээс урьдчилан сэргийлэх чиглэлээр байгууллагаас авч хэрэгжүүлж байгаа сургалт, нөлөөллийн ажлын чанар, хүртээмжийн талаар үнэлгээ өгнө үү.", type: "Нэг сонголт", options: rating },
+    ]
+  };
+}
+
+function surveyUseTemplate(key) {
+  if (key === "abbd") surveyAdd(surveyTemplateAbbd());
+}
+
 async function hrRenderSurvey(tc) {
   if (!tc) tc = document.getElementById("hrSubContent") || document.getElementById("hrTabContent");
   if (!tc) return;
@@ -3769,8 +3854,9 @@ async function hrRenderSurvey(tc) {
           <div style="font-size:20px;font-weight:800;color:${c}">${v}</div>
         </div>`).join("")}
     </div>
-    ${canEdit?`<div style="display:flex;justify-content:flex-end;margin-bottom:12px">
-      <button class="btn" onclick="surveyAdd()">+ Судалгаа нэмэх</button>
+    ${canEdit?`<div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+      <button class="btn secondary" onclick="surveyUseTemplate('abbd')">📋 АББД загвараас үүсгэх</button>
+      <button class="btn" onclick="surveyAdd()">+ Судалгаа үүсгэх</button>
     </div>`:""}
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px">
       ${surveys.length===0?`<div style="grid-column:1/-1;text-align:center;padding:48px;color:#94a3b8"><div style="font-size:32px">📝</div>Судалгаа бүртгэгдээгүй байна</div>`:
@@ -3790,6 +3876,8 @@ async function hrRenderSurvey(tc) {
           <div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap">
             ${isActive?`<button class="btn sm" onclick="surveyFill(${s.id},'${escapeHtml(s.title)}')">✍ Бөглөх</button>`:""}
             ${canEdit?`<button class="btn secondary sm" onclick="surveyViewResults(${s.id},'${escapeHtml(s.title)}')">📊 Үр дүн</button>`:""}
+            ${canEdit?`<button class="btn secondary sm" onclick="surveyQr(${s.id})">🔗 QR/линк</button>
+            <button class="btn secondary sm" onclick="surveyDownloadCsv(${s.id})">⬇ CSV</button>`:""}
             ${canEdit?`<button class="btn secondary sm" onclick="surveyEdit(${s.id})">✏</button>
             <button class="btn secondary sm" style="color:#dc2626" onclick="surveyDel(${s.id},'${escapeHtml(s.title)}')">🗑</button>`:""}
           </div>
@@ -3811,7 +3899,7 @@ function surveyAdd(data={}) {
         <div><div class="small muted">Судалгааны нэр *</div><input class="input" id="sv_title" value="${escapeHtml(data.title||"")}" placeholder="Нэр..."></div>
         <div><div class="small muted">Төрөл</div>
           <select class="input" id="sv_type">
-            ${["Сэтгэл ханамж","Дотоод санал асуулга","Үнэлгээний судалгаа","Ажлын орчны судалгаа"].map(t=>`<option ${(data.type||"Сэтгэл ханамж")===t?"selected":""}>${t}</option>`).join("")}
+            ${["Сэтгэл ханамж","Дотоод санал асуулга","Үнэлгээний судалгаа","Ажлын орчны судалгаа","АББД судалгаа"].map(t=>`<option ${(data.type||"Сэтгэл ханамж")===t?"selected":""}>${t}</option>`).join("")}
           </select></div>
       </div>
       <div class="row">
@@ -3840,19 +3928,27 @@ function surveyAdd(data={}) {
 }
 
 function surveyQuestionHtml(q, idx) {
+  const needsOptions = q.type === "Нэг сонголт" || q.type === "Олон сонголт";
+  const options = (q.options && q.options.length ? q.options : [""]).map((opt, oi) => `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <span style="font-size:13px;color:#64748b">${q.type==="Олон сонголт" ? "☑" : "○"}</span>
+      <input class="input svq-option" data-q="${idx}" value="${escapeHtml(opt)}" placeholder="Сонголт..." style="font-size:12px;flex:1">
+      <button type="button" onclick="surveyRemoveOption(${idx},${oi})" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:14px">✕</button>
+    </div>`).join("");
   return `
   <div style="background:#f8fafc;border-radius:8px;padding:10px 12px;border:1px solid #e2e8f0">
     <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
       <span style="font-size:11px;font-weight:700;color:#64748b;min-width:20px">${idx+1}.</span>
       <input class="input" id="svq_text_${idx}" value="${escapeHtml(q.text||"")}" placeholder="Асуултын текст..." style="flex:1;font-size:12px">
-      <select class="input" id="svq_type_${idx}" style="width:120px;font-size:12px">
+      <select class="input" id="svq_type_${idx}" onchange="surveyRefreshQuestions()" style="width:120px;font-size:12px">
         ${["Нэг сонголт","Олон сонголт","Текст","Оноо (1-5)"].map(t=>`<option ${(q.type||"Нэг сонголт")===t?"selected":""}>${t}</option>`).join("")}
       </select>
       <button onclick="surveyRemoveQuestion(${idx})" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:16px">✕</button>
     </div>
-    ${q.type==="Нэг сонголт"||q.type==="Олон сонголт"?`
-    <div style="font-size:11px;color:#64748b;margin-bottom:4px">Сонголтууд (таслалаар тусгаарлана уу):</div>
-    <input class="input" id="svq_opts_${idx}" value="${escapeHtml((q.options||[]).join(", "))}" placeholder="Тийм, Үгүй, Мэдэхгүй" style="font-size:12px">`:""}
+    ${needsOptions ? `
+    <div style="font-size:11px;color:#64748b;margin-bottom:6px">Сонголтууд</div>
+    <div id="svq_opts_${idx}">${options}</div>
+    <button type="button" class="btn secondary sm" onclick="surveyAddOption(${idx})">+ Сонголт нэмэх</button>`:""}
   </div>`;
 }
 
@@ -3871,13 +3967,40 @@ function surveyRemoveQuestion(idx) {
   if (list) list.innerHTML = _surveyQuestions.map((q,i)=>surveyQuestionHtml(q,i)).join("");
 }
 
+function surveySyncQuestionDrafts() {
+  _surveyQuestions = surveyGatherQuestions();
+}
+
+function surveyAddOption(idx) {
+  surveySyncQuestionDrafts();
+  _surveyQuestions[idx].options = _surveyQuestions[idx].options || [];
+  _surveyQuestions[idx].options.push("");
+  const list = document.getElementById("svQuestionList");
+  if (list) list.innerHTML = _surveyQuestions.map((q,i)=>surveyQuestionHtml(q,i)).join("");
+}
+
+function surveyRemoveOption(idx, optIdx) {
+  surveySyncQuestionDrafts();
+  _surveyQuestions[idx].options = (_surveyQuestions[idx].options || []).filter((_, i) => i !== optIdx);
+  if (!_surveyQuestions[idx].options.length) _surveyQuestions[idx].options = [""];
+  const list = document.getElementById("svQuestionList");
+  if (list) list.innerHTML = _surveyQuestions.map((q,i)=>surveyQuestionHtml(q,i)).join("");
+}
+
+function surveyRefreshQuestions() {
+  _surveyQuestions = surveyGatherQuestions();
+  const list = document.getElementById("svQuestionList");
+  if (list) list.innerHTML = _surveyQuestions.map((q,i)=>surveyQuestionHtml(q,i)).join("");
+}
+
 function surveyGatherQuestions() {
   const n = _surveyQuestions.length;
   return _surveyQuestions.map((_,i)=>{
     const text = document.getElementById("svq_text_"+i)?.value.trim()||"";
     const type = document.getElementById("svq_type_"+i)?.value||"Нэг сонголт";
-    const optsStr = document.getElementById("svq_opts_"+i)?.value||"";
-    const options = optsStr ? optsStr.split(",").map(s=>s.trim()).filter(Boolean) : [];
+    const options = [...document.querySelectorAll(`.svq-option[data-q="${i}"]`)]
+      .map(el => el.value.trim())
+      .filter(Boolean);
     return { text, type, options };
   });
 }
@@ -3913,6 +4036,68 @@ async function surveyDel(id, title) {
   await api(`/api/surveys/${id}`,{method:"DELETE"});
   toast("Устгагдлаа");
   hrRenderSurvey(document.getElementById("hrSubContent"));
+}
+
+async function surveyQr(id) {
+  const surveys = await api("/api/surveys").catch(()=>[]);
+  const s = surveys.find(x => x.id === id);
+  if (!s) return;
+  let token = s.public_token;
+  if (!token) {
+    const created = await api(`/api/surveys/${id}/public-token`, { method:"POST" }).catch(e => ({ error: e.message }));
+    token = created?.token;
+  }
+  if (!token) { toast("QR холбоос үүсгэж чадсангүй. Серверээ restart хийгээд дахин оролдоорой."); return; }
+  const cfg = await fetch("/api/public-base-url").then(r => r.json()).catch(()=>({ baseUrl: location.origin }));
+  const link = `${(cfg.baseUrl || location.origin).replace(/\/+$/,"")}/qr-survey.html?t=${encodeURIComponent(token)}`;
+  document.getElementById("surveyQrModal")?.remove();
+  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(link)}`;
+  document.body.insertAdjacentHTML("beforeend", `
+    <div id="surveyQrModal" style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1002;display:flex;align-items:center;justify-content:center;padding:18px">
+      <div style="background:#fff;border-radius:16px;padding:24px;width:min(440px,96vw);box-shadow:0 20px 60px rgba(0,0,0,.25)">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:14px">
+          <div>
+            <div style="font-weight:800;font-size:16px">🔗 Судалгааны QR</div>
+            <div style="font-size:12px;color:#64748b;margin-top:4px">${escapeHtml(s.title)}</div>
+          </div>
+          <button onclick="document.getElementById('surveyQrModal').remove()" style="background:none;border:none;font-size:20px;color:#94a3b8;cursor:pointer">✕</button>
+        </div>
+        <div style="text-align:center;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px;margin-bottom:12px">
+          <img src="${qrSrc}" alt="QR" style="width:240px;height:240px;max-width:100%">
+          <div style="font-size:11px;color:#94a3b8;margin-top:8px">QR харагдахгүй бол доорх холбоосыг ашиглана.</div>
+        </div>
+        <input class="input" id="surveyPublicLink" readonly value="${escapeHtml(link)}" onclick="this.select()" style="font-size:12px;margin-bottom:12px">
+        <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+          <button class="btn secondary" onclick="navigator.clipboard?.writeText(document.getElementById('surveyPublicLink').value);toast('Холбоос хууллаа')">Холбоос хуулах</button>
+          <button class="btn" onclick="window.open(document.getElementById('surveyPublicLink').value,'_blank')">Нээж шалгах</button>
+        </div>
+      </div>
+    </div>`);
+}
+
+async function surveyDownloadCsv(id) {
+  const [survey, responses] = await Promise.all([
+    api("/api/surveys").then(s => s.find(x => x.id === id)),
+    api(`/api/survey-responses/${id}`)
+  ]).catch(()=>[null,[]]);
+  if (!survey) return;
+  const qs = typeof survey.questions === "string" ? JSON.parse(survey.questions || "[]") : survey.questions || [];
+  const csvCell = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const header = ["Огноо", ...qs.map((q,i) => `${i+1}. ${q.text}`)];
+  const rows = responses.map(r => {
+    const answers = typeof r.answers === "string" ? JSON.parse(r.answers || "{}") : r.answers || {};
+    return [r.submitted_at || "", ...qs.map((_, i) => Array.isArray(answers[i]) ? answers[i].join("; ") : (answers[i] ?? ""))];
+  });
+  const csv = "\uFEFF" + [header, ...rows].map(row => row.map(csvCell).join(",")).join("\r\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${(survey.title || "survey").replace(/[\\/:*?"<>|]/g, "_")}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 async function surveyFill(id, title) {
@@ -4031,26 +4216,101 @@ async function surveyViewResults(id, title) {
 }
 
 Object.assign(window, { hrRenderSurvey, surveyAdd, surveyEdit, surveySave, surveyDel,
-  surveyAddQuestion, surveyRemoveQuestion, surveyFill, surveySubmit, surveyViewResults });
+  surveyUseTemplate, surveyQr, surveyDownloadCsv,
+  surveyAddQuestion, surveyRemoveQuestion, surveyAddOption, surveyRemoveOption, surveyRefreshQuestions, surveyFill, surveySubmit, surveyViewResults });
 
-// ── Tab 3: НД тооцоо ─────────────────────────────────────────
+// ── Tab 3: Цалингийн тооцоо ───────────────────────────────────
 
-function hrRenderND(tc) {
+function hrNdPayrollRange(year, month) {
+  const prevMonth = month === 1 ? 12 : month - 1;
+  const prevYear = month === 1 ? year - 1 : year;
+  return {
+    start: new Date(prevYear, prevMonth - 1, 21),
+    end: new Date(year, month - 1, 20),
+  };
+}
+
+function hrNdWorkedDays(records, userId, year, month) {
+  const days = new Map();
+  const { start: rangeStartDate, end: rangeEndDate } = hrNdPayrollRange(year, month);
+  records.forEach(r => {
+    if (r.user_id !== userId || !r.start_date) return;
+    const start = new Date(r.start_date.slice(0, 10));
+    const end = new Date((r.end_date || r.start_date).slice(0, 10));
+    const rangeStart = start > rangeStartDate ? start : rangeStartDate;
+    const rangeEnd = end < rangeEndDate ? end : rangeEndDate;
+    if (rangeStart > rangeEnd) return;
+    for (let d = new Date(rangeStart); d <= rangeEnd; d.setDate(d.getDate() + 1)) {
+      const key = d.toISOString().slice(0, 10);
+      const prev = days.get(key);
+      if (!prev || r.id > prev.id) days.set(key, r);
+    }
+  });
+  return [...days.values()].filter(r => ["Ажилласан", "Хоцорсон", "Илүү цаг"].includes(r.record_type)).length;
+}
+
+function hrNdTenureYears(hireDate, atDate = new Date()) {
+  if (!hireDate) return 0;
+  const start = new Date(String(hireDate).slice(0, 10));
+  if (isNaN(start)) return 0;
+  let years = atDate.getFullYear() - start.getFullYear();
+  const beforeAnniversary = atDate.getMonth() < start.getMonth()
+    || (atDate.getMonth() === start.getMonth() && atDate.getDate() < start.getDate());
+  if (beforeAnniversary) years--;
+  return Math.max(0, years);
+}
+
+function hrTenureAllowanceRate(years) {
+  const y = Math.floor(Number(years || 0));
+  if (y >= 16) return 25;
+  if (y >= 11) return 20;
+  if (y >= 9) return 15;
+  if (y >= 7) return 10;
+  if (y >= 4) return 8;
+  if (y >= 2) return 5;
+  return 0;
+}
+
+async function hrRenderND(tc) {
   if (!tc) tc = document.getElementById("hrTabContent");
   if (!tc) return;
   const ND_EMP = 0.10, ND_EMP_HEALTH = 0.02;
   const ND_ORG = 0.115, ND_ORG_HEALTH = 0.02;
-
-  const active = _hrUsers.filter(u => (u.status_hr||"Идэвхтэй") === "Идэвхтэй" && u.salary > 0);
+  const MEAL_PER_WORKDAY = 10000;
+  const canEditNd = ["director","hr"].includes(state.me?.role);
+  const ndYear = window._hrNdYear || new Date().getFullYear();
+  const ndMonth = window._hrNdMonth || (new Date().getMonth() + 1);
+  window._hrNdYear = ndYear;
+  window._hrNdMonth = ndMonth;
+  const payrollRange = hrNdPayrollRange(ndYear, ndMonth);
+  const fmtDate = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  const records = await api("/api/hr-records").catch(() => []);
+  const workedDays = (u) => hrNdWorkedDays(records, u.id, ndYear, ndMonth);
+  const skillAmount = (u) => Number(u.salary||0) * Math.min(25, Math.max(0, Math.floor(Number(u.skill_allowance_rate||0)))) / 100;
+  const tenureYearsOf = (u) => Number(u.tenure_years || 0);
+  const tenureRateOf = (u) => hrTenureAllowanceRate(tenureYearsOf(u));
+  const tenureAmount = (u) => Number(u.salary||0) * tenureRateOf(u) / 100;
+  const mealAmount = (u) => workedDays(u) * MEAL_PER_WORKDAY;
+  const ndBase = (u) => Number(u.salary||0) + skillAmount(u) + tenureAmount(u) + mealAmount(u);
+  const active = _hrUsers.filter(u => (u.status_hr||"Идэвхтэй") === "Идэвхтэй");
   const totalSalary = active.reduce((s,u) => s + Number(u.salary||0), 0);
-  const totalNdEmp  = active.reduce((s,u) => s + Number(u.salary||0) * (ND_EMP + ND_EMP_HEALTH), 0);
-  const totalNdOrg  = active.reduce((s,u) => s + Number(u.salary||0) * (ND_ORG + ND_ORG_HEALTH), 0);
+  const totalSkillAllowance = active.reduce((s,u) => s + skillAmount(u), 0);
+  const totalTenureAllowance = active.reduce((s,u) => s + tenureAmount(u), 0);
+  const totalMealAllowance = active.reduce((s,u) => s + mealAmount(u), 0);
+  const totalWorkedDays = active.reduce((s,u) => s + workedDays(u), 0);
+  const totalNdBase = active.reduce((s,u) => s + ndBase(u), 0);
+  const totalNdEmp  = totalNdBase * (ND_EMP + ND_EMP_HEALTH);
+  const totalNdOrg  = totalNdBase * (ND_ORG + ND_ORG_HEALTH);
 
   tc.innerHTML = `
   <div style="padding:20px 24px">
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px">
       ${[
-        ["Нийт цалин", totalSalary.toLocaleString()+"₮","#1d4ed8","#eff6ff"],
+        ["Үндсэн цалин", totalSalary.toLocaleString()+"₮","#1d4ed8","#eff6ff"],
+        ["Ур чадвар", totalSkillAllowance.toLocaleString("mn-MN",{maximumFractionDigits:0})+"₮","#0f766e","#ecfdf5"],
+        ["Ажилласан жил", totalTenureAllowance.toLocaleString("mn-MN",{maximumFractionDigits:0})+"₮","#4338ca","#eef2ff"],
+        ["Хоол", totalMealAllowance.toLocaleString()+"₮","#b45309","#fffbeb"],
+        ["НД тооцох дүн", totalNdBase.toLocaleString()+"₮","#334155","#f8fafc"],
         ["Ажилтны НД", totalNdEmp.toLocaleString("mn-MN",{maximumFractionDigits:0})+"₮","#7e22ce","#fdf4ff"],
         ["Байгуулллагын НД", totalNdOrg.toLocaleString("mn-MN",{maximumFractionDigits:0})+"₮","#15803d","#dcfce7"],
         ["Нийт НД", (totalNdEmp+totalNdOrg).toLocaleString("mn-MN",{maximumFractionDigits:0})+"₮","#c2410c","#fff7ed"]
@@ -4061,51 +4321,203 @@ function hrRenderND(tc) {
         </div>`).join("")}
     </div>
 
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+      <button class="btn secondary sm" onclick="window._hrNdMonth--; if(window._hrNdMonth<1){window._hrNdMonth=12;window._hrNdYear--;} hrRenderND()">‹</button>
+      <div style="padding:8px 12px;border:1px solid #dbe3ef;border-radius:10px;background:#fff;font-size:13px;font-weight:800;color:#0f172a">
+        ${ndYear} оны ${ndMonth}-р сарын цалингийн тооцоо
+      </div>
+      <button class="btn secondary sm" onclick="window._hrNdMonth++; if(window._hrNdMonth>12){window._hrNdMonth=1;window._hrNdYear++;} hrRenderND()">›</button>
+      <span style="font-size:12px;color:#64748b">Цалин бодох өдөр: сарын 20 · Ирцийн хугацаа: ${fmtDate(payrollRange.start)} — ${fmtDate(payrollRange.end)} · Нэмэгдэл: үндсэн цалингийн 0-25% · Хоол: ажилласан хоног × ${MEAL_PER_WORKDAY.toLocaleString()}₮</span>
+    </div>
+
     <div style="background:#f8fafc;border-radius:10px;padding:12px 16px;margin-bottom:20px;font-size:12px;color:#475569">
       НД хувь: Ажилтан <b>${(ND_EMP*100).toFixed(0)}%</b> пенсион + <b>${(ND_EMP_HEALTH*100).toFixed(0)}%</b> эмнэлэг ·
       Байгуулллага <b>${(ND_ORG*100).toFixed(1)}%</b> + <b>${(ND_ORG_HEALTH*100).toFixed(0)}%</b> эмнэлэг
     </div>
 
-    <table style="width:100%;border-collapse:collapse;font-size:13px">
+    <div style="overflow-x:auto;border:1px solid #e2e8f0;border-radius:10px">
+    <table style="width:100%;min-width:1320px;border-collapse:collapse;font-size:12px;table-layout:fixed">
+      <colgroup>
+        <col style="width:150px"><col style="width:104px"><col style="width:82px"><col style="width:92px">
+        <col style="width:82px"><col style="width:72px"><col style="width:92px"><col style="width:70px">
+        <col style="width:92px"><col style="width:104px"><col style="width:104px"><col style="width:112px">
+        <col style="width:104px"><col style="width:96px">
+      </colgroup>
       <thead>
         <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0">
-          <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#475569">АЖИЛТАН</th>
-          <th style="padding:10px 12px;text-align:right;font-size:11px;font-weight:600;color:#475569">ЦАЛИН</th>
-          <th style="padding:10px 12px;text-align:right;font-size:11px;font-weight:600;color:#475569">АЖИЛТНЫ НД (12%)</th>
-          <th style="padding:10px 12px;text-align:right;font-size:11px;font-weight:600;color:#475569">БАЙГУУЛ. НД (13.5%)</th>
-          <th style="padding:10px 12px;text-align:right;font-size:11px;font-weight:600;color:#475569">АВАХ ЦАЛИН</th>
+          <th style="padding:8px 10px;text-align:left;font-size:10px;font-weight:700;color:#475569;position:sticky;left:0;background:#f8fafc;z-index:2">АЖИЛТАН</th>
+          <th style="padding:8px 8px;text-align:right;font-size:10px;font-weight:700;color:#475569">ЦАЛИН</th>
+          <th style="padding:8px 8px;text-align:right;font-size:10px;font-weight:700;color:#475569">УР %</th>
+          <th style="padding:8px 8px;text-align:right;font-size:10px;font-weight:700;color:#475569">УР ₮</th>
+          <th style="padding:8px 8px;text-align:right;font-size:10px;font-weight:700;color:#475569">ЖИЛ</th>
+          <th style="padding:8px 8px;text-align:right;font-size:10px;font-weight:700;color:#475569">ЖИЛ %</th>
+          <th style="padding:8px 8px;text-align:right;font-size:10px;font-weight:700;color:#475569">ЖИЛ ₮</th>
+          <th style="padding:8px 8px;text-align:right;font-size:10px;font-weight:700;color:#475569">ХОНОГ</th>
+          <th style="padding:8px 8px;text-align:right;font-size:10px;font-weight:700;color:#475569">ХООЛ</th>
+          <th style="padding:8px 8px;text-align:right;font-size:10px;font-weight:700;color:#475569">СУУРЬ</th>
+          <th style="padding:8px 8px;text-align:right;font-size:10px;font-weight:700;color:#475569">АЖ.НД</th>
+          <th style="padding:8px 8px;text-align:right;font-size:10px;font-weight:700;color:#475569">БАЙГ.НД</th>
+          <th style="padding:8px 8px;text-align:right;font-size:10px;font-weight:700;color:#475569">АВАХ</th>
+          <th style="padding:8px 8px;text-align:center;font-size:10px;font-weight:700;color:#475569;position:sticky;right:0;background:#f8fafc;z-index:2">ҮЙЛДЭЛ</th>
         </tr>
       </thead>
       <tbody>
         ${active.map((u,i) => {
           const sal = Number(u.salary||0);
-          const empNd = sal * (ND_EMP + ND_EMP_HEALTH);
-          const orgNd = sal * (ND_ORG + ND_ORG_HEALTH);
-          const net = sal - empNd;
+          const skillRate = Math.min(25, Math.max(0, Math.floor(Number(u.skill_allowance_rate||0))));
+          const skill = sal * skillRate / 100;
+          const tenureYears = tenureYearsOf(u);
+          const tenureRate = tenureRateOf(u);
+          const tenure = sal * tenureRate / 100;
+          const days = workedDays(u);
+          const meal = days * MEAL_PER_WORKDAY;
+          const base = sal + skill + tenure + meal;
+          const empNd = base * (ND_EMP + ND_EMP_HEALTH);
+          const orgNd = base * (ND_ORG + ND_ORG_HEALTH);
+          const net = base - empNd;
           return `
           <tr style="border-bottom:1px solid #f1f5f9;background:${i%2===0?'#fff':'#fafbfc'}">
-            <td style="padding:10px 12px">
-              <div style="font-weight:600">${escapeHtml(u.full_name)}</div>
-              <div style="font-size:11px;color:#64748b">${escapeHtml(u.position||"")}</div>
+            <td style="padding:8px 10px;position:sticky;left:0;background:${i%2===0?'#fff':'#fafbfc'};z-index:1">
+              <div style="font-weight:700;line-height:1.25">${escapeHtml(u.full_name)}</div>
+              <div style="font-size:10px;color:#64748b;line-height:1.25">${escapeHtml(u.position||"")}</div>
             </td>
-            <td style="padding:10px 12px;text-align:right;font-weight:600">${sal.toLocaleString()}₮</td>
-            <td style="padding:10px 12px;text-align:right;color:#7e22ce">${empNd.toLocaleString("mn-MN",{maximumFractionDigits:0})}₮</td>
-            <td style="padding:10px 12px;text-align:right;color:#15803d">${orgNd.toLocaleString("mn-MN",{maximumFractionDigits:0})}₮</td>
-            <td style="padding:10px 12px;text-align:right;font-weight:700;color:#0f172a">${net.toLocaleString("mn-MN",{maximumFractionDigits:0})}₮</td>
+            <td style="padding:8px 8px;text-align:right">
+              <input id="nd_salary_${u.id}" class="input" type="number" min="0" value="${sal || ""}"
+                oninput="hrPreviewNdRow(${u.id},${days})"
+                ${canEditNd ? "" : "disabled"} style="width:92px;margin:0;text-align:right;font-weight:700;color:#0f172a;padding:7px 8px">
+            </td>
+            <td style="padding:8px 8px;text-align:right">
+              <input id="nd_skill_${u.id}" class="input" type="number" min="0" max="25" step="1" value="${skillRate || ""}"
+                oninput="hrPreviewNdRow(${u.id},${days})"
+                ${canEditNd ? "" : "disabled"} style="width:64px;margin:0;text-align:right;color:#0f766e;padding:7px 8px">
+            </td>
+            <td id="nd_skill_amt_${u.id}" style="padding:8px 8px;text-align:right;color:#0f766e;font-weight:700">${skill.toLocaleString("mn-MN",{maximumFractionDigits:0})}₮</td>
+            <td style="padding:8px 8px;text-align:right">
+              <input id="nd_tenure_years_${u.id}" class="input" type="number" min="0" step="1" value="${tenureYears ? Math.floor(tenureYears) : ""}"
+                oninput="hrPreviewNdRow(${u.id},${days})"
+                ${canEditNd ? "" : "disabled"} style="width:64px;margin:0;text-align:right;color:#475569;padding:7px 8px">
+            </td>
+            <td id="nd_tenure_rate_${u.id}" style="padding:8px 8px;text-align:right;color:#4338ca;font-weight:700">${tenureRate}%</td>
+            <td id="nd_tenure_amt_${u.id}" style="padding:8px 8px;text-align:right;color:#4338ca;font-weight:700">${tenure.toLocaleString("mn-MN",{maximumFractionDigits:0})}₮</td>
+            <td style="padding:8px 8px;text-align:right;color:#475569;font-weight:700">${days}</td>
+            <td style="padding:8px 8px;text-align:right">
+              <div id="nd_meal_amt_${u.id}" style="font-weight:700;color:#b45309">${meal ? meal.toLocaleString()+"₮" : "—"}</div>
+            </td>
+            <td id="nd_base_${u.id}" style="padding:8px 8px;text-align:right;font-weight:700;color:#334155">${base.toLocaleString()}₮</td>
+            <td id="nd_emp_${u.id}" style="padding:8px 8px;text-align:right;color:#7e22ce">${empNd.toLocaleString("mn-MN",{maximumFractionDigits:0})}₮</td>
+            <td id="nd_org_${u.id}" style="padding:8px 8px;text-align:right;color:#15803d">${orgNd.toLocaleString("mn-MN",{maximumFractionDigits:0})}₮</td>
+            <td id="nd_net_${u.id}" style="padding:8px 8px;text-align:right;font-weight:700;color:#0f172a">${net.toLocaleString("mn-MN",{maximumFractionDigits:0})}₮</td>
+            <td style="padding:8px 8px;text-align:center;position:sticky;right:0;background:${i%2===0?'#fff':'#fafbfc'};z-index:1">
+              ${canEditNd ? `<button class="btn secondary sm" onclick="hrSaveNdRow(${u.id})">Хадгалах</button>` : "—"}
+            </td>
           </tr>`;
         }).join("")}
       </tbody>
       <tfoot>
         <tr style="background:#f0f7ff;border-top:2px solid #bfdbfe">
-          <td style="padding:11px 12px;font-weight:700">НИЙТ (${active.length} ажилтан)</td>
-          <td style="padding:11px 12px;text-align:right;font-weight:700">${totalSalary.toLocaleString()}₮</td>
-          <td style="padding:11px 12px;text-align:right;font-weight:700;color:#7e22ce">${totalNdEmp.toLocaleString("mn-MN",{maximumFractionDigits:0})}₮</td>
-          <td style="padding:11px 12px;text-align:right;font-weight:700;color:#15803d">${totalNdOrg.toLocaleString("mn-MN",{maximumFractionDigits:0})}₮</td>
-          <td style="padding:11px 12px;text-align:right;font-weight:700">${(totalSalary-totalNdEmp).toLocaleString("mn-MN",{maximumFractionDigits:0})}₮</td>
+          <td style="padding:9px 10px;font-weight:700;position:sticky;left:0;background:#f0f7ff;z-index:1">НИЙТ (${active.length})</td>
+          <td style="padding:9px 8px;text-align:right;font-weight:700">${totalSalary.toLocaleString()}₮</td>
+          <td></td>
+          <td style="padding:9px 8px;text-align:right;font-weight:700;color:#0f766e">${totalSkillAllowance.toLocaleString("mn-MN",{maximumFractionDigits:0})}₮</td>
+          <td></td>
+          <td></td>
+          <td style="padding:9px 8px;text-align:right;font-weight:700;color:#4338ca">${totalTenureAllowance.toLocaleString("mn-MN",{maximumFractionDigits:0})}₮</td>
+          <td style="padding:9px 8px;text-align:right;font-weight:700;color:#475569">${totalWorkedDays}</td>
+          <td style="padding:9px 8px;text-align:right;font-weight:700;color:#b45309">${totalMealAllowance.toLocaleString()}₮</td>
+          <td style="padding:9px 8px;text-align:right;font-weight:700">${totalNdBase.toLocaleString()}₮</td>
+          <td style="padding:9px 8px;text-align:right;font-weight:700;color:#7e22ce">${totalNdEmp.toLocaleString("mn-MN",{maximumFractionDigits:0})}₮</td>
+          <td style="padding:9px 8px;text-align:right;font-weight:700;color:#15803d">${totalNdOrg.toLocaleString("mn-MN",{maximumFractionDigits:0})}₮</td>
+          <td style="padding:9px 8px;text-align:right;font-weight:700">${(totalNdBase-totalNdEmp).toLocaleString("mn-MN",{maximumFractionDigits:0})}₮</td>
+          <td style="position:sticky;right:0;background:#f0f7ff"></td>
         </tr>
       </tfoot>
     </table>
+    </div>
   </div>`;
+}
+
+function hrPreviewNdRow(userId, days) {
+  const salary = Number(document.getElementById(`nd_salary_${userId}`)?.value || 0);
+  let rate = Math.floor(Number(document.getElementById(`nd_skill_${userId}`)?.value || 0));
+  let tenureYears = Math.floor(Number(document.getElementById(`nd_tenure_years_${userId}`)?.value || 0));
+  if (isNaN(rate)) rate = 0;
+  if (isNaN(tenureYears)) tenureYears = 0;
+  rate = Math.min(25, Math.max(0, rate));
+  tenureYears = Math.max(0, tenureYears);
+  const tenureRate = hrTenureAllowanceRate(tenureYears);
+  const skill = salary * rate / 100;
+  const tenure = salary * tenureRate / 100;
+  const meal = Number(days || 0) * 10000;
+  const base = salary + skill + tenure + meal;
+  const empNd = base * 0.12;
+  const orgNd = base * 0.135;
+  const net = base - empNd;
+  const money = (v) => Number(v || 0).toLocaleString("mn-MN", { maximumFractionDigits: 0 }) + "₮";
+  const set = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+  };
+  set(`nd_skill_amt_${userId}`, money(skill));
+  set(`nd_tenure_rate_${userId}`, tenureRate + "%");
+  set(`nd_tenure_amt_${userId}`, money(tenure));
+  set(`nd_meal_amt_${userId}`, meal ? money(meal) : "—");
+  set(`nd_base_${userId}`, money(base));
+  set(`nd_emp_${userId}`, money(empNd));
+  set(`nd_org_${userId}`, money(orgNd));
+  set(`nd_net_${userId}`, money(net));
+}
+
+async function hrSaveNdRow(userId) {
+  const u = _hrUsers.find(x => x.id === userId);
+  if (!u) return;
+  const salary = Number(document.getElementById(`nd_salary_${userId}`)?.value || 0);
+  const skillRate = Math.floor(Number(document.getElementById(`nd_skill_${userId}`)?.value || 0));
+  const tenureYears = Math.floor(Number(document.getElementById(`nd_tenure_years_${userId}`)?.value || 0));
+  if ([salary, skillRate, tenureYears].some(v => isNaN(v) || v < 0) || skillRate > 25) {
+    toast("Цалин, ажилласан жил 0-ээс багагүй, ур чадварын хувь 0-25 хооронд байх ёстой");
+    return;
+  }
+  const tenureRate = hrTenureAllowanceRate(tenureYears);
+  const ndYear = window._hrNdYear || new Date().getFullYear();
+  const ndMonth = window._hrNdMonth || (new Date().getMonth() + 1);
+  const records = await api("/api/hr-records").catch(() => []);
+  const meal = hrNdWorkedDays(records, userId, ndYear, ndMonth) * 10000;
+  const skill = salary * skillRate / 100;
+  const tenure = salary * tenureRate / 100;
+  await api(`/api/users/${userId}/hr`, {
+    method: "PUT",
+    body: JSON.stringify({
+      full_name: u.full_name,
+      email: u.email || null,
+      role: u.role || "worker",
+      position: u.position || "",
+      department: u.department || "",
+      phone: u.phone || "",
+      address: u.address || "",
+      register_no: u.register_no || "",
+      hire_date: u.hire_date || null,
+      contract_type: u.contract_type || "Байнгын",
+      contract_end: u.contract_end || null,
+      status_hr: u.status_hr || "Идэвхтэй",
+      job_category: u.job_category || "Захиргааны ажилтан",
+      education: u.education || "",
+      gender: u.gender || "",
+      birthdate: u.birthdate || null,
+      nationality: u.nationality || "Монгол",
+      emergency_contact: u.emergency_contact || "",
+      active: u.active !== false,
+      salary,
+      skill_allowance_rate: skillRate,
+      skill_allowance: skill,
+      tenure_years: tenureYears,
+      tenure_allowance_rate: tenureRate,
+      tenure_allowance: tenure,
+      meal_allowance: meal
+    })
+  });
+  toast("НД тооцооны мэдээлэл хадгалагдлаа");
+  _hrUsers = await api("/api/users-full").catch(() => _hrUsers);
+  hrRenderND();
 }
 
 // ── Tab 4: Тайлан ────────────────────────────────────────────
@@ -4277,7 +4689,7 @@ Object.assign(window, {
   attendance, switchAttTab, renderAttMonth, renderAttYear, renderAttRange,
   attChangeYear, attJumpToPayrollInterval, showAttCalendar, attPrint, _attPrintMonthForm, _attPrintYearSimple, _attPrintRangeForm,
   onAttendanceTypeChange, saveAttendance, editAttendanceCell, editAttendanceCellDate, markAllWorked,
-  hr, hrSwTab, hrSwSubTab, hrRenderEmployees, hrRenderEmployeeList, hrRenderDocs, hrRenderND, hrRenderReports,
+  hr, hrSwTab, hrSwSubTab, hrRenderEmployees, hrRenderEmployeeList, hrRenderDocs, hrRenderND, hrPreviewNdRow, hrSaveNdRow, hrRenderReports,
   hrOpenForm, hrContractChg, hrCloseForm, hrSaveEmp, hrDeleteEmployee,
   hrOpenProfile, hrCloseProfile, hrProfTab, hrLoadProfTab,
   hrAddHistory, hrUploadFile, hrDelFile,

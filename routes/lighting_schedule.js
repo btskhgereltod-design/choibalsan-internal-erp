@@ -55,7 +55,10 @@ router.put("/light-schedules/:id", auth, requirePermission("lighting_edit"), asy
 
 router.delete("/light-schedules/:id", auth, requirePermission("lighting_edit"), async (req, res) => {
   try {
+    const row = await get("SELECT category,valid_from,on_time,off_time,is_always_off FROM light_schedule_logs WHERE id=?", [req.params.id]);
     await run("DELETE FROM light_schedule_logs WHERE id=?", [req.params.id]);
+    await audit(req.user.id, "DELETE", "light_schedule_logs", req.params.id,
+      row ? `${row.category}: ${row.valid_from} ${row.is_always_off ? "унтраасан" : `${row.on_time}–${row.off_time}`}` : "");
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });

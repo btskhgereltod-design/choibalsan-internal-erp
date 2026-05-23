@@ -26,6 +26,10 @@ let _ganttCache = null; // { rows, execs, year, canEdit, canDel }
 async function work() {
   const canEdit = ["director","chief_engineer","engineer","camera_engineer"].includes(state.me.role);
   const canDel  = ["director","chief_engineer"].includes(state.me.role);
+  const embedTargetId = window._workEmbedTarget || "";
+  const embedTarget = embedTargetId ? document.getElementById(embedTargetId) : null;
+  if (embedTargetId && !embedTarget) window._workEmbedTarget = "";
+  const renderTarget = embedTarget || main;
 
   // Load categories dynamically
   try { window._workCatList = await api("/api/work-categories"); } catch(e) { window._workCatList = []; }
@@ -86,7 +90,12 @@ async function work() {
 
   const autoDepт = activeCat.department || "";
 
-  const catTabs = window._workCatList.map(c => `
+  const isHiddenEmbedCat = (name = "") =>
+    name === "Камер засвар" || name === "Бусад" || name.toLowerCase().includes("захир");
+  const visibleCats = embedTarget
+    ? window._workCatList.filter(c => !isHiddenEmbedCat(c.name || ""))
+    : window._workCatList;
+  const catTabs = visibleCats.map(c => `
     <button class="btn ${window.workCat===c.name?'':'secondary'}"
       data-cat="${escapeHtml(c.name)}"
       onclick="window.workCat=this.dataset.cat;work()"
@@ -94,7 +103,7 @@ async function work() {
       ${c.icon||'📋'} ${escapeHtml(c.name)}
     </button>`).join("");
 
-  main.innerHTML = `
+  renderTarget.innerHTML = `
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       ${catTabs}
@@ -131,7 +140,7 @@ async function work() {
         <div><div class="small muted" style="margin-bottom:4px">Ажлын нэр *</div>
           <input class="input" id="wtitle" placeholder="Найрамдал парк..."></div>
         <div><div class="small muted" style="margin-bottom:4px">Байршил</div>
-          <input class="input" id="wloc" placeholder="Байршил"></div>
+          <input class="input" id="wloc" placeholder="${window.workCat === "Гэрэлтүүлэг засвар" ? "Доорх бүртгэлтэй байршлаас сонгоно" : "Байршил"}" ${window.workCat === "Гэрэлтүүлэг засвар" ? "readonly" : ""}></div>
         <div><div class="small muted" style="margin-bottom:4px">Тасаг</div>
           <input class="input" id="wdep" value="${autoDepт}" placeholder="Тасаг оруулах..."></div>
       </div>
@@ -148,7 +157,7 @@ async function work() {
         <div id="wBagBtns" style="display:flex;gap:5px;flex-wrap:wrap"></div>
       </div>
       <div id="wLocRow" style="margin-bottom:10px;display:none">
-        <div class="small muted" style="margin-bottom:4px">📍 Байршил сонгох</div>
+        <div class="small muted" style="margin-bottom:4px">📍 Бүртгэлтэй байршил / объект сонгох</div>
         <select class="input" id="wgerLoc" style="width:100%" onchange="onWorkLocSelect()">
           <option value="">— Дэд хэсэг сонгоно уу —</option>
         </select>
@@ -170,8 +179,8 @@ async function work() {
           <input class="input" id="wprog" type="number" value="0" min="0" max="100"></div>
         <div><div class="small muted" style="margin-bottom:4px">Зардал ₮</div>
           <input class="input" id="wcost" type="number" value="0"></div>
-        <div><div class="small muted" style="margin-bottom:4px">🏗 Холбогдох хөрөнгө</div>
-          <select class="input" id="wasset">
+        <div style="${window.workCat === "Гэрэлтүүлэг засвар" ? "display:none" : ""}"><div class="small muted" style="margin-bottom:4px">🏗 Холбогдох хөрөнгө / байршил</div>
+          <select class="input" id="wasset" onchange="onWorkAssetSelect()">
             <option value="">— Сонгохгүй —</option>
             ${workAssets.map(a => `<option value="${a.id}">[${escapeHtml(a.asset_code||"")}] ${escapeHtml(a.name)} — ${escapeHtml(a.location||"")}</option>`).join("")}
           </select>
@@ -247,8 +256,12 @@ async function work() {
     if (action === "view-exec")    openExecModal(id);
     if (action === "del-exec")     deleteExec(Number(btn.dataset.eid), Number(btn.dataset.wid));
     if (action === "edit-exec")    openEditExecModal(btn);
+    if (action === "submit-done")  openSubmitDoneModal(id);
     if (action === "confirm-work") confirmWorkDone(id);
     if (action === "reject-work")  rejectWorkDone(id);
+    if (action === "habea-post")   openHabeaPostModal(id);
+    if (action === "habea-reject") habeaPostReject(id);
+    if (action === "habea-pre")    openHabeaPreModal(id);
     if (action === "add-photo")    openQuickPhotoModal(id, btn.dataset.title || "");
     if (action === "upd-prog")     openProgressModal(id, btn.dataset.title || "", Number(btn.dataset.prog||0), btn.dataset.status||"Явцтай");
     if (action === "show-move-menu") { e.stopPropagation(); showMoveMenu(btn, id); }
@@ -257,6 +270,12 @@ async function work() {
   autoScrollToCurrentMonth();
   initColResize();
   initGanttDrag(28);
+}
+
+async function slHubWork() {
+  window._workEmbedTarget = "slHubContent";
+  window.workCat = "Гэрэлтүүлэг засвар";
+  await work();
 }
 
 function initColResize() {
@@ -513,57 +532,108 @@ function renderGantt(rows, execs, year, canEdit, canDel) {
     const eOff   = off(r.end_date   || r.start_date || r.work_date);
     const workers = r.material_note || "";
 
-    const canConfirm = ["director","chief_engineer"].includes(state.me.role);
-    const isDone = r.status === "Дууссан";
-    const cs     = r.confirm_status || "";
+    const canConfirm    = ["director","chief_engineer"].includes(state.me.role);
+    const canHabeaAct   = ["director","safety"].includes(state.me.role);
+    const canSubmitDone = ["director","chief_engineer","engineer","electric","camera_engineer"].includes(state.me.role);
+    const cs  = r.confirm_status || "";
+    const st  = r.status || "Явцтай";
+    const prog = r.progress || 0;
 
-    // Confirm badge
+    // Status badge colours
+    const _sBg = {
+      'Явцтай':'#dbeafe','Эхэлсэн':'#f1f5f9','Дууссан':'#dcfce7',
+      'Дууссан гэж илгээсэн':'#fef3c7','Инженер баталсан':'#ede9fe',
+      'Хаагдсан':'#dcfce7','Буцаагдсан':'#fee2e2','Хүлээгдэж байгаа':'#f1f5f9',
+    };
+    const _sCl = {
+      'Явцтай':'#1d4ed8','Эхэлсэн':'#475569','Дууссан':'#16a34a',
+      'Дууссан гэж илгээсэн':'#92400e','Инженер баталсан':'#7c3aed',
+      'Хаагдсан':'#15803d','Буцаагдсан':'#dc2626','Хүлээгдэж байгаа':'#94a3b8',
+    };
+    const statusBg = _sBg[st] || '#f1f5f9';
+    const statusCl = _sCl[st] || '#475569';
+
+    // Workflow badge
     let confirmBadge = "";
-    if (cs === "confirmed") {
-      const cDate = r.confirmed_at ? r.confirmed_at.slice(0,10) : "";
+    if (st === "Хаагдсан") {
+      const hDate = (r.habea_post_at||"").slice(0,10);
+      confirmBadge = `
+      <div style="margin-top:4px;padding:5px 8px;background:linear-gradient(135deg,#fefce8,#fef9c3);border:1px solid #fde047;border-radius:8px;text-align:center">
+        <div style="font-size:16px;letter-spacing:2px;line-height:1.2">⭐⭐⭐⭐⭐</div>
+        <div style="font-size:9px;color:#92400e;font-weight:700;margin-top:1px">Бүрэн хаагдсан!</div>
+      </div>
+      <div style="font-size:10px;color:#15803d;background:#dcfce7;border:1px solid #86efac;border-radius:6px;padding:4px 8px;margin-top:3px">
+        🦺 ХАБЭА баталсан · ${escapeHtml(r.habea_post_name||"")} · ${hDate}
+      </div>
+      <button onclick="printApprovalSheet(${r.id})" style="margin-top:4px;width:100%;padding:4px 8px;font-size:10px;font-weight:700;background:#1e40af;color:#fff;border:none;border-radius:6px;cursor:pointer">🖨 Акт хэвлэх</button>`;
+    } else if (st === "Инженер баталсан") {
+      const cDate = (r.confirmed_at||"").slice(0,10);
+      confirmBadge = `<div style="font-size:10px;color:#7c3aed;background:#ede9fe;border:1px solid #c4b5fd;border-radius:6px;padding:4px 8px;margin-top:3px">
+        🔧 Инж. баталсан · ${escapeHtml(r.confirmed_name||"")} · ${cDate} · ⏳ ХАБЭА хүлээж байна
+      </div>`;
+    } else if (st === "Дууссан гэж илгээсэн") {
+      confirmBadge = `<div style="font-size:10px;color:#92400e;background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;padding:4px 8px;margin-top:3px">
+        📬 Илгээсэн · ⏳ Ерөнхий инженер батлалт хүлээж байна
+      </div>`;
+    } else if (st === "Буцаагдсан" || cs === "rejected") {
+      confirmBadge = `<div style="font-size:10px;color:#dc2626;background:#fee2e2;border:1px solid #fca5a5;border-radius:6px;padding:4px 8px;margin-top:3px">
+        ❌ Буцаагдсан${r.reject_note?` · "${escapeHtml(r.reject_note)}"`:""}</div>`;
+    } else if (cs === "confirmed") {
+      const cDate = (r.confirmed_at||"").slice(0,10);
       const imgThumb = r.confirm_image_url
         ? `<img src="${r.confirm_image_url}" onclick="window._ftZoom&&window._ftZoom('${r.confirm_image_url}')"
              style="height:32px;width:48px;object-fit:cover;border-radius:4px;cursor:zoom-in;border:1px solid #86efac;margin-left:4px">` : "";
       confirmBadge = `
       <div style="margin-top:4px;padding:5px 8px;background:linear-gradient(135deg,#fefce8,#fef9c3);border:1px solid #fde047;border-radius:8px;text-align:center">
         <div style="font-size:16px;letter-spacing:2px;line-height:1.2">⭐⭐⭐⭐⭐</div>
-        <div style="font-size:9px;color:#92400e;font-weight:700;margin-top:1px">Гайгүй хийлээ!</div>
       </div>
       <div style="font-size:10px;color:#15803d;background:#dcfce7;border:1px solid #86efac;border-radius:6px;padding:4px 8px;margin-top:3px;display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap">
         ✅ Батлагдсан · ${escapeHtml(r.confirmed_name||"")} · ${cDate}
         ${r.confirm_note?`<span style="color:#166534;font-style:italic">"${escapeHtml(r.confirm_note)}"</span>`:""}
         ${imgThumb}
       </div>`;
-    } else if (isDone && cs !== "confirmed") {
-      const rejNote = cs === "rejected" ? `<span style="color:#dc2626"> · ${escapeHtml(r.reject_note||"Буцаагдсан")}</span>` : "";
-      confirmBadge = `<div style="font-size:10px;color:${cs==='rejected'?'#dc2626':'#d97706'};background:${cs==='rejected'?'#fee2e2':'#fef3c7'};border:1px solid ${cs==='rejected'?'#fca5a5':'#fcd34d'};border-radius:6px;padding:2px 7px;margin-top:3px;display:inline-flex;align-items:center;gap:3px">
-        ${cs==='rejected'?'❌ Буцаагдсан':'⏳ Батлагдаагүй'}${rejNote}
+    }
+
+    // ХАБЭА pre sign-off badge
+    if (r.habea_pre_status === "approved") {
+      const hpDate = (r.habea_pre_at||"").slice(0,10);
+      confirmBadge += `<div style="font-size:10px;color:#0369a1;background:#e0f2fe;border:1px solid #7dd3fc;border-radius:6px;padding:3px 7px;margin-top:3px">
+        🦺 Эхлэлтийн зөвшөөрөл: ${escapeHtml(r.habea_pre_name||"")} · ${hpDate}
       </div>`;
     }
 
-    // Confirm/Reject buttons: director/chief_engineer can confirm any unconfirmed work
+    // Action buttons
     let btnConfirm = "";
-    if (canConfirm && cs !== "confirmed") {
-      btnConfirm = `
+    const notLocked = !["Дууссан гэж илгээсэн","Инженер баталсан","Хаагдсан"].includes(st);
+    if (canSubmitDone && prog >= 100 && notLocked) {
+      btnConfirm += `<button data-action="submit-done" data-id="${r.id}" class="btn" style="padding:3px 8px;font-size:10px;background:#f59e0b;color:#fff">📬 Дуусгаж илгээх</button>`;
+    }
+    if (canConfirm && (st === "Дууссан гэж илгээсэн" || (st === "Дууссан" && cs !== "confirmed"))) {
+      btnConfirm += `
         <button data-action="confirm-work" data-id="${r.id}" class="btn" style="padding:3px 8px;font-size:10px;background:#16a34a">✅ Батлах</button>
         <button data-action="reject-work"  data-id="${r.id}" class="btn danger" style="padding:3px 8px;font-size:10px">↩ Буцаах</button>`;
+    }
+    if (canHabeaAct && st === "Инженер баталсан") {
+      btnConfirm += `
+        <button data-action="habea-post"   data-id="${r.id}" class="btn" style="padding:3px 8px;font-size:10px;background:#7c3aed">🦺 ХАБЭА батлах</button>
+        <button data-action="habea-reject" data-id="${r.id}" class="btn danger" style="padding:3px 8px;font-size:10px">↩ Буцаах</button>`;
+    }
+    if (canHabeaAct && !["Хаагдсан","Дууссан гэж илгээсэн","Инженер баталсан"].includes(st) && r.habea_pre_status !== "approved") {
+      btnConfirm += `<button data-action="habea-pre" data-id="${r.id}" class="btn secondary" style="padding:3px 8px;font-size:10px;color:#0369a1;border-color:#7dd3fc">🦺 Эхлэлт зөвшөөрөх</button>`;
     }
 
     const btnEdit    = canEdit ? `<button data-action="edit-work"  data-id="${r.id}" class="btn secondary" style="padding:2px 7px;font-size:10px">✏️</button>` : "";
     const btnDel     = canDel  ? `<button data-action="del-work"   data-id="${r.id}" class="btn danger"    style="padding:2px 7px;font-size:10px">🗑</button>` : "";
     const btnMove    = canEdit && window._workCatList.length > 1
       ? `<button data-action="show-move-menu" data-id="${r.id}" class="btn secondary" style="padding:2px 7px;font-size:10px" title="Өөр категорид шилжүүлэх">📁</button>` : "";
-    const btnProg    = canEdit ? `<button data-action="upd-prog"   data-id="${r.id}" data-prog="${r.progress||0}" data-status="${escapeHtml(r.status||'Явцтай')}" data-title="${escapeHtml(r.title)}" class="btn" style="padding:2px 7px;font-size:10px">📝 Явц</button>` : "";
+    const btnProg    = canEdit ? `<button data-action="upd-prog"   data-id="${r.id}" data-prog="${prog}" data-status="${escapeHtml(st)}" data-title="${escapeHtml(r.title)}" class="btn" style="padding:2px 7px;font-size:10px">📝 Явц</button>` : "";
     const btnAddExec = canEdit ? `<button data-action="add-exec"   data-id="${r.id}" class="btn" style="padding:2px 7px;font-size:10px;background:#16a34a">➕ Гүйцэтгэл</button>` : "";
     const btnView    = `<button data-action="view-exec"  data-id="${r.id}" class="btn secondary" style="padding:2px 7px;font-size:10px">📋</button>`;
     const btnPhoto   = canEdit ? `<button data-action="add-photo"  data-id="${r.id}" data-title="${escapeHtml(r.title)}" class="btn secondary" style="padding:2px 7px;font-size:10px">📷</button>` : "";
 
-    const planBarColor = cs === "confirmed" ? "#15803d" : "#93c5fd";
-    const prog      = r.progress || 0;
+    const planBarColor = st==="Хаагдсан" ? "#15803d" : st==="Инженер баталсан" ? "#8b5cf6" : cs==="confirmed" ? "#15803d" : "#93c5fd";
     const progColor = prog === 100 ? '#16a34a' : prog >= 50 ? '#2563eb' : '#d97706';
     const progBg    = prog === 100 ? '#16a34a' : prog >= 50 ? '#2563eb' : '#f59e0b';
-    const statusBg  = r.status==='Дууссан' ? '#dcfce7' : r.status==='Явцтай' ? '#dbeafe' : '#f1f5f9';
-    const statusCl  = r.status==='Дууссан' ? '#16a34a' : r.status==='Явцтай' ? '#1d4ed8' : '#475569';
 
     // rowspan: main + plan row + exec rows
     const totalSpan = 1 + rExecs.length;
@@ -783,6 +853,10 @@ async function saveWork() {
   const title = (document.getElementById("wtitle")||{}).value?.trim();
   if (!title) { toast("Ажлын нэр оруулна уу"); return; }
   const g = id => (document.getElementById(id)||{}).value||"";
+  if (window.workCat === "Гэрэлтүүлэг засвар" && window._workSubCat !== "other" && !g("wgerLoc")) {
+    toast("Бүртгэлтэй байршил / объект сонгоно уу");
+    return;
+  }
   const workers = getSelectedWorkers();
   const locVal = g("wgerLoc") || "";
   const [locType, locIdStr] = locVal.includes(":") ? locVal.split(":") : ["", ""];
@@ -1002,6 +1076,9 @@ async function openExecModal(workId) {
   let execs = [];
   try { execs = await api(`/api/work-logs/${workId}/executions`); } catch(e){}
 
+  let linkedPtw = [];
+  try { linkedPtw = await api(`/api/work-logs/${workId}/safety-reports`); } catch(e){}
+
   const modal = document.getElementById("execModal");
   const inner = document.getElementById("execModalInner");
   if (!modal || !inner) return;
@@ -1019,24 +1096,57 @@ async function openExecModal(workId) {
   const status = workInfo.status   || "Явцтай";
   const pColor = prog>=100?"#16a34a":prog>0?"#2563eb":"#94a3b8";
 
-  // ── Confirm badge ─────────────────────────────────────────────
-  const cs = workInfo.confirm_status || "";
+  // ── Workflow status block ─────────────────────────────────────
+  const cs  = workInfo.confirm_status || "";
+  const wst = workInfo.status || "Явцтай";
   let confirmBlock = "";
-  if (cs === "confirmed") {
-    confirmBlock = `<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:#dcfce7;border:1px solid #86efac;border-radius:10px;margin-bottom:14px">
-      <span style="font-size:18px">✅</span>
-      <div>
-        <div style="font-size:12px;font-weight:700;color:#15803d">Батлагдсан</div>
-        <div style="font-size:11px;color:#166534">${escapeHtml(workInfo.confirmed_name||"")} · ${(workInfo.confirmed_at||"").slice(0,10)}</div>
-        ${workInfo.confirm_note?`<div style="font-size:11px;color:#166534;font-style:italic">"${escapeHtml(workInfo.confirm_note)}"</div>`:""}
-      </div>
-    </div>`;
-  } else if (cs === "rejected") {
-    confirmBlock = `<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:#fee2e2;border:1px solid #fca5a5;border-radius:10px;margin-bottom:14px">
-      <span style="font-size:18px">❌</span>
-      <div style="font-size:12px;font-weight:700;color:#dc2626">Буцаагдсан${workInfo.reject_note?` · "${escapeHtml(workInfo.reject_note)}"`:""}</div>
-    </div>`;
-  }
+
+  const _wfSteps = [
+    { key:"created",   label:"Ажил үүссэн",          done: true,                                                              icon:"📋" },
+    { key:"habea_pre", label:"ХАБЭА эхлэлт зөвшөөрөл", done: workInfo.habea_pre_status==="approved",                          icon:"🦺" },
+    { key:"submitted", label:"Дуусгаж илгээсэн",      done: ["Дууссан гэж илгээсэн","Инженер баталсан","Хаагдсан"].includes(wst), icon:"📬" },
+    { key:"eng",       label:"Ерөнхий инженер батлал", done: ["Инженер баталсан","Хаагдсан"].includes(wst),                   icon:"🔧" },
+    { key:"habea_post",label:"ХАБЭА дуусгалт батлал", done: wst==="Хаагдсан",                                                 icon:"🦺" },
+  ];
+  const activeStep = _wfSteps.filter(s=>s.done).length - 1;
+  confirmBlock = `
+  <div style="margin-bottom:14px;padding:12px 14px;background:#f8fafc;border:1px solid #e2e6ed;border-radius:10px">
+    <div style="font-size:11px;font-weight:700;color:#334155;margin-bottom:10px">📊 Ажлын явцын дэс дараалал</div>
+    <div style="display:flex;align-items:center;gap:4px;flex-wrap:nowrap;overflow-x:auto">
+      ${_wfSteps.map((s, i) => `
+        <div style="display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0;flex:1">
+          <div style="width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;
+            background:${s.done?'#16a34a':'#f1f5f9'};border:2px solid ${s.done?'#86efac':'#e2e6ed'}">${s.done?'✅':s.icon}</div>
+          <div style="font-size:9px;text-align:center;color:${s.done?'#15803d':'#94a3b8'};font-weight:${s.done?'700':'400'};line-height:1.2;max-width:70px">${s.label}</div>
+        </div>
+        ${i<_wfSteps.length-1?`<div style="height:2px;flex:1;background:${_wfSteps[i+1].done?'#86efac':'#e2e6ed'};min-width:8px;margin-bottom:14px"></div>`:""}
+      `).join("")}
+    </div>
+    ${wst==="Буцаагдсан"?`<div style="margin-top:10px;font-size:11px;color:#dc2626;font-weight:700">❌ Буцаагдсан${workInfo.reject_note?` · "${escapeHtml(workInfo.reject_note)}"`:""}</div>`:""}
+    ${workInfo.habea_pre_status==="approved"?`<div style="margin-top:8px;font-size:11px;color:#0369a1;background:#e0f2fe;border-radius:6px;padding:5px 8px">
+      🦺 Эхлэлт зөвшөөрсөн: ${escapeHtml(workInfo.habea_pre_name||"")} · ${(workInfo.habea_pre_at||"").slice(0,10)}
+      ${workInfo.habea_pre_risks?`<br><b>Эрсдэл:</b> ${escapeHtml(workInfo.habea_pre_risks)}`:""}
+      ${workInfo.habea_pre_measures?`<br><b>Арга хэмжээ:</b> ${escapeHtml(workInfo.habea_pre_measures)}`:""}
+      ${workInfo.habea_pre_note?`<br><b>Тайлбар:</b> ${escapeHtml(workInfo.habea_pre_note)}`:""}
+    </div>`:""}
+    ${wst==="Хаагдсан"?`<div style="margin-top:8px;font-size:11px;color:#15803d;background:#dcfce7;border-radius:6px;padding:5px 8px">
+      🦺 ХАБЭА дуусгалт: ${escapeHtml(workInfo.habea_post_name||"")} · ${(workInfo.habea_post_at||"").slice(0,10)}
+      ${workInfo.habea_post_note?` · "${escapeHtml(workInfo.habea_post_note)}"`:""}</div>`:""}
+    ${linkedPtw.length?`<div style="margin-top:8px;padding:8px 10px;background:#f5f3ff;border-radius:6px;border-left:3px solid #7c3aed">
+      <div style="font-size:10px;font-weight:700;color:#7c3aed;margin-bottom:5px">🛂 PTW — Ажлын зөвшөөрлийн бүртгэл</div>
+      ${linkedPtw.map(ptw=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;padding:4px 6px;background:#fff;border-radius:5px;border:1px solid #e9d5ff;margin-bottom:3px">
+        <div style="min-width:0">
+          <span style="font-size:11px;font-weight:600;color:#374151">${escapeHtml(ptw.title||"PTW")}</span>
+          <span style="font-size:10px;color:#94a3b8;margin-left:6px">${ptw.report_date?String(ptw.report_date).slice(0,10):""}</span>
+        </div>
+        <span style="flex-shrink:0;font-size:10px;padding:2px 8px;border-radius:20px;font-weight:700;
+          background:${ptw.status==="Хаагдсан"?"#dcfce7":ptw.status==="Батлагдсан"?"#eff6ff":"#fff7ed"};
+          color:${ptw.status==="Хаагдсан"?"#16a34a":ptw.status==="Батлагдсан"?"#2563eb":"#ea580c"}">
+          ${escapeHtml(ptw.status||"—")}
+        </span>
+      </div>`).join("")}
+    </div>`:""}
+  </div>`;
 
   // ── Creator / workers ─────────────────────────────────────────
   const creatorUser = (state.users||[]).find(u=>u.id===workInfo.created_by);
@@ -1923,6 +2033,8 @@ function _renderWorkLocDropdown(sub, bagFilter) {
     });
   }
   sel.innerHTML = opts;
+  const locEl = document.getElementById("wloc");
+  if (locEl) locEl.value = "";
 }
 
 async function onWorkLocSelect() {
@@ -1939,14 +2051,14 @@ async function onWorkLocSelect() {
   if (locType === "sl") {
     const pt = (window._slPoints || []).find(p => p.id === locId);
     if (pt) {
-      if (locEl   && !locEl.value)   locEl.value   = pt.name || pt.code || "";
+      if (locEl) locEl.value = pt.name || pt.code || "";
       if (titleEl && !titleEl.value) titleEl.value = `Гэмтэл засвар — ${pt.name || pt.code || ""}`;
     }
     fCat = "Авто замын гэрэл";
   } else {
     const g = (window._gerLocations || []).find(g => g.id === locId);
     if (g) {
-      if (locEl   && !locEl.value)   locEl.value   = g.location_name || "";
+      if (locEl) locEl.value = g.location_name || "";
       if (titleEl && !titleEl.value) titleEl.value = `Гэмтэл засвар — ${g.location_name || ""}`;
     }
     fCat = window._workSubCat === "ger" ? "Гэр хорооллын гэрэл" : "Цамхагийн гэрэл";
@@ -1968,18 +2080,285 @@ async function onWorkLocSelect() {
   } catch(e) { faultDiv.style.display = "none"; }
 }
 
+function onWorkAssetSelect() {
+  const id = Number(document.getElementById("wasset")?.value || 0);
+  const asset = (workAssets || []).find(a => Number(a.id) === id);
+  if (!asset) return;
+  const locEl = document.getElementById("wloc");
+  const titleEl = document.getElementById("wtitle");
+  if (locEl) locEl.value = asset.location || asset.name || "";
+  if (titleEl && !titleEl.value) titleEl.value = asset.name || asset.asset_code || "";
+}
+
+// ── Submit-done modal ─────────────────────────────────────────
+function openSubmitDoneModal(id) {
+  let m = document.getElementById("submitDoneModal");
+  if (!m) { m = document.createElement("div"); m.id = "submitDoneModal"; document.body.appendChild(m); }
+  m.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:3000;display:flex;align-items:flex-start;justify-content:center;padding-top:80px";
+  window._sdmId = id;
+  m.innerHTML = `
+    <div style="background:#fff;border-radius:16px;width:min(460px,94vw);box-shadow:0 20px 60px rgba(0,0,0,.25);overflow:hidden">
+      <div style="background:linear-gradient(135deg,#d97706,#f59e0b);padding:16px 20px;display:flex;align-items:center;justify-content:space-between">
+        <div style="color:#fff;font-size:14px;font-weight:800">📬 Дуусгаж илгээх</div>
+        <button onclick="document.getElementById('submitDoneModal').style.display='none'"
+          style="border:none;background:rgba(255,255,255,.2);color:#fff;border-radius:8px;padding:5px 12px;cursor:pointer">✕</button>
+      </div>
+      <div style="padding:20px">
+        <div style="font-size:13px;color:#475569;margin-bottom:14px">Ажил дуусч, ерөнхий инженерт батлуулахаар илгээх гэж байна. Дуусгалтын тайлбар оруулна уу.</div>
+        <textarea id="sdm_note" class="input" rows="3" placeholder="Дуусгалтын тайлбар, хийсэн ажлын мэдээлэл..." style="resize:vertical;margin-bottom:14px"></textarea>
+        <div style="display:flex;gap:10px">
+          <button id="sdm_btn" onclick="doSubmitDone()" style="flex:1;background:#f59e0b;color:#fff;border:none;border-radius:8px;padding:10px;font-size:14px;font-weight:700;cursor:pointer">
+            📬 Илгээх
+          </button>
+          <button onclick="document.getElementById('submitDoneModal').style.display='none'"
+            style="padding:10px 20px;border:1px solid #e2e6ed;border-radius:8px;background:#fff;cursor:pointer">Цуцлах</button>
+        </div>
+      </div>
+    </div>`;
+  m.addEventListener("click", e => { if (e.target===m) m.style.display="none"; }, { once:false });
+}
+async function doSubmitDone() {
+  const id   = window._sdmId;
+  const note = document.getElementById("sdm_note")?.value?.trim() || "";
+  const btn  = document.getElementById("sdm_btn");
+  if (btn) btn.disabled = true;
+  try {
+    await api(`/api/work-logs/${id}/submit-done`, { method:"POST", body:JSON.stringify({ note }) });
+    document.getElementById("submitDoneModal").style.display = "none";
+    toast("📬 Ерөнхий инженерт илгээгдлээ ✓");
+    work();
+  } catch(e) { toast("Алдаа: " + e.message); }
+  finally { if (btn) btn.disabled = false; }
+}
+
+// ── ХАБЭА pre sign-off modal ──────────────────────────────────
+function openHabeaPreModal(id) {
+  let m = document.getElementById("habeaPreModal");
+  if (!m) { m = document.createElement("div"); m.id = "habeaPreModal"; document.body.appendChild(m); }
+  m.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:3000;display:flex;align-items:flex-start;justify-content:center;padding-top:80px";
+  window._hpmId = id;
+  m.innerHTML = `
+    <div style="background:#fff;border-radius:16px;width:min(520px,94vw);box-shadow:0 20px 60px rgba(0,0,0,.25);overflow:hidden">
+      <div style="background:linear-gradient(135deg,#0369a1,#0ea5e9);padding:16px 20px;display:flex;align-items:center;justify-content:space-between">
+        <div style="color:#fff;font-size:14px;font-weight:800">🦺 ХАБЭА — Ажлын эхлэлт зөвшөөрөх</div>
+        <button onclick="document.getElementById('habeaPreModal').style.display='none'"
+          style="border:none;background:rgba(255,255,255,.2);color:#fff;border-radius:8px;padding:5px 12px;cursor:pointer">✕</button>
+      </div>
+      <div style="padding:20px;display:flex;flex-direction:column;gap:12px">
+        <div>
+          <div style="font-size:11px;font-weight:700;color:#344054;margin-bottom:4px">⚠️ Тодорхойлсон эрсдэлүүд</div>
+          <textarea id="hpm_risks" class="input" rows="2" placeholder="Цахилгааны эрсдэл, өндрөөс унах эрсдэл..." style="resize:vertical"></textarea>
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:700;color:#344054;margin-bottom:4px">🛡️ Авах хамгаалах арга хэмжээ</div>
+          <textarea id="hpm_measures" class="input" rows="2" placeholder="Хувийн хамгаалах хэрэгсэл, ажлын талбайн хаалт..." style="resize:vertical"></textarea>
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:700;color:#344054;margin-bottom:4px">📝 Зааварчилгааны тэмдэглэл</div>
+          <textarea id="hpm_note" class="input" rows="2" placeholder="Ажилчдад өгсөн зааварчилгаа, анхааруулга..." style="resize:vertical"></textarea>
+        </div>
+        <div style="display:flex;gap:10px">
+          <button id="hpm_btn" onclick="doHabeaPre()" style="flex:1;background:#0369a1;color:#fff;border:none;border-radius:8px;padding:10px;font-size:14px;font-weight:700;cursor:pointer">
+            🦺 Зөвшөөрч гарын үсэг зурах
+          </button>
+          <button onclick="document.getElementById('habeaPreModal').style.display='none'"
+            style="padding:10px 20px;border:1px solid #e2e6ed;border-radius:8px;background:#fff;cursor:pointer">Цуцлах</button>
+        </div>
+      </div>
+    </div>`;
+  m.addEventListener("click", e => { if (e.target===m) m.style.display="none"; }, { once:false });
+}
+async function doHabeaPre() {
+  const id       = window._hpmId;
+  const risks    = document.getElementById("hpm_risks")?.value?.trim() || "";
+  const measures = document.getElementById("hpm_measures")?.value?.trim() || "";
+  const note     = document.getElementById("hpm_note")?.value?.trim() || "";
+  const btn      = document.getElementById("hpm_btn");
+  if (btn) btn.disabled = true;
+  try {
+    await api(`/api/work-logs/${id}/habea-pre`, { method:"POST", body:JSON.stringify({ risks, measures, note }) });
+    document.getElementById("habeaPreModal").style.display = "none";
+    toast("🦺 Эхлэлтийн зөвшөөрөл бүртгэгдлээ ✓");
+    work();
+  } catch(e) { toast("Алдаа: " + e.message); }
+  finally { if (btn) btn.disabled = false; }
+}
+
+// ── ХАБЭА post-work approval modal ───────────────────────────
+function openHabeaPostModal(id) {
+  let m = document.getElementById("habeaPostModal");
+  if (!m) { m = document.createElement("div"); m.id = "habeaPostModal"; document.body.appendChild(m); }
+  m.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:3000;display:flex;align-items:flex-start;justify-content:center;padding-top:80px";
+  window._hpostId = id;
+  m.innerHTML = `
+    <div style="background:#fff;border-radius:16px;width:min(500px,94vw);box-shadow:0 20px 60px rgba(0,0,0,.25);overflow:hidden">
+      <div style="background:linear-gradient(135deg,#6d28d9,#7c3aed);padding:16px 20px;display:flex;align-items:center;justify-content:space-between">
+        <div style="color:#fff;font-size:14px;font-weight:800">🦺 ХАБЭА — Ажлын талбай шалгах</div>
+        <button onclick="document.getElementById('habeaPostModal').style.display='none'"
+          style="border:none;background:rgba(255,255,255,.2);color:#fff;border-radius:8px;padding:5px 12px;cursor:pointer">✕</button>
+      </div>
+      <div style="padding:20px">
+        <div style="margin-bottom:14px;padding:12px;background:#faf5ff;border:1px solid #e9d5ff;border-radius:8px;font-size:12px;color:#581c87">
+          <b>Шалгах зүйлс:</b> Ил утас/кабель үлдсэн үү? · Нүх, унасан зүйл байна уу? · Замын саад арилсан уу? · Ажилчид осол гэмтэлгүй дуусгасан уу?
+        </div>
+        <label style="font-size:11px;color:#6d28d9;font-weight:700;display:block;margin-bottom:4px">Шалгалтын дүгнэлт <span style="color:#dc2626">*</span></label>
+        <textarea id="hpost_note" class="input" rows="3" placeholder="Шалгалтын дүн, ажлын талбайн байдал, ажилчдын аюулгүй байдал — заавал бичнэ үү..." style="resize:vertical;margin-bottom:4px;border-color:#c4b5fd"></textarea>
+        <div style="font-size:10px;color:#6b7280;margin-bottom:12px">⚠️ Энэ тэмдэглэл хуулийн баримт болно — тодорхой бичнэ үү</div>
+        <div style="display:flex;gap:10px">
+          <button id="hpost_btn" onclick="doHabeaPost()" style="flex:1;background:#7c3aed;color:#fff;border:none;border-radius:8px;padding:10px;font-size:14px;font-weight:700;cursor:pointer">
+            🦺 Аюулгүй — Ажил хаах
+          </button>
+          <button onclick="document.getElementById('habeaPostModal').style.display='none'"
+            style="padding:10px 20px;border:1px solid #e2e6ed;border-radius:8px;background:#fff;cursor:pointer">Цуцлах</button>
+        </div>
+      </div>
+    </div>`;
+  m.addEventListener("click", e => { if (e.target===m) m.style.display="none"; }, { once:false });
+}
+async function doHabeaPost() {
+  const id   = window._hpostId;
+  const note = document.getElementById("hpost_note")?.value?.trim() || "";
+  if (!note) { toast("Шалгалтын дүгнэлт заавал бичих шаардлагатай"); return; }
+  const btn  = document.getElementById("hpost_btn");
+  if (btn) btn.disabled = true;
+  try {
+    await api(`/api/work-logs/${id}/habea-post`, { method:"POST", body:JSON.stringify({ note }) });
+    document.getElementById("habeaPostModal").style.display = "none";
+    toast("🦺 ХАБЭА батлагдсан — Ажил хаагдлаа ✓");
+    work();
+    printApprovalSheet(id);
+  } catch(e) { toast("Алдаа: " + e.message); }
+  finally { if (btn) btn.disabled = false; }
+}
+async function habeaPostReject(id) {
+  const note = prompt("ХАБЭА буцаах шалтгаан (ямар асуудал байгаа):");
+  if (note === null) return;
+  try {
+    await api(`/api/work-logs/${id}/habea-post-reject`, {
+      method: "POST",
+      body: JSON.stringify({ note: note || "ХАБЭА шалгалтад тэнцсэнгүй" })
+    });
+    toast("↩ ХАБЭА буцаасан — Ажил засварлах шаардлагатай.");
+    work();
+  } catch(e) { toast("Алдаа: " + e.message); }
+}
+
+// ── Approval sheet print ──────────────────────────────────────
+async function printApprovalSheet(id) {
+  let w;
+  try { w = await api(`/api/work-logs/${id}/approval-sheet`); } catch(e) { toast("Акт татахад алдаа гарлаа"); return; }
+
+  const fmt = s => s ? s.replace("T"," ").slice(0,16) : "—";
+  const esc = s => String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+
+  const html = `<!DOCTYPE html><html lang="mn"><head><meta charset="utf-8">
+  <title>Ажлын зөвшөөрлийн акт — ${esc(w.title)}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:"Times New Roman",serif;font-size:13px;color:#000;background:#fff;padding:30px 40px}
+    h1{font-size:17px;text-align:center;margin-bottom:4px;font-weight:bold}
+    .sub{text-align:center;font-size:12px;color:#333;margin-bottom:18px}
+    table{width:100%;border-collapse:collapse;margin-bottom:16px}
+    td,th{border:1px solid #666;padding:5px 8px;vertical-align:top;font-size:12px}
+    th{background:#f0f0f0;font-weight:bold;width:38%}
+    .section{font-size:13px;font-weight:bold;margin:14px 0 6px;border-bottom:1px solid #999;padding-bottom:3px}
+    .sign-row{display:flex;gap:40px;margin-top:30px}
+    .sign-box{flex:1;border-top:1px solid #000;padding-top:6px;font-size:11px;text-align:center}
+    .stamp{width:80px;height:80px;border:1px dashed #aaa;display:inline-block;margin-top:8px;line-height:78px;text-align:center;color:#bbb;font-size:10px}
+    .watermark{position:fixed;top:40%;left:50%;transform:translate(-50%,-50%) rotate(-30deg);font-size:80px;color:rgba(0,100,0,.06);font-weight:900;pointer-events:none;white-space:nowrap}
+    @media print{.no-print{display:none}body{padding:15px 20px}}
+  </style></head><body>
+  <div class="watermark">ЧОЙБАЛСАН ХӨГЖИЛ</div>
+
+  <div class="no-print" style="margin-bottom:16px;display:flex;gap:10px">
+    <button onclick="window.print()" style="padding:8px 20px;background:#1e40af;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer;font-weight:700">🖨 Хэвлэх</button>
+    <button onclick="window.close()" style="padding:8px 16px;background:#6b7280;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer">✕ Хаах</button>
+  </div>
+
+  <h1>АЖЛЫН ЗӨВШӨӨРЛИЙН АКТ</h1>
+  <div class="sub">Чойбалсан Хөгжил ОНӨҮГ · Smart City ERP · №${esc(w.id)}</div>
+
+  <div class="section">1. АЖЛЫН МЭДЭЭЛЭЛ</div>
+  <table>
+    <tr><th>Ажлын нэр</th><td><b>${esc(w.title)}</b></td></tr>
+    <tr><th>Байршил / Объект</th><td>${esc(w.location||w.address||"—")}</td></tr>
+    <tr><th>Эхлэх огноо</th><td>${esc(w.start_date||"—")}</td></tr>
+    <tr><th>Дуусах огноо</th><td>${esc(w.end_date||"—")}</td></tr>
+    <tr><th>Гүйцэтгэгч</th><td>${esc(w.assigned_name||"—")}</td></tr>
+    <tr><th>Бүртгэсэн</th><td>${esc(w.created_name||"—")} · ${fmt(w.created_at)}</td></tr>
+    <tr><th>Эцсийн статус</th><td><b>${esc(w.status||"—")}</b></td></tr>
+  </table>
+
+  <div class="section">2. ЕРӨНХИЙ ИНЖЕНЕРИЙН БАТЛАЛ</div>
+  <table>
+    <tr><th>Баталсан ажилтан</th><td><b>${esc(w.confirmed_name||"—")}</b></td></tr>
+    <tr><th>Баталсан огноо</th><td>${fmt(w.confirmed_at)}</td></tr>
+    <tr><th>Баталгааны тэмдэглэл</th><td><b>${esc(w.confirm_note||"—")}</b></td></tr>
+  </table>
+
+  <div class="section">3. ХАБЭА ЭХЛЭЛТИЙН ЗӨВШӨӨРӨЛ</div>
+  <table>
+    <tr><th>Зөвшөөрсөн ажилтан</th><td>${esc(w.habea_pre_name||"—")}</td></tr>
+    <tr><th>Зөвшөөрсөн огноо</th><td>${fmt(w.habea_pre_at)}</td></tr>
+    <tr><th>Эрсдэлийн мэдээлэл</th><td>${esc(w.habea_pre_risks||"—")}</td></tr>
+    <tr><th>Хамгаалах арга хэмжээ</th><td>${esc(w.habea_pre_measures||"—")}</td></tr>
+    <tr><th>Тэмдэглэл</th><td>${esc(w.habea_pre_note||"—")}</td></tr>
+  </table>
+
+  <div class="section">4. ХАБЭА ДУУСГАЛТЫН БАТЛАЛ</div>
+  <table>
+    <tr><th>Баталсан ажилтан</th><td><b>${esc(w.habea_post_name||"—")}</b></td></tr>
+    <tr><th>Баталсан огноо</th><td>${fmt(w.habea_post_at)}</td></tr>
+    <tr><th>Шалгалтын дүгнэлт</th><td><b>${esc(w.habea_post_note||"—")}</b></td></tr>
+  </table>
+
+  <div class="sign-row">
+    <div class="sign-box">
+      Ерөнхий инженер<br><br>
+      <div style="height:40px"></div>
+      ___________________________<br>
+      ${esc(w.confirmed_name||"")}<br>
+      <span style="font-size:10px">${fmt(w.confirmed_at)}</span>
+      <div><div class="stamp">Тамга</div></div>
+    </div>
+    <div class="sign-box">
+      ХАБЭА мэргэжилтэн<br><br>
+      <div style="height:40px"></div>
+      ___________________________<br>
+      ${esc(w.habea_post_name||"")}<br>
+      <span style="font-size:10px">${fmt(w.habea_post_at)}</span>
+      <div><div class="stamp">Тамга</div></div>
+    </div>
+  </div>
+
+  <div style="margin-top:24px;font-size:10px;color:#666;text-align:center;border-top:1px solid #ddd;padding-top:8px">
+    Энэхүү акт нь Чойбалсан Хөгжил ОНӨҮГ-ийн Smart City ERP системээс автоматаар үүсгэгдсэн.<br>
+    Баримт бичгийн дугаар: WO-${esc(w.id)} · Хэвлэсэн: ${new Date().toLocaleString("mn-MN")}
+  </div>
+  </body></html>`;
+
+  const win = window.open("", "_blank", "width=800,height=900");
+  if (!win) { toast("Popup хаалттай байна — хөтчийн тохиргоог шалгана уу"); return; }
+  win.document.write(html);
+  win.document.close();
+}
+
 Object.assign(window, {
-  work, toggleWorkForm, resetWorkForm, editWorkById,
+  work, slHubWork, toggleWorkForm, resetWorkForm, editWorkById,
   toggleWassDropdown, updateWassLabel, filterWassList,
   saveWork, confirmDeleteWork,
   confirmWorkDone, rejectWorkDone, submitConfirmWork,
+  openSubmitDoneModal, doSubmitDone,
+  openHabeaPreModal, doHabeaPre,
+  openHabeaPostModal, doHabeaPost, habeaPostReject,
   openExecModal, closeExecModal, saveExec, deleteExec, openEditExecModal, updateExec,
   filterExecWorkers, updateExecWorkers, eeFilterWorkers, eeUpdateWorkers, previewExecPhotos,
   loadExecPhotos, deleteExecPhoto, uploadExecPhoto,
   openExecDetail, scrollGanttToMonth,
   photoBox, uploadPhoto,
-  setWorkSubCat, setWorkBag, onWorkLocSelect,
+  setWorkSubCat, setWorkBag, onWorkLocSelect, onWorkAssetSelect,
   openQuickPhotoModal, qpPreviewFiles, submitQuickPhotos,
   openProgressModal, submitProgress,
   showMoveMenu, moveWorkToCat,
+  printApprovalSheet,
 });

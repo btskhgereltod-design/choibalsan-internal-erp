@@ -15,7 +15,8 @@ export const roleMenus = {
   storekeeper: ["dashboard","attendance","materials","reports"],
   accountant: ["dashboard","attendance","expenses","reports"],
   hr: ["dashboard","attendance","hr","docs","reports"],
-  safety: ["dashboard","attendance","safety","reports"]
+  safety: ["dashboard","attendance","safety","reports"],
+  electric: ["dashboard","attendance","work","reports"]
 };
 
 export const menuNames = {
@@ -98,6 +99,79 @@ export function codeClass(code) {
   if (code === "Х") return "late";
   if (code === "ИЦ") return "overtime";
   return "";
+}
+
+// ── Floating sticky horizontal scrollbar ─────────────────────
+// .table-wrap viewport-оос гадагшлахад доод талд гарна
+
+let _floatingBar = null;
+let _activeWrap  = null;
+let _syncing     = false;
+
+function _getOrCreateBar() {
+  if (_floatingBar) return _floatingBar;
+  const bar = document.createElement("div");
+  bar.className = "floating-hscroll";
+  const inner = document.createElement("div");
+  bar.appendChild(inner);
+  document.body.appendChild(bar);
+
+  bar.addEventListener("scroll", () => {
+    if (_syncing || !_activeWrap) return;
+    _syncing = true;
+    _activeWrap.scrollLeft = bar.scrollLeft;
+    _syncing = false;
+  }, { passive: true });
+
+  _floatingBar = bar;
+  return bar;
+}
+
+function _updateFloating() {
+  const bar = _getOrCreateBar();
+  const wraps = document.querySelectorAll(".table-wrap");
+  let found = null;
+
+  wraps.forEach(wrap => {
+    if (wrap.scrollWidth <= wrap.clientWidth) return;
+    const rect = wrap.getBoundingClientRect();
+    // Хүснэгтийн native scrollbar viewport-аас гарсан бол
+    if (rect.bottom > window.innerHeight && rect.top < window.innerHeight) {
+      found = wrap;
+    }
+  });
+
+  if (found) {
+    const rect = found.getBoundingClientRect();
+    bar.style.display  = "block";
+    bar.style.left     = rect.left + "px";
+    bar.style.width    = rect.width + "px";
+    bar.firstChild.style.width = found.scrollWidth + "px";
+    if (_activeWrap !== found) {
+      _activeWrap = found;
+      bar.scrollLeft = found.scrollLeft;
+      found._floatingListener && found.removeEventListener("scroll", found._floatingListener);
+      found._floatingListener = () => {
+        if (_syncing) return;
+        _syncing = true;
+        bar.scrollLeft = found.scrollLeft;
+        _syncing = false;
+      };
+      found.addEventListener("scroll", found._floatingListener, { passive: true });
+    }
+  } else {
+    bar.style.display = "none";
+    _activeWrap = null;
+  }
+}
+
+export function initFloatingScrollbar() {
+  window.addEventListener("scroll",  _updateFloating, { passive: true });
+  window.addEventListener("resize",  _updateFloating, { passive: true });
+  // main дотор шинэ table-wrap нэмэгдэхэд автоматаар идэвхжих
+  const main = document.getElementById("main");
+  if (!main) return;
+  new MutationObserver(_updateFloating).observe(main, { childList: true, subtree: true });
 }
 
 export function hydrateGlobals() {

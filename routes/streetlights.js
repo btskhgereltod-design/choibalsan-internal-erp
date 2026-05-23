@@ -136,6 +136,15 @@ router.get("/sl-points/:id", auth, async (req, res) => {
        LEFT JOIN users u ON u.id = d.uploaded_by
        WHERE d.sl_point_id=? ORDER BY d.uploaded_at DESC`, [req.params.id]
     );
+    pt.history = await all(
+      `SELECT w.*, u.full_name created_name, c.full_name confirmed_name
+       FROM asset_events w
+       LEFT JOIN users u ON u.id = w.created_by
+       LEFT JOIN users c ON c.id = w.confirmed_by
+       WHERE w.sl_point_id=?
+       ORDER BY COALESCE(w.work_date,w.start_date,w.created_at) DESC, w.id DESC
+       LIMIT 50`, [req.params.id]
+    );
     res.json(pt);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
@@ -738,6 +747,154 @@ router.get("/sl-ger-stats", auth, async (_req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Lighting fault / availability analytics ───────────────────
+router.get("/sl-analytics", auth, async (req, res) => {
+  try {
+    const year = String(req.query.year || new Date().getFullYear()).replace(/[^\d]/g, "").slice(0, 4) || String(new Date().getFullYear());
+    const start = `${year}-01-01`;
+    const end = `${Number(year) + 1}-01-01`;
+    const cats = ["Авто замын гэрэл", "Гэр хорооллын гэрэл", "Цамхагийн гэрэл", "Гэрлэн дохио"];
+
+    const [road, ger, tower, signal, reported, repaired, reportedToDate, repairedToDate, openNow] = await Promise.all([
+      get(`SELECT COALESCE(SUM(CASE WHEN total_heads > 0 THEN total_heads ELSE lamp_count END),0) total
+           FROM sl_points WHERE code LIKE 'ГТ-%'`),
+      get(`SELECT COALESCE(SUM(CASE WHEN head_count > 0 THEN head_count ELSE total_count END),0) total
+           FROM sl_ger_inventory WHERE category='Гэр хороолол'`),
+      get(`SELECT COALESCE(SUM(CASE WHEN head_count > 0 THEN head_count ELSE total_count END),0) total
+           FROM sl_ger_inventory WHERE category='Цамхаг'`),
+      get(`SELECT COUNT(*) total FROM assets WHERE category='Гэрлэн дохио'`),
+      all(`SELECT category, substr(report_date,1,7) ym,
+                  SUM(broken_count + fixed_count) reported_heads,
+                  COUNT(*) fault_count
+           FROM sl_faults
+           WHERE report_date>=? AND report_date<?
+           GROUP BY category, substr(report_date,1,7)`, [start, end]),
+      all(`SELECT f.category, substr(r.repair_date,1,7) ym,
+                  SUM(r.heads_fixed) repaired_heads,
+                  COUNT(*) repair_count
+           FROM sl_fault_repairs r
+           JOIN sl_faults f ON f.id=r.fault_id
+           WHERE r.repair_date>=? AND r.repair_date<?
+           GROUP BY f.category, substr(r.repair_date,1,7)`, [start, end]),
+      all(`SELECT category, substr(report_date,1,7) ym,
+                  SUM(broken_count + fixed_count) reported_heads
+           FROM sl_faults
+           WHERE report_date<?
+           GROUP BY category, substr(report_date,1,7)`, [end]),
+      all(`SELECT f.category, substr(r.repair_date,1,7) ym,
+                  SUM(r.heads_fixed) repaired_heads
+           FROM sl_fault_repairs r
+           JOIN sl_faults f ON f.id=r.fault_id
+           WHERE r.repair_date<?
+           GROUP BY f.category, substr(r.repair_date,1,7)`, [end]),
+      all(`SELECT category, SUM(broken_count) open_heads, COUNT(*) open_faults
+           FROM sl_faults
+           WHERE status!='Дууссан'
+           GROUP BY category`)
+    ]);
+
+    const totals = {
+      "Авто замын гэрэл": Number(road?.total || 0),
+      "Гэр хорооллын гэрэл": Number(ger?.total || 0),
+      "Цамхагийн гэрэл": Number(tower?.total || 0),
+      "Гэрлэн дохио": Number(signal?.total || 0),
+    };
+    const byKey = rows => {
+      const map = {};
+      rows.forEach(r => { map[`${r.category}|${r.ym}`] = r; });
+      return map;
+    };
+    const repMap = byKey(reported);
+    const fixMap = byKey(repaired);
+    const openMap = {};
+    openNow.forEach(r => { openMap[r.category] = r; });
+
+    const months = Array.from({ length: 12 }, (_, i) => {
+      const ym = `${year}-${String(i + 1).padStart(2, "0")}`;
+      let reportedHeads = 0, repairedHeads = 0, faultCount = 0, repairCount = 0, openHeads = 0, capacity = 0;
+      const categories = cats.map(category => {
+        const r = repMap[`${category}|${ym}`] || {};
+        const f = fixMap[`${category}|${ym}`] || {};
+        const cumulativeReported = reportedToDate
+          .filter(x => x.category === category && x.ym <= ym)
+          .reduce((s, x) => s + Number(x.reported_heads || 0), 0);
+        const cumulativeRepaired = repairedToDate
+          .filter(x => x.category === category && x.ym <= ym)
+          .reduce((s, x) => s + Number(x.repaired_heads || 0), 0);
+        const catOpen = Math.max(0, cumulativeReported - cumulativeRepaired);
+        const catCapacity = totals[category] || 0;
+        const catAvailability = catCapacity > 0 ? Math.max(0, (catCapacity - catOpen) / catCapacity * 100) : null;
+
+        reportedHeads += Number(r.reported_heads || 0);
+        repairedHeads += Number(f.repaired_heads || 0);
+        faultCount += Number(r.fault_count || 0);
+        repairCount += Number(f.repair_count || 0);
+        openHeads += catOpen;
+        capacity += catCapacity;
+
+        return {
+          category,
+          capacity: catCapacity,
+          fault_count: Number(r.fault_count || 0),
+          reported_heads: Number(r.reported_heads || 0),
+          repair_count: Number(f.repair_count || 0),
+          repaired_heads: Number(f.repaired_heads || 0),
+          open_heads: catOpen,
+          availability_pct: catAvailability
+        };
+      });
+      return {
+        ym,
+        label: `${i + 1}-р сар`,
+        capacity,
+        fault_count: faultCount,
+        reported_heads: reportedHeads,
+        repair_count: repairCount,
+        repaired_heads: repairedHeads,
+        open_heads: openHeads,
+        availability_pct: capacity > 0 ? Math.max(0, (capacity - openHeads) / capacity * 100) : null,
+        categories
+      };
+    });
+
+    const by_category = cats.map(category => {
+      const catReported = reported.filter(r => r.category === category);
+      const catRepaired = repaired.filter(r => r.category === category);
+      const reportedHeads = catReported.reduce((s, r) => s + Number(r.reported_heads || 0), 0);
+      const repairedHeads = catRepaired.reduce((s, r) => s + Number(r.repaired_heads || 0), 0);
+      const openHeads = Number(openMap[category]?.open_heads || 0);
+      const capacity = totals[category] || 0;
+      return {
+        category,
+        capacity,
+        fault_count: catReported.reduce((s, r) => s + Number(r.fault_count || 0), 0),
+        reported_heads: reportedHeads,
+        repair_count: catRepaired.reduce((s, r) => s + Number(r.repair_count || 0), 0),
+        repaired_heads: repairedHeads,
+        open_heads: openHeads,
+        open_faults: Number(openMap[category]?.open_faults || 0),
+        availability_pct: capacity > 0 ? Math.max(0, (capacity - openHeads) / capacity * 100) : null
+      };
+    });
+
+    const totalCapacity = Object.values(totals).reduce((s, n) => s + n, 0);
+    const totalOpen = by_category.reduce((s, r) => s + r.open_heads, 0);
+    res.json({
+      year: Number(year),
+      totals,
+      summary: {
+        capacity: totalCapacity,
+        reported_heads: by_category.reduce((s, r) => s + r.reported_heads, 0),
+        repaired_heads: by_category.reduce((s, r) => s + r.repaired_heads, 0),
+        open_heads: totalOpen,
+        availability_pct: totalCapacity > 0 ? Math.max(0, (totalCapacity - totalOpen) / totalCapacity * 100) : null
+      },
+      by_category,
+      months
+    });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── List inventory ────────────────────────────────────────────
 router.get("/sl-ger-inventory", auth, async (req, res) => {
   try {
@@ -823,6 +980,15 @@ router.get("/sl-ger-inventory/:id", auth, async (req, res) => {
       `SELECT d.*, u.full_name uploader_name FROM sl_ger_docs d
        LEFT JOIN users u ON u.id=d.uploaded_by WHERE d.ger_id=? ORDER BY d.uploaded_at DESC`,
       [req.params.id]
+    );
+    rec.history = await all(
+      `SELECT w.*, u.full_name created_name, c.full_name confirmed_name
+       FROM asset_events w
+       LEFT JOIN users u ON u.id = w.created_by
+       LEFT JOIN users c ON c.id = w.confirmed_by
+       WHERE w.ger_inventory_id=?
+       ORDER BY COALESCE(w.work_date,w.start_date,w.created_at) DESC, w.id DESC
+       LIMIT 50`, [req.params.id]
     );
     res.json(rec);
   } catch(e) { res.status(500).json({ error: e.message }); }

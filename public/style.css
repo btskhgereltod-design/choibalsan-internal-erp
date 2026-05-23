@@ -210,6 +210,45 @@ body {
   color: var(--ink4);
   padding: 8px 10px 4px;
 }
+.side-group-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--ink4);
+  cursor: pointer;
+  padding: 8px 10px 6px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  text-align: left;
+}
+.side-group-btn:hover { background: var(--bg); color: var(--ink2); }
+.side-group-btn span:first-child { flex: 1; }
+.side-group-count {
+  letter-spacing: 0;
+  font-size: 10px;
+  color: var(--ink4);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 6px;
+}
+.side-group-caret {
+  letter-spacing: 0;
+  font-size: 12px;
+  transition: transform .15s;
+}
+.side-group-btn.open .side-group-caret { transform: rotate(180deg); }
+.side-group-items {
+  padding-left: 8px;
+  border-left: 2px solid var(--border);
+  margin-left: 10px;
+}
 .menu button {
   display: flex;
   align-items: center;
@@ -475,6 +514,22 @@ textarea { min-height: 80px; resize: vertical; }
 
 /* ── TABLES ── */
 .table-wrap { overflow-x: auto; }
+
+/* Floating sticky horizontal scrollbar — viewport доод талд гарна */
+.floating-hscroll {
+  position: fixed;
+  bottom: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  height: 14px;
+  background: rgba(255,255,255,.96);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -2px 8px rgba(0,0,0,.08);
+  z-index: 900;
+  display: none;
+  cursor: col-resize;
+}
+.floating-hscroll > div { height: 1px; }
 table {
   width: 100%;
   border-collapse: collapse;

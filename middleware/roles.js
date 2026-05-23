@@ -25,10 +25,11 @@ const ROLE_META = {
   accountant:     { label: "Нягтлан",              level: 6  },
   hr:             { label: "Хүний нөөц",           level: 5  },
   storekeeper:    { label: "Нярав",                level: 4  },
-  engineer:       { label: "Инженер",              level: 3  },
+  engineer:       { label: "Цахилгааны инженер",   level: 3  },
   electric:       { label: "Цахилгаанчин",         level: 3  },
   safety:         { label: "ХАБЭА",                level: 2  },
   camera_engineer:{ label: "Камерын инженер",      level: 2  },
+  worker:         { label: "Ажилтан",              level: 1  },
 };
 
 // ── Permission sets ───────────────────────────────────────────────────────────
@@ -53,11 +54,11 @@ const PERMISSIONS = {
 
   // ── Streetlights / Electricity billing ───────────────────────
   // Цахилгааны тооцоо, нэхэмжлэл, байгууллагын бүртгэл
-  sl_billing:         ["director", "accountant"],
+  sl_billing:         ["director", "accountant", "engineer", "electric"],
   // Гэрэлтүүлгийн техник засвар, цэгийн бүртгэл
   sl_technical:       ["director", "chief_engineer", "engineer", "electric"],
   // Гэр хорооллын гэрэлтүүлгийн талбайн бүртгэл (санхүү + цахилгаанчин)
-  sl_ger_write:       ["director", "accountant", "electric"],
+  sl_ger_write:       ["director", "accountant", "engineer", "electric"],
 
   // ── Meter points ──────────────────────────────────────────────
   // Тоолуурын байршил, баталгаажуулалт, бүртгэл
@@ -65,11 +66,11 @@ const PERMISSIONS = {
 
   // ── Lighting schedule ─────────────────────────────────────────
   // Гэрэлтүүлгийн хуваарь: асах/унтрах цаг
-  lighting_edit:      ["director", "chief_engineer", "accountant"],
+  lighting_edit:      ["director", "chief_engineer", "accountant", "engineer", "electric"],
 
   // ── LoRa ──────────────────────────────────────────────────────
   lora_manage:        ["director", "chief_engineer"],
-  lora_access:        ["director", "chief_engineer", "engineer"],
+  lora_access:        ["director", "chief_engineer", "engineer", "camera_engineer"],
 
   // ── Warehouse / Нярав ─────────────────────────────────────────
   // Агуулахын орлого, зарлага, үлдэгдэл
@@ -84,11 +85,23 @@ const PERMISSIONS = {
   reports_read:       ["director", "hr", "accountant", "chief_engineer"],
   reports_write:      ["director", "hr", "accountant"],
 
+  // ── Operations / Work logs ────────────────────────────────────
+  // Ажлын бүртгэл үүсгэх, засах, гүйцэтгэл, зураг
+  operations_write:   ["director", "chief_engineer", "engineer", "camera_engineer"],
+  // Ажил болон гүйцэтгэл устгах
+  operations_delete:  ["director", "chief_engineer"],
+  // Ажил дуусгавар батлах / буцаах
+  operations_confirm: ["director", "chief_engineer"],
+
   // ── Vehicles ──────────────────────────────────────────────────
   vehicle_write:      ["director", "chief_engineer", "safety"],
 
   // ── Smart import (Excel/PDF) ──────────────────────────────────
   smart_import:       ["director", "accountant", "storekeeper", "chief_engineer"],
+
+  // ── Safety / ХАБЭА ───────────────────────────────────────────
+  // Ажлын эхлэлтийн зөвшөөрөл болон дуусгалтын эрсдэл шалгалт
+  safety_confirm:     ["director", "safety"],
 
   // ── Admin / System ────────────────────────────────────────────
   // Системийн тохиргоо, хэрэглэгч удирдлага
@@ -97,7 +110,50 @@ const PERMISSIONS = {
   admin_hr:           ["director", "hr", "chief_engineer"],
   // Ажлын категори, шийдвэр гаргах тохиргоо
   engineering:        ["director", "chief_engineer"],
+  camera:             ["director", "chief_engineer", "camera_engineer"],
 };
+
+const PERMISSION_MODULES = {
+  hr_read:            ["admin_hub"],
+  hr_write:           ["admin_hub"],
+  finance_read:       ["nyagtlan"],
+  finance_write:      ["nyagtlan"],
+  assets_write:       ["assets", "camera"],
+  assets_delete:      ["assets", "camera"],
+  camera:             ["camera"],
+  sl_billing:         ["streetlights"],
+  sl_technical:       ["streetlights"],
+  sl_ger_write:       ["streetlights"],
+  meter_write:        ["streetlights"],
+  lighting_edit:      ["streetlights"],
+  lora_manage:        ["lora"],
+  lora_access:        ["lora"],
+  warehouse_write:    ["warehouse"],
+  warehouse_delete:   ["warehouse"],
+  payroll_write:      ["nyagtlan"],
+  reports_read:       ["reports"],
+  reports_write:      ["reports"],
+  operations_write:   ["operations"],
+  operations_delete:  ["operations"],
+  operations_confirm: ["operations"],
+  safety_confirm:     ["operations", "habea"],
+  vehicle_write:      ["habea"],
+  smart_import:       ["nyagtlan", "warehouse", "assets"],
+  admin_only:         ["settings"],
+  admin_hr:           ["admin_hub"],
+  engineering:        ["settings", "assets"],
+};
+
+function hasCustomPermission(user, permission) {
+  const modules = PERMISSION_MODULES[permission] || [];
+  if (!modules.length || !user?.permissions) return false;
+  try {
+    const perms = typeof user.permissions === "string" ? JSON.parse(user.permissions || "{}") : user.permissions;
+    return modules.some(moduleKey => perms?.[moduleKey]?.edit);
+  } catch {
+    return false;
+  }
+}
 
 // ── Middleware factories ──────────────────────────────────────────────────────
 
@@ -128,7 +184,7 @@ function requirePermission(permission) {
   }
   return function permissionMiddleware(req, res, next) {
     if (!req.user) return res.status(401).json({ error: "Нэвтрэх шаардлагатай" });
-    if (allowed.includes(req.user.role)) return next();
+    if (allowed.includes(req.user.role) || hasCustomPermission(req.user, permission)) return next();
     return res.status(403).json({ error: "Эрх хүрэхгүй" });
   };
 }

@@ -11,7 +11,9 @@ router.get("/vehicles", auth, async (_req, res) => {
     SELECT v.*, u.full_name driver_name,
       (SELECT COUNT(*) FROM vehicle_daily_inspections d WHERE d.vehicle_id=v.id) daily_count,
       (SELECT COUNT(*) FROM vehicle_monthly_inspections m WHERE m.vehicle_id=v.id) monthly_count,
-      (SELECT COUNT(*) FROM vehicle_repairs r WHERE r.vehicle_id=v.id AND r.repair_status!='Дууссан') active_repairs
+      (SELECT COUNT(*) FROM vehicle_repairs r WHERE r.vehicle_id=v.id AND r.repair_status!='Дууссан') active_repairs,
+      COALESCE((SELECT MAX(d.insp_date) FROM vehicle_daily_inspections d WHERE d.vehicle_id=v.id), v.last_daily_insp) latest_daily_insp,
+      COALESCE((SELECT MAX(printf('%04d-%02d', m.insp_year, m.insp_month)) FROM vehicle_monthly_inspections m WHERE m.vehicle_id=v.id), v.last_monthly_insp) latest_monthly_insp
     FROM vehicles v
     LEFT JOIN users u ON u.id = v.driver_id
     ORDER BY v.created_at DESC`);
@@ -74,9 +76,11 @@ router.get("/vehicle-dashboard", auth, async (_req, res) => {
 // Deprecated: see docs/deprecated-endpoints.md
 router.get("/vehicles/:id/daily-inspections", auth, async (req, res) => {
   const rows = await all(`
-    SELECT d.*, u.full_name inspector_name, v.plate_no
+    SELECT d.*, u.full_name inspector_name, du.full_name driver_name, rv.full_name reviewer_name, v.plate_no
     FROM vehicle_daily_inspections d
     LEFT JOIN users u ON u.id = d.inspector_id
+    LEFT JOIN users du ON du.id = d.driver_id
+    LEFT JOIN users rv ON rv.id = d.reviewer_id
     LEFT JOIN vehicles v ON v.id = d.vehicle_id
     WHERE d.vehicle_id=? ORDER BY d.insp_date DESC LIMIT 30`, [req.params.id]);
   res.json(rows);
@@ -85,9 +89,11 @@ router.get("/vehicles/:id/daily-inspections", auth, async (req, res) => {
 router.get("/vehicle-daily-inspections", auth, async (req, res) => {
   const { vehicle_id } = req.query;
   const rows = await all(`
-    SELECT d.*, u.full_name inspector_name, v.plate_no, v.vehicle_type
+    SELECT d.*, u.full_name inspector_name, du.full_name driver_name, rv.full_name reviewer_name, v.plate_no, v.vehicle_type
     FROM vehicle_daily_inspections d
     LEFT JOIN users u ON u.id = d.inspector_id
+    LEFT JOIN users du ON du.id = d.driver_id
+    LEFT JOIN users rv ON rv.id = d.reviewer_id
     LEFT JOIN vehicles v ON v.id = d.vehicle_id
     ${vehicle_id ? "WHERE d.vehicle_id=?" : ""}
     ORDER BY d.insp_date DESC LIMIT 60`,
@@ -95,19 +101,65 @@ router.get("/vehicle-daily-inspections", auth, async (req, res) => {
   res.json(rows);
 });
 
-router.post("/vehicle-daily-inspections", auth, async (req, res) => {
+router.post("/vehicle-daily-inspections", auth, requireRole("director", "chief_engineer", "engineer", "electric"), async (req, res) => {
   const b = req.body;
   if (!b.vehicle_id || !b.insp_date) return res.status(400).json({ error: "Техник болон огноо шаардлагатай" });
+  const veh = await get("SELECT driver_id FROM vehicles WHERE id=?", [b.vehicle_id]);
+  const driverId = b.driver_id || veh?.driver_id || null;
   const hasIssue = (b.items||[]).some(i => i.status === "Зөрчилтэй");
   const r = await run(
-    `INSERT INTO vehicle_daily_inspections(vehicle_id,insp_date,inspector_id,items_json,overall_ok,note,created_by)
-     VALUES(?,?,?,?,?,?,?)`,
-    [b.vehicle_id, b.insp_date, b.inspector_id || req.user.id,
-     JSON.stringify(b.items||[]), hasIssue ? 0 : 1, b.note||"", req.user.id]);
+    `INSERT INTO vehicle_daily_inspections(vehicle_id,insp_date,inspector_id,driver_id,items_json,overall_ok,review_status,work_permit,note,created_by)
+     VALUES(?,?,?,?,?,?,?,?,?,?)`,
+    [b.vehicle_id, b.insp_date, b.inspector_id || req.user.id, driverId,
+     JSON.stringify(b.items||[]), hasIssue ? 0 : 1, "ХАБЭА хүлээгдэж байна", 0, b.note||"", req.user.id]);
   await run("UPDATE vehicles SET last_daily_insp=? WHERE id=?", [b.insp_date, b.vehicle_id]);
   if (hasIssue)
     await run("UPDATE vehicles SET status='Үзлэг хийгдэх шаардлагатай' WHERE id=? AND status='Ажилд'", [b.vehicle_id]);
+  else
+    await run("UPDATE vehicles SET status='Ажилд' WHERE id=? AND status='Үзлэг хийгдэх шаардлагатай'", [b.vehicle_id]);
   await audit(req.user.id, "CREATE", "vehicle_daily_inspections", r.id, `${b.vehicle_id}·${b.insp_date}`);
+  res.json({ id: r.id });
+});
+
+router.patch("/vehicle-daily-inspections/:id/review", auth, requireRole("director", "chief_engineer", "safety"), async (req, res) => {
+  const b = req.body;
+  const status = b.approved ? "Ажилд гарах зөвшөөрөлтэй" : "Зөвшөөрөл татгалзсан";
+  const row = await get("SELECT vehicle_id FROM vehicle_daily_inspections WHERE id=?", [req.params.id]);
+  if (!row) return res.status(404).json({ error: "Үзлэг олдсонгүй" });
+  await run(`UPDATE vehicle_daily_inspections
+    SET review_status=?, reviewer_id=?, reviewed_at=CURRENT_TIMESTAMP, review_note=?, work_permit=?
+    WHERE id=?`, [status, req.user.id, b.note || "", b.approved ? 1 : 0, req.params.id]);
+  await run(`UPDATE vehicles SET status=? WHERE id=?`,
+    [b.approved ? "Ажилд" : "Үзлэг хийгдэх шаардлагатай", row.vehicle_id]);
+  await audit(req.user.id, "REVIEW", "vehicle_daily_inspections", req.params.id, status);
+  res.json({ ok: true });
+});
+
+// ── Weekly Inspections ─────────────────────────────────────────
+
+router.get("/vehicle-weekly-inspections", auth, async (req, res) => {
+  const { vehicle_id } = req.query;
+  const rows = await all(`
+    SELECT w.*, u.full_name hse_name, v.plate_no, v.vehicle_type
+    FROM vehicle_weekly_inspections w
+    LEFT JOIN users u ON u.id = w.hse_id
+    LEFT JOIN vehicles v ON v.id = w.vehicle_id
+    ${vehicle_id ? "WHERE w.vehicle_id=?" : ""}
+    ORDER BY w.week_start DESC LIMIT 60`,
+    vehicle_id ? [vehicle_id] : []);
+  res.json(rows);
+});
+
+router.post("/vehicle-weekly-inspections", auth, requireRole("director", "safety"), async (req, res) => {
+  const b = req.body;
+  if (!b.vehicle_id || !b.week_start) return res.status(400).json({ error: "Техник болон 7 хоногийн огноо шаардлагатай" });
+  const hasIssue = (b.items||[]).some(i => i.status === "Зөрчилтэй");
+  const r = await run(
+    `INSERT INTO vehicle_weekly_inspections(vehicle_id,week_start,hse_id,items_json,overall_ok,note,created_by)
+     VALUES(?,?,?,?,?,?,?)`,
+    [b.vehicle_id, b.week_start, b.hse_id || req.user.id, JSON.stringify(b.items||[]), hasIssue ? 0 : 1, b.note||"", req.user.id]);
+  if (hasIssue) await run("UPDATE vehicles SET status='Үзлэг хийгдэх шаардлагатай' WHERE id=? AND status='Ажилд'", [b.vehicle_id]);
+  await audit(req.user.id, "CREATE", "vehicle_weekly_inspections", r.id, `${b.vehicle_id}·${b.week_start}`);
   res.json({ id: r.id });
 });
 
@@ -116,10 +168,11 @@ router.post("/vehicle-daily-inspections", auth, async (req, res) => {
 router.get("/vehicle-monthly-inspections", auth, async (req, res) => {
   const { vehicle_id } = req.query;
   const rows = await all(`
-    SELECT m.*, u1.full_name mechanic_name, u2.full_name engineer_name, v.plate_no, v.vehicle_type
+    SELECT m.*, u1.full_name mechanic_name, u2.full_name engineer_name, ap.full_name approver_name, v.plate_no, v.vehicle_type
     FROM vehicle_monthly_inspections m
     LEFT JOIN users u1 ON u1.id = m.mechanic_id
     LEFT JOIN users u2 ON u2.id = m.engineer_id
+    LEFT JOIN users ap ON ap.id = m.approved_by
     LEFT JOIN vehicles v ON v.id = m.vehicle_id
     ${vehicle_id ? "WHERE m.vehicle_id=?" : ""}
     ORDER BY m.insp_year DESC, m.insp_month DESC LIMIT 60`,
@@ -127,19 +180,29 @@ router.get("/vehicle-monthly-inspections", auth, async (req, res) => {
   res.json(rows);
 });
 
-router.post("/vehicle-monthly-inspections", auth, async (req, res) => {
+router.post("/vehicle-monthly-inspections", auth, requireRole("director", "chief_engineer", "safety"), async (req, res) => {
   const b = req.body;
   if (!b.vehicle_id || !b.insp_year || !b.insp_month) return res.status(400).json({ error: "Техник болон сар шаардлагатай" });
   const hasIssue = (b.items||[]).some(i => i.status === "Зөрчилтэй");
   const r = await run(
-    `INSERT INTO vehicle_monthly_inspections(vehicle_id,insp_year,insp_month,mechanic_id,engineer_id,items_json,overall_ok,note,created_by)
-     VALUES(?,?,?,?,?,?,?,?,?)`,
+    `INSERT INTO vehicle_monthly_inspections(vehicle_id,insp_year,insp_month,mechanic_id,engineer_id,items_json,overall_ok,approval_status,note,created_by)
+     VALUES(?,?,?,?,?,?,?,?,?,?)`,
     [b.vehicle_id, b.insp_year, b.insp_month, b.mechanic_id||null, b.engineer_id||null,
-     JSON.stringify(b.items||[]), hasIssue ? 0 : 1, b.note||"", req.user.id]);
+     JSON.stringify(b.items||[]), hasIssue ? 0 : 1, "Ерөнхий инженер хүлээгдэж байна", b.note||"", req.user.id]);
   const mo = `${b.insp_year}-${String(b.insp_month).padStart(2,"0")}-01`;
   await run("UPDATE vehicles SET last_monthly_insp=? WHERE id=?", [mo, b.vehicle_id]);
   await audit(req.user.id, "CREATE", "vehicle_monthly_inspections", r.id, `${b.vehicle_id}·${b.insp_year}/${b.insp_month}`);
   res.json({ id: r.id });
+});
+
+router.patch("/vehicle-monthly-inspections/:id/approve", auth, requireRole("director", "chief_engineer"), async (req, res) => {
+  const b = req.body;
+  const status = b.approved ? "Баталгаажсан" : "Буцаасан";
+  await run(`UPDATE vehicle_monthly_inspections
+    SET approval_status=?, approved_by=?, approved_at=CURRENT_TIMESTAMP, approval_note=?
+    WHERE id=?`, [status, req.user.id, b.note || "", req.params.id]);
+  await audit(req.user.id, "APPROVE", "vehicle_monthly_inspections", req.params.id, status);
+  res.json({ ok: true });
 });
 
 // ── Repairs ───────────────────────────────────────────────────

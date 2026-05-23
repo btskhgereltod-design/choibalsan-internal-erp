@@ -93,6 +93,153 @@ function updateWcBar() {
   // Org info rendered separately via renderOrgInfo()
 }
 
+const LIGHT_CATS = [
+  ["🛣️", "Авто замын гэрэл"],
+  ["🏘️", "Гэр хорооллын гэрэл"],
+  ["🗼", "Цамхагийн гэрэл"],
+];
+
+function dashHoursFromStr(s) {
+  if (!s) return null;
+  const [hh, mm] = s.split(":").map(Number);
+  return hh + mm / 60;
+}
+
+function dashCivilAverageOnTime(dateStr) {
+  const LAT = 48.0714, LNG = 114.5357, UTC_OFFSET = 8;
+  const [year, month1, day] = dateStr.split("-").map(Number);
+  const toR = d => d * Math.PI / 180;
+  const toD = r => r * 180 / Math.PI;
+  const date = new Date(year, month1 - 1, day);
+  const dayOfYear = Math.round((date - new Date(year, 0, 1)) / 86400000) + 1;
+  const gamma = 2 * Math.PI / 365 * (dayOfYear - 1);
+  const eot = 229.18 * (
+    0.000075 + 0.001868 * Math.cos(gamma) - 0.032077 * Math.sin(gamma)
+    - 0.014615 * Math.cos(2 * gamma) - 0.040849 * Math.sin(2 * gamma)
+  );
+  const decl =
+    0.006918 - 0.399912 * Math.cos(gamma) + 0.070257 * Math.sin(gamma)
+    - 0.006758 * Math.cos(2 * gamma) + 0.000907 * Math.sin(2 * gamma)
+    - 0.002697 * Math.cos(3 * gamma) + 0.00148 * Math.sin(3 * gamma);
+  const lat = toR(LAT);
+  const solarNoonMinutes = 720 - 4 * LNG - eot + UTC_OFFSET * 60;
+  const eveningAt = (angleDeg) => {
+    const zenith = toR(90 - angleDeg);
+    const cosH = (Math.cos(zenith) / (Math.cos(lat) * Math.cos(decl))) - Math.tan(lat) * Math.tan(decl);
+    if (Math.abs(cosH) > 1) return null;
+    return (solarNoonMinutes + toD(Math.acos(cosH)) * 4) / 60;
+  };
+  const sunset = eveningAt(-0.833);
+  const civilEnd = eveningAt(-6);
+  if (sunset == null || civilEnd == null) return null;
+  return (sunset + civilEnd) / 2;
+}
+
+function dashTimeText(hour) {
+  if (hour == null || isNaN(hour)) return "—";
+  const t = Math.round(((hour % 24) + 24) % 24 * 60);
+  return `${String(Math.floor(t / 60)).padStart(2,"0")}:${String(t % 60).padStart(2,"0")}`;
+}
+
+function lightScheduleWarnings(logs, dateStr) {
+  const suitableOn = dashCivilAverageOnTime(dateStr);
+  if (suitableOn == null) return [];
+  return LIGHT_CATS.map(([, cat]) => {
+    const s = activeLightSchedule(logs, cat, dateStr);
+    if (!s || s.is_always_off || !s.on_time) return null;
+    const on = dashHoursFromStr(s.on_time);
+    if (on == null || isNaN(on)) return null;
+    const diff = Math.round((on - suitableOn) * 60);
+    const abs = Math.abs(diff);
+    if (abs <= 10) return null;
+    return {
+      category: cat,
+      onTime: s.on_time,
+      suitableOn: dashTimeText(suitableOn),
+      text: diff < 0
+        ? `${abs} минут эрт асаж байна`
+        : `${abs} минут оройтож асаж байна`,
+    };
+  }).filter(Boolean);
+}
+
+function activeLightSchedule(logs, category, dateStr) {
+  const monthKey = dateStr.slice(0, 7);
+  const monthRows = logs
+    .filter(r => r.category === category && (r.valid_from || r.adjusted_date || "").startsWith(monthKey))
+    .sort((a,b) => (b.valid_from || "").localeCompare(a.valid_from || "") || (b.id || 0) - (a.id || 0));
+  if (monthRows.length) return monthRows[0];
+
+  const rows = logs
+    .filter(r => r.category === category && (r.valid_from || r.adjusted_date || "") <= dateStr)
+    .sort((a,b) => (b.valid_from || "").localeCompare(a.valid_from || "") || (b.id || 0) - (a.id || 0));
+  return rows[0] || null;
+}
+
+function renderAiFeedbackStats(stats) {
+  if (!stats) return "";
+  const rows = (stats.intentStats || []).slice(0, 5);
+  const total = rows.reduce((s, r) => s + Number(r.total || 0), 0);
+  const positive = rows.reduce((s, r) => s + Number(r.positive || 0), 0);
+  const negative = rows.reduce((s, r) => s + Number(r.negative || 0), 0);
+  const pct = positive + negative ? Math.round(positive / (positive + negative) * 100) : null;
+  return `
+    <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;margin:-6px 0 16px;box-shadow:0 1px 2px rgba(15,23,42,.04)">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+        <div>
+          <div style="font-size:13px;font-weight:900;color:#172033">AI туслахын чанарын хяналт</div>
+          <div style="font-size:11px;color:#64748b">Асуултын log болон ажилтны 👍/👎 үнэлгээний тойм</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <span class="pill ${pct === null || pct >= 80 ? 'ok' : pct >= 60 ? 'warn' : 'bad'}">👍 ${pct === null ? '—' : pct + '%'}</span>
+          <span class="pill">Нийт ${total}</span>
+          <span class="pill ${negative ? 'bad' : 'ok'}">👎 ${negative}</span>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">
+        ${rows.map(r => `
+          <div style="background:#f8fafc;border-radius:9px;padding:8px 10px">
+            <div style="font-size:11px;font-weight:800;color:#334155;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(r.intent || 'unknown')}</div>
+            <div style="font-size:10px;color:#64748b;margin-top:3px">Нийт ${Number(r.total||0)} · 👍 ${Number(r.positive||0)} · 👎 ${Number(r.negative||0)}</div>
+          </div>
+        `).join("") || `<div style="font-size:12px;color:#64748b">Одоогоор үнэлгээний мэдээлэл алга.</div>`}
+      </div>
+    </div>`;
+}
+
+function renderDevRequestStats(rows) {
+  if (!Array.isArray(rows) || !rows.length) return "";
+  const open = rows.filter(r => !["Хаасан", "Цуцалсан"].includes(r.status || "")).slice(0, 5);
+  const bugs = rows.filter(r => r.request_type === "bug" && !["Хаасан", "Цуцалсан"].includes(r.status || "")).length;
+  const reports = rows.filter(r => r.request_type === "report" && !["Хаасан", "Цуцалсан"].includes(r.status || "")).length;
+  const high = rows.filter(r => r.severity === "high" && !["Хаасан", "Цуцалсан"].includes(r.status || "")).length;
+  return `
+    <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;margin:-6px 0 16px;box-shadow:0 1px 2px rgba(15,23,42,.04)">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+        <div>
+          <div style="font-size:13px;font-weight:900;color:#172033">ERP хөгжүүлэлтийн санал/алдаа</div>
+          <div style="font-size:11px;color:#64748b">Ажилчдын ERP туслахаар илгээсэн хүсэлтүүд</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <span class="pill ${high ? 'bad' : 'ok'}">Яаралтай ${high}</span>
+          <span class="pill ${bugs ? 'bad' : 'ok'}">Алдаа ${bugs}</span>
+          <span class="pill">Тайлан ${reports}</span>
+        </div>
+      </div>
+      <div style="display:grid;gap:7px">
+        ${open.map(r => `
+          <div style="display:flex;align-items:center;gap:10px;background:#f8fafc;border-radius:9px;padding:8px 10px">
+            <span class="pill ${r.severity === 'high' ? 'bad' : r.severity === 'medium' ? 'warn' : 'ok'}" style="font-size:10px">${escapeHtml(r.request_type || 'support')}</span>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:12px;font-weight:800;color:#334155;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(r.title || r.description || '')}</div>
+              <div style="font-size:10px;color:#64748b">${escapeHtml(r.module || 'unknown')} · ${escapeHtml(r.user_name || '')} · ${escapeHtml(r.created_at || '')}</div>
+            </div>
+          </div>
+        `).join("")}
+      </div>
+    </div>`;
+}
+
 export async function dashboard() {
   const s = await api(`/api/reports/summary?year=${new Date().getFullYear()}`);
   let myTasks = [];
@@ -105,6 +252,14 @@ export async function dashboard() {
       (r.workflow_status || 'Шинэ') !== 'Хаасан'
     );
   } catch(e) {}
+  let aiSummary = null;
+  try { aiSummary = await api("/api/assistant/dashboard-summary"); } catch(e) {}
+  let aiFeedbackStats = null;
+  let devRequests = [];
+  if (["director", "chief_engineer"].includes(state.me?.role)) {
+    try { aiFeedbackStats = await api("/api/assistant/feedback-stats"); } catch(e) {}
+    try { devRequests = await api("/api/assistant/dev-requests"); } catch(e) {}
+  }
   const totalWork     = s.work.count || 0;
   let expiringDocs = [];
   try { expiringDocs = (await api("/api/documents/expiring?days=30")) || []; } catch(e) {}
@@ -112,6 +267,8 @@ export async function dashboard() {
   try { upcomingReports = (await api("/api/report-schedules/upcoming")) || []; } catch(e) {}
   let gerStats = { total_ger: 0, total_camhag: 0, total_broken: 0, sl_poles: 0, sl_heads: 0 };
   try { gerStats = await api("/api/sl-ger-stats"); } catch(e) {}
+  let lightSchedules = [];
+  try { lightSchedules = await api(`/api/light-schedules?year=${new Date().getFullYear()}`); } catch(e) {}
   const workCost      = Math.round(s.work.total_cost || 0);
   const financeCost   = Math.round(s.expenses.total || 0);
   const avgProgress   = Math.round(s.work.avg_progress || 0);
@@ -119,6 +276,7 @@ export async function dashboard() {
 
   // ── Today attendance ──
   const todayStr = today();
+  const lightWarnings = lightScheduleWarnings(lightSchedules, todayStr);
   let todayAtt = { worked:0, absent:0, leave:0, sick:0, vacation:0, late:0, overtime:0 };
   let hrRows = [];
   try {
@@ -157,14 +315,12 @@ export async function dashboard() {
     <div style="display:flex;align-items:center;gap:16px;position:relative;z-index:1">
       <img src="/logo.jpg" class="heroLogo" onerror="this.style.display='none'">
       <div class="hero-text">
-        <h1>Чойбалсан хөгжил ОНӨҮГ</h1>
-        <p class="sub">Дотоод ажил · Тайлан · Төлөвлөгөөний ERP систем</p>
+        <h1>Нэгдсэн хяналтын самбар</h1>
+        <p class="sub">Дотоод ажил · Тайлан · Төлөвлөгөө</p>
       </div>
     </div>
     <div class="hero-right">
-      <div class="hero-badge">LAN ONLINE</div>
-      <div id="liveClock"></div>
-      <div class="weather">Чойбалсан хот · ERP ONLINE</div>
+      <div class="hero-badge">Систем онлайн</div>
     </div>
   </div>
 
@@ -237,6 +393,47 @@ export async function dashboard() {
     </div>
   </div>
 
+  <!-- ═══ AI ДҮГНЭЛТ ═══ -->
+  ${(() => {
+    if (!aiSummary) return '';
+    const badge = (icon, label, val, isAlert) => {
+      const danger = isAlert && typeof val === 'number' && val > 0;
+      const bg = danger ? 'rgba(239,68,68,.18)' : 'rgba(255,255,255,.08)';
+      const nc = danger ? '#fca5a5' : '#94a3b8';
+      const vc = danger ? '#f87171' : '#f8fafc';
+      return `<div style="background:${bg};border-radius:10px;padding:7px 11px;text-align:center;min-width:74px;cursor:default">
+        <div style="font-size:15px">${icon}</div>
+        <div style="font-size:16px;font-weight:800;color:${vc};line-height:1.2">${val ?? '—'}</div>
+        <div style="font-size:9px;color:${nc};margin-top:2px;white-space:nowrap">${label}</div>
+      </div>`;
+    };
+    const chips = ['Өнөөдрийн тойм','Нээлттэй гэмтэл хэдэн байна?','Агуулахын нөөц байна уу?','Өнөөдөр хэн ирсэн?'];
+    return `
+    <div style="background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%);border-radius:14px;padding:14px 18px;margin-bottom:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+        <div>
+          <div style="font-size:13px;font-weight:800;color:#fff">💬 AI Өдрийн тойм &nbsp;<span style="font-weight:400;font-size:11px;color:#64748b">· ${aiSummary.today}</span></div>
+          <div style="font-size:11px;color:#475569;margin-top:2px">Системийн өнөөдрийн байдал — асуулт дарж илгээх</div>
+        </div>
+        <button onclick="toggleErpAssistant(true)" style="border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.1);color:#e2e8f0;border-radius:8px;padding:5px 14px;cursor:pointer;font-size:11px;font-weight:700">ERP туслахтай ярих →</button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+        ${badge('⚡','Гэрлэн гэмтэл', aiSummary.open_light_faults, true)}
+        ${badge('🔧','Толгой гэмтэл', aiSummary.broken_heads, true)}
+        ${badge('🛠','Нээлттэй ажил', aiSummary.open_work, true)}
+        ${badge('🚦','Дохионы гэмтэл', aiSummary.traffic_issues, true)}
+        ${badge('✅','Өнөөдөр ирсэн', aiSummary.present_today, false)}
+        ${badge('📦','Нөөц анхааруулга', aiSummary.low_stock_items, true)}
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${chips.map(q=>`<button onclick="toggleErpAssistant(true);askErpAssistant('${q.replace(/'/g,"\\'")}');" style="border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.07);color:#cbd5e1;border-radius:20px;padding:4px 12px;font-size:11px;cursor:pointer;transition:background .12s" onmouseover="this.style.background='rgba(255,255,255,.14)'" onmouseout="this.style.background='rgba(255,255,255,.07)'">${q}</button>`).join('')}
+      </div>
+    </div>`;
+  })()}
+
+  ${renderAiFeedbackStats(aiFeedbackStats)}
+  ${renderDevRequestStats(devRequests)}
+
   <!-- ═══ MAIN CONTENT GRID ═══ -->
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
 
@@ -250,10 +447,8 @@ export async function dashboard() {
         <button class="btn sm secondary" onclick="show('attendance')">Бүртгэх →</button>
       </div>
       <div class="panel-body">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px">
           ${[
-            ['✅','Ажилласан', todayAtt.worked,   'green'],
-            ['❌','Тасалсан',  todayAtt.absent,   'red'],
             ['🟡','Чөлөөтэй', todayAtt.leave,    'amber'],
             ['🔵','Өвчтэй',   todayAtt.sick,     'blue'],
             ['⚫','Амралт',   todayAtt.vacation,  ''],
@@ -266,17 +461,6 @@ export async function dashboard() {
                 <div style="font-size:18px;font-weight:800;color:var(--ink)">${vl}</div>
               </div>
             </div>`).join('')}
-        </div>
-        <!-- Attendance progress -->
-        <div class="progress-wrap">
-          <div class="progress-label">
-            <span>Ирцийн хувь</span>
-            <span style="font-weight:700">${attPct}%</span>
-          </div>
-          <div class="progress-bar">
-            <div class="progress-fill ${attPct>=80?'green':attPct>=60?'amber':'red'}"
-                 style="width:${attPct}%"></div>
-          </div>
         </div>
         ${notRecorded>0?`<div class="alertItem warn" style="margin-top:10px;padding:8px 10px;font-size:12px">
           ⚠ ${notRecorded} ажилтны ирц бүртгэгдээгүй байна</div>`:''}
@@ -448,11 +632,18 @@ export async function dashboard() {
           <h3>⚠️ Warning Center</h3>
           <div class="subtitle">Анхааруулга, мэдэгдэл</div>
         </div>
-        ${(matWarnings.length||expiringDocs.length||upcomingReports.length)
-          ? `<span class="pill bad">${matWarnings.length+expiringDocs.length+upcomingReports.length} анхааруулга</span>`
+        ${(matWarnings.length||expiringDocs.length||upcomingReports.length||lightWarnings.length)
+          ? `<span class="pill bad">${matWarnings.length+expiringDocs.length+upcomingReports.length+lightWarnings.length} анхааруулга</span>`
           : `<span class="pill ok">Хэвийн</span>`}
       </div>
       <div class="panel-body" style="padding-top:12px">
+        ${lightWarnings.length ? lightWarnings.map(w => `
+          <div class="alertItem bad" style="padding:9px 12px;font-size:12px;margin-bottom:6px;cursor:pointer" onclick="show('sl_light_sched')">
+            <span>💡</span>
+            <div><b>${escapeHtml(w.category)}</b> — ${escapeHtml(w.text)}<br>
+              <span style="color:var(--ink3)">Асах: ${escapeHtml(w.onTime)} · Асаах тохиромжтой: ${escapeHtml(w.suitableOn)} · зөвшөөрөх зөрүү ±10мин</span>
+            </div>
+          </div>`).join('') : ''}
         ${expiringDocs.length ? expiringDocs.map(d => {
             const dl = Number(d.days_left);
             const cls = dl <= 7 ? 'bad' : 'warn';
@@ -497,7 +688,7 @@ export async function dashboard() {
   </div>
 
   <!-- ═══ SECOND ROW ═══ -->
-  <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px">
+  <div style="display:grid;grid-template-columns:1fr;gap:16px;margin-bottom:16px">
 
     <!-- Ажлын явц + зардал -->
     <div class="panel">
@@ -541,44 +732,10 @@ export async function dashboard() {
       </div>
     </div>
 
-    <!-- Quick actions -->
-    <div class="panel">
-      <div class="panel-head">
-        <h3>⚡ Хурдан үйлдэл</h3>
-      </div>
-      <div class="panel-body">
-        <div class="quick-actions" style="grid-template-columns:1fr 1fr">
-          ${[
-            ['⏱','Ирц бүртгэх','attendance'],
-            ['🛠','Ажил нэмэх','work'],
-            ['📦','Материал','materials'],
-            ['💰','Зардал','expenses'],
-            ['👥','Хүний нөөц','hr'],
-            ['📑','Тайлан','reports'],
-          ].map(([ic,lb,pg])=>`
-            <div class="qa-btn" onclick="show('${pg}')">
-              <span class="qa-icon">${ic}</span>
-              <span>${lb}</span>
-            </div>`).join('')}
-        </div>
-
-        <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
-          <div style="font-size:11px;font-weight:700;color:var(--ink3);letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px">Материалын дүн</div>
-          ${s.materials.slice(0,4).map(x=>`
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:0.5px solid var(--border);font-size:12px">
-              <span>${x.item_name}</span>
-              <span class="pill ${Number(x.balance)<=Number(x.warning_level||10)?'bad':'ok'}" style="padding:2px 7px;font-size:10px">
-                ${Number(x.balance).toLocaleString()}
-              </span>
-            </div>`).join('') || '<div class="muted small">Өгөгдөл алга</div>'}
-        </div>
-      </div>
-    </div>
-
   </div>
 
   <!-- ═══ BOTTOM ROW ═══ -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+  <div style="display:grid;grid-template-columns:1fr;gap:16px">
 
     <!-- Recent work -->
     <div class="panel">
@@ -601,34 +758,6 @@ export async function dashboard() {
               : '—'
           ])
         )}
-      </div>
-    </div>
-
-    <!-- Ажилчдын жагсаалт товч -->
-    <div class="panel">
-      <div class="panel-head">
-        <div>
-          <h3>👥 Ажилчдын жагсаалт</h3>
-          <div class="subtitle">Нийт ${totalEmp} ажилтан</div>
-        </div>
-        <button class="btn sm secondary" onclick="show('hr')">Бүгдийг харах →</button>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Нэр</th><th>Албан тушаал</th><th>Тасаг</th></tr></thead>
-          <tbody>
-            ${state.users.slice(0,8).map(u=>`
-              <tr>
-                <td style="font-weight:600">${u.full_name}</td>
-                <td>${u.position||'—'}</td>
-                <td><span class="pill info" style="font-size:10px">${u.department||'—'}</span></td>
-              </tr>`).join('')}
-            ${state.users.length>8?`
-              <tr><td colspan="3" style="text-align:center;color:var(--ink3);font-size:12px;padding:10px">
-                + ${state.users.length-8} ажилтан бий
-              </td></tr>`:''}
-          </tbody>
-        </table>
       </div>
     </div>
 

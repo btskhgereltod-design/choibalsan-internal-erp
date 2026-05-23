@@ -145,6 +145,10 @@ function trafficSummaryBar(rows) {
 async function assets(filterCat) {
   const slMode = !!window._slAssetMode;
   window._slAssetMode = false;
+  if (!slMode) window._assetEmbedTarget = "";
+  const embedTargetId = window._assetEmbedTarget || "";
+  const renderTarget = embedTargetId ? document.getElementById(embedTargetId) : main;
+  const embedded = !!embedTargetId && !!renderTarget;
   const canCreate = ["director","chief_engineer","storekeeper","camera_engineer"].includes(state.me.role) ||
                     (slMode && state.me.role === "engineer");
   const canDel    = ["director","chief_engineer"].includes(state.me.role);
@@ -195,14 +199,14 @@ async function assets(filterCat) {
 
   const visibleCats = slMode ? _dynCats.filter(c => SL_CATS.includes(c.name)) : _dynCats;
 
-  main.innerHTML = `
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:12px">
+  renderTarget.innerHTML = `
+  ${embedded ? "" : `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:12px">
     <div>
       <h1 style="margin:0 0 4px;font-size:22px;font-weight:800;letter-spacing:-.02em">${slMode ? "💡 Гэрэлтүүлгийн объектийн бүртгэл" : "🏗 Объектийн бүртгэл"}</h1>
       <div style="font-size:12px;color:#667085">${slMode ? "Гэрэлтүүлэг · Дэд станц · Тоног төхөөрөмж" : "Asset Registry · Паспорт · Засварын түүх"}</div>
     </div>
     ${slMode ? `<button onclick="sl_dashboard()" class="btn secondary" style="font-size:12px;padding:6px 14px">← Гэрэлтүүлгийн төв</button>` : ""}
-  </div>
+  </div>`}
 
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:10px;margin-bottom:20px">
     ${visibleCats.map(c => {
@@ -214,7 +218,7 @@ async function assets(filterCat) {
       const col  = c.color  || "#94a3b8";
       const bg   = c.bg     || "#f8fafc";
       const brd  = c.border || "#e2e8f0";
-      const clickFn = slMode ? `slAssets(this.dataset.cat)` : `assets(this.dataset.cat)`;
+      const clickFn = embedded && slMode ? `slHubAsset(this.dataset.cat)` : slMode ? `slAssets(this.dataset.cat)` : `assets(this.dataset.cat)`;
       return `<div data-cat="${escapeHtml(c.name)}" onclick="${clickFn}" style="
         padding:12px 14px;border-radius:10px;cursor:pointer;transition:all .15s;
         background:${active?col:bg};color:${active?'#fff':col};
@@ -238,6 +242,11 @@ async function assets(filterCat) {
   <div id="assetPassportModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:flex-start;justify-content:center;padding-top:30px;overflow-y:auto"
     onclick="if(event.target===this)closePassport()">
     <div id="assetPassportInner" style="background:#fff;border-radius:14px;width:min(780px,96vw);margin:0 auto 40px;box-shadow:0 20px 60px rgba(0,0,0,.25)"></div>
+  </div>
+
+  <div id="trafficSignalModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1200;align-items:flex-start;justify-content:center;padding-top:30px;overflow-y:auto"
+    onclick="if(event.target===this)closeTrafficSignalModal()">
+    <div id="trafficSignalInner" style="background:#fff;border-radius:14px;width:min(900px,96vw);margin:0 auto 40px;box-shadow:0 20px 60px rgba(0,0,0,.25)"></div>
   </div>
 
   <div id="globalLightbox" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.93);z-index:3000;align-items:center;justify-content:center;flex-direction:column"
@@ -509,6 +518,8 @@ async function assets(filterCat) {
               <td>
                 <div style="display:flex;gap:4px;flex-wrap:wrap">
                   <button class="btn secondary" style="padding:3px 8px;font-size:10px" onclick="openPassport(${r.id})">📋</button>
+                  ${r.category==="Гэрлэн дохио"?`<button class="btn secondary" style="padding:3px 8px;font-size:10px;color:#059669;border-color:#86efac" onclick="openTrafficSignalJournal(${r.id})" title="Төлөвийн цагийн журнал">🕒</button>`:""}
+                  ${r.category==="Гэрлэн дохио"?`<button class="btn secondary" style="padding:3px 8px;font-size:10px;color:#2563eb;border-color:#bfdbfe" onclick="openTrafficSignalCheck(${r.id})" title="Ослын цаг шалгах">🔎</button>`:""}
                   ${canCreate?`<button class="btn secondary" style="padding:3px 8px;font-size:10px" onclick="openAssetForm(${r.id})">✏️</button>`:""}
                   ${canDel?`<button class="btn danger" style="padding:3px 8px;font-size:10px" onclick="confirmDeleteAsset(${r.id})">🗑</button>`:""}
                   ${flBtn3}
@@ -604,12 +615,182 @@ function isTrafficOn(status) {
   return status === "Асаалтай" || status === "Идэвхтэй";
 }
 
+function nowLocalInput() {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0,16);
+}
+
 async function toggleTrafficStatus(id, current) {
   const next = isTrafficOn(current) ? "Унтраалтай" : "Асаалтай";
   try {
-    await api(`/api/assets/${id}/status`, { method: "PATCH", body: JSON.stringify({ status: next }) });
+    await api("/api/traffic-signal-logs", {
+      method: "POST",
+      body: JSON.stringify({
+        asset_id: id,
+        status: next,
+        started_at: nowLocalInput(),
+        source: "Шуурхай төлөв солив",
+        notes: "Жагсаалтаас шууд сольсон төлөв"
+      })
+    });
     assets(window._assetCat);
   } catch(e) { toast("Алдаа: " + e.message); }
+}
+
+function trafficSignalModal(html) {
+  const modal = document.getElementById("trafficSignalModal");
+  const inner = document.getElementById("trafficSignalInner");
+  if (!modal || !inner) return;
+  inner.innerHTML = html;
+  modal.style.display = "flex";
+}
+
+function closeTrafficSignalModal() {
+  const modal = document.getElementById("trafficSignalModal");
+  if (modal) modal.style.display = "none";
+}
+
+async function openTrafficSignalJournal(assetId) {
+  const asset = await api(`/api/assets/${assetId}`).catch(()=>null);
+  const logs = await api(`/api/traffic-signal-logs?asset_id=${assetId}`).catch(()=>[]);
+  const rows = logs.map((l,i)=>`
+    <tr>
+      <td style="color:#94a3b8;font-size:11px">${i+1}</td>
+      <td><span style="font-size:10px;padding:2px 8px;border-radius:20px;background:${isTrafficOn(l.status)?"#dcfce7":"#f1f5f9"};color:${isTrafficOn(l.status)?"#16a34a":"#475569"};font-weight:700">${escapeHtml(l.status)}</span></td>
+      <td style="font-family:monospace;font-size:12px">${escapeHtml(l.started_at||"")}</td>
+      <td style="font-family:monospace;font-size:12px">${escapeHtml(l.ended_at||"Одоо хүртэл")}</td>
+      <td style="font-size:12px;color:#475569">${escapeHtml(l.source||"")}</td>
+      <td style="font-size:12px;color:#475569">${escapeHtml(l.evidence_no||"")}</td>
+      <td style="font-size:11px;color:#64748b">${escapeHtml(l.recorded_name||"")}</td>
+    </tr>`).join("") || `<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:24px">Журнал бүртгэгдээгүй байна</td></tr>`;
+
+  trafficSignalModal(`
+  <div style="padding:16px 20px;border-bottom:1px solid #e2e6ed;display:flex;align-items:center;justify-content:space-between;background:#0f172a;border-radius:14px 14px 0 0">
+    <div>
+      <div style="font-size:15px;font-weight:800;color:#fff">🚦 Төлөвийн цагийн журнал</div>
+      <div style="font-size:11px;color:#cbd5e1;margin-top:2px">${escapeHtml(asset?.name||"")} · ${escapeHtml(asset?.location||"")}</div>
+    </div>
+    <button onclick="closeTrafficSignalModal()" style="border:none;background:rgba(255,255,255,.12);color:#fff;border-radius:8px;padding:6px 12px;cursor:pointer">✕</button>
+  </div>
+  <div style="padding:18px 20px">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">
+      <div>
+        <div style="font-size:11px;color:#667085;margin-bottom:4px">Төлөв *</div>
+        <select class="input" id="ts_status" style="margin:0">
+          ${["Асаалтай","Унтраалтай","Гэмтэлтэй","Засварт","Гар удирдлага"].map(s=>`<option>${s}</option>`).join("")}
+        </select>
+      </div>
+      <div>
+        <div style="font-size:11px;color:#667085;margin-bottom:4px">Эхэлсэн огноо, цаг *</div>
+        <input class="input" id="ts_start" type="datetime-local" value="${nowLocalInput()}" style="margin:0">
+      </div>
+      <div>
+        <div style="font-size:11px;color:#667085;margin-bottom:4px">Дууссан огноо, цаг</div>
+        <input class="input" id="ts_end" type="datetime-local" style="margin:0">
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div>
+        <div style="font-size:11px;color:#667085;margin-bottom:4px">Эх сурвалж</div>
+        <input class="input" id="ts_source" placeholder="Жижүүр, LoRa, дуудлага, цагдаа..." style="margin:0">
+      </div>
+      <div>
+        <div style="font-size:11px;color:#667085;margin-bottom:4px">Баримт / дуудлагын №</div>
+        <input class="input" id="ts_evidence" placeholder="Дуудлага №, албан бичиг №..." style="margin:0">
+      </div>
+    </div>
+    <div style="margin-bottom:12px">
+      <div style="font-size:11px;color:#667085;margin-bottom:4px">Тайлбар</div>
+      <textarea class="input" id="ts_notes" style="margin:0;min-height:54px" placeholder="Ямар шалтгаанаар унтарсан, ямар арга хэмжээ авсан..."></textarea>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:18px">
+      <button class="btn" onclick="saveTrafficSignalLog(${assetId})">Журнал нэмэх</button>
+      <button class="btn secondary" onclick="openTrafficSignalCheck(${assetId})">Ослын цаг шалгах</button>
+    </div>
+    <div class="table-wrap" style="max-height:360px;overflow:auto">
+      <table>
+        <thead><tr><th>#</th><th>Төлөв</th><th>Эхэлсэн</th><th>Дууссан</th><th>Эх сурвалж</th><th>Баримт</th><th>Бүртгэсэн</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  </div>`);
+}
+
+async function saveTrafficSignalLog(assetId) {
+  const body = {
+    asset_id: assetId,
+    status: document.getElementById("ts_status")?.value,
+    started_at: document.getElementById("ts_start")?.value,
+    ended_at: document.getElementById("ts_end")?.value || null,
+    source: document.getElementById("ts_source")?.value || "",
+    evidence_no: document.getElementById("ts_evidence")?.value || "",
+    notes: document.getElementById("ts_notes")?.value || "",
+  };
+  if (!body.status || !body.started_at) { toast("Төлөв, эхэлсэн цаг шаардлагатай"); return; }
+  try {
+    await api("/api/traffic-signal-logs", { method:"POST", body:JSON.stringify(body) });
+    toast("Журнал нэмэгдлээ");
+    openTrafficSignalJournal(assetId);
+  } catch(e) { toast("Алдаа: " + e.message); }
+}
+
+async function openTrafficSignalCheck(assetId) {
+  const asset = await api(`/api/assets/${assetId}`).catch(()=>null);
+  trafficSignalModal(`
+  <div style="padding:16px 20px;border-bottom:1px solid #e2e6ed;display:flex;align-items:center;justify-content:space-between;background:#1e3a5f;border-radius:14px 14px 0 0">
+    <div>
+      <div style="font-size:15px;font-weight:800;color:#fff">🔎 Ослын цагийн төлөв шалгах</div>
+      <div style="font-size:11px;color:#bfdbfe;margin-top:2px">${escapeHtml(asset?.name||"")} · ${escapeHtml(asset?.location||"")}</div>
+    </div>
+    <button onclick="closeTrafficSignalModal()" style="border:none;background:rgba(255,255,255,.12);color:#fff;border-radius:8px;padding:6px 12px;cursor:pointer">✕</button>
+  </div>
+  <div style="padding:20px">
+    <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px">
+      <div>
+        <div style="font-size:11px;color:#667085;margin-bottom:4px">Ослын огноо, цаг *</div>
+        <input class="input" id="ts_check_at" type="datetime-local" value="${nowLocalInput()}" style="margin:0;width:210px">
+      </div>
+      <button class="btn" onclick="checkTrafficSignalAt(${assetId})">Шалгах</button>
+      <button class="btn secondary" onclick="openTrafficSignalJournal(${assetId})">Журнал харах</button>
+    </div>
+    <div id="ts_check_result" style="border:1px dashed #cbd5e1;border-radius:10px;padding:18px;color:#64748b">
+      Цаг оруулаад шалгахад тухайн мөчид хүчинтэй байсан журналын бичлэг гарна.
+    </div>
+  </div>`);
+}
+
+async function checkTrafficSignalAt(assetId) {
+  const at = document.getElementById("ts_check_at")?.value;
+  if (!at) { toast("Ослын огноо, цаг оруулна уу"); return; }
+  const box = document.getElementById("ts_check_result");
+  try {
+    const r = await api(`/api/traffic-signal-status-at?asset_id=${assetId}&at=${encodeURIComponent(at)}`);
+    const ok = r.matched && isTrafficOn(r.status);
+    const warn = r.matched && !isTrafficOn(r.status);
+    box.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+        <div>
+          <div style="font-size:13px;color:#64748b">Шалгасан цаг</div>
+          <div style="font-size:18px;font-weight:800;color:#0f172a;font-family:monospace">${escapeHtml(r.checked_at)}</div>
+        </div>
+        <div style="font-size:18px;font-weight:900;color:${ok?"#16a34a":warn?"#dc2626":"#d97706"}">
+          ${ok?"🟢 Асаалттай байсан":warn?"🔴 Асаалтгүй / эрсдэлтэй төлөв":"⚠️ Журнал олдсонгүй"}
+        </div>
+      </div>
+      <div style="background:${ok?"#f0fdf4":warn?"#fef2f2":"#fffbeb"};border-radius:10px;padding:12px 14px;font-size:13px">
+        <b>Дохио:</b> ${escapeHtml(r.asset?.name||"")}<br>
+        <b>Байршил:</b> ${escapeHtml(r.asset?.location||"")}<br>
+        <b>Төлөв:</b> ${escapeHtml(r.status||"")}<br>
+        ${r.log ? `<b>Хугацаа:</b> ${escapeHtml(r.log.started_at||"")} - ${escapeHtml(r.log.ended_at||"Одоо хүртэл")}<br>
+        <b>Эх сурвалж:</b> ${escapeHtml(r.log.source||"")}<br>
+        <b>Баримт:</b> ${escapeHtml(r.log.evidence_no||"")}<br>
+        <b>Тайлбар:</b> ${escapeHtml(r.log.notes||"")}<br>
+        <b>Бүртгэсэн:</b> ${escapeHtml(r.log.recorded_name||"")}` : "Тухайн цагийг хамарсан төлөвийн бичлэг байхгүй байна."}
+      </div>`;
+  } catch(e) {
+    box.innerHTML = `<div style="color:#dc2626">${escapeHtml(e.message)}</div>`;
+  }
 }
 
 function updateAssetFormStatus(cat) {
@@ -1151,6 +1332,10 @@ async function openPassport(id) {
     </div>
 
     <div id="ptab_history" style="display:none;padding:20px 24px">
+      <!-- ХАБЭА эрсдэлийн түүх -->
+      <div id="assetRisksSection" style="margin-bottom:18px">
+        <div style="font-size:12px;color:#94a3b8;padding:8px 0">⚠️ ХАБЭА эрсдэлийг ачааллаж байна...</div>
+      </div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
         <div style="font-size:13px;font-weight:700;color:#344054">Засварын түүх (${history.length})</div>
         ${canEdit ? `<button class="btn" style="font-size:11px;padding:6px 12px" onclick="closePassport();window.workCat='${asset.category==="Авто замын гэрэл"?"Авто замын гэрэл засвар":"Камер засвар"}';show('work')">+ Шинэ ажил нэмэх</button>` : ""}
@@ -1196,6 +1381,32 @@ async function openPassport(id) {
   if (asset.gps_lat && asset.gps_lng) {
     setTimeout(() => initPassportMap(asset.gps_lat, asset.gps_lng, asset.name), 100);
   }
+  loadAssetSafetyRisks(id);
+}
+
+async function loadAssetSafetyRisks(assetId) {
+  const el = document.getElementById('assetRisksSection');
+  if (!el) return;
+  try {
+    const risks = await api(`/api/safety-reports?ref_type=assets&ref_id=${assetId}`);
+    if (!risks.length) { el.innerHTML = ''; return; }
+    const COLORS = {'Маш өндөр':['#fee2e2','#dc2626'],'Өндөр':['#ffedd5','#ea580c'],'Дунд':['#fef9c3','#ca8a04'],'Бага':['#dcfce7','#16a34a']};
+    el.innerHTML = `
+      <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:14px;margin-bottom:4px">
+        <div style="font-size:12px;font-weight:700;color:#c2410c;margin-bottom:10px">⚠️ ХАБЭА эрсдэлийн түүх (${risks.length})</div>
+        ${risks.map(r => {
+          const [bg,color] = COLORS[r.risk_level] || ['#f1f5f9','#64748b'];
+          return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #fed7aa;last-child:border-bottom:none">
+            <span style="padding:2px 9px;border-radius:20px;font-size:10px;font-weight:800;background:${bg};color:${color};flex-shrink:0">${escapeHtml(r.risk_level||'')}</span>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:12px;font-weight:600;color:#1e293b">${escapeHtml(r.risk_type||'—')}</div>
+              <div style="font-size:10px;color:#94a3b8">${r.report_date||''} · ${escapeHtml(r.creator_name||'—')} · ${escapeHtml(r.workflow_status||'Шинэ')}</div>
+              ${r.risk_description ? `<div style="font-size:11px;color:#475569;margin-top:2px">${escapeHtml(r.risk_description)}</div>` : ''}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`;
+  } catch { if (el) el.innerHTML = ''; }
 }
 
 function switchPassportTab(tab, panelId) {
@@ -1399,6 +1610,51 @@ async function deleteAssetFile(fileId, assetId) {
   } catch(err) { toast("Алдаа: "+err.message); }
 }
 
+function renderSlRepairHistory(history = [], cat = "") {
+  const rows = history.map((w, i) => {
+    const statusColor = w.status === "Дууссан" ? "#16a34a" : w.status === "Явцтай" ? "#2563eb" : "#d97706";
+    const confirmText = w.confirm_status === "confirmed"
+      ? `<span style="font-size:10px;padding:2px 8px;border-radius:20px;background:#dcfce7;color:#15803d;font-weight:700">Батлагдсан</span>`
+      : w.confirm_status === "rejected"
+        ? `<span style="font-size:10px;padding:2px 8px;border-radius:20px;background:#fee2e2;color:#dc2626;font-weight:700">Буцаагдсан</span>`
+        : "";
+    return `<div style="position:relative;margin-bottom:10px">
+      <div style="position:absolute;left:-20px;top:12px;width:10px;height:10px;border-radius:50%;background:${i === 0 ? "#2563eb" : "#cbd5e1"};border:2px solid #fff;box-shadow:0 0 0 1px #cbd5e1"></div>
+      <div style="background:${i === 0 ? "#eff6ff" : "#f8fafc"};border:1px solid ${i === 0 ? "#bfdbfe" : "#e2e8f0"};border-radius:10px;padding:12px 14px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:6px">
+          <div style="font-size:13px;font-weight:800;color:#172033">${escapeHtml(w.title || "Засварын ажил")}</div>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+            <span style="font-size:10px;padding:2px 8px;border-radius:20px;background:${w.status === "Дууссан" ? "#dcfce7" : "#dbeafe"};color:${statusColor};font-weight:700">${escapeHtml(w.status || "")}</span>
+            ${confirmText}
+            <span style="font-size:10px;color:#94a3b8;font-family:monospace">${escapeHtml(w.work_date || w.start_date || "")}</span>
+          </div>
+        </div>
+        ${w.description ? `<div style="font-size:12px;color:#667085;line-height:1.5;margin-bottom:6px">${escapeHtml(w.description)}</div>` : ""}
+        <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:#94a3b8">
+          ${w.created_name ? `<span>👤 Үүсгэсэн: ${escapeHtml(w.created_name)}</span>` : ""}
+          ${w.material_note ? `<span>👷 ${escapeHtml(w.material_note)}</span>` : ""}
+          ${w.progress != null ? `<span>Явц: <b style="color:#2563eb">${Number(w.progress || 0)}%</b></span>` : ""}
+          ${w.cost_amount ? `<span style="color:#16a34a;font-weight:700">💰 ${Number(w.cost_amount).toLocaleString()}₮</span>` : ""}
+        </div>
+      </div>
+    </div>`;
+  }).join("");
+
+  return `<div style="padding:14px 20px;border-bottom:1px solid #f1f5f9">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:10px;flex-wrap:wrap">
+      <div style="font-size:13px;font-weight:700;color:#344054">🛠 Засварын түүх (${history.length})</div>
+      <div style="font-size:11px;color:#94a3b8">${escapeHtml(cat || "")}</div>
+    </div>
+    ${history.length ? `<div style="position:relative;padding-left:24px">
+      <div style="position:absolute;left:8px;top:0;bottom:0;width:2px;background:#e2e8f0"></div>
+      ${rows}
+    </div>` : `<div style="text-align:center;padding:22px;color:#94a3b8;background:#f8fafc;border-radius:10px;border:2px dashed #e2e8f0">
+      <div style="font-size:26px;margin-bottom:6px">🛠</div>
+      <div style="font-size:12px">Засварын түүх бүртгэгдээгүй байна</div>
+    </div>`}
+  </div>`;
+}
+
 async function openSlDetail(id) {
   const modal = document.getElementById("slDetailModal");
   const inner = document.getElementById("slDetailInner");
@@ -1420,6 +1676,7 @@ async function openSlDetail(id) {
   const canEdit = ["director","chief_engineer","engineer","camera_engineer"].includes(state.me.role);
   const photos  = pt.photos || [];
   const docs    = pt.docs   || [];
+  const history = pt.history || [];
   const workPct = (pt.total_heads||pt.lamp_count||0) > 0
     ? Math.round(((pt.total_heads||pt.lamp_count) - 0) / (pt.total_heads||pt.lamp_count) * 100)
     : 100;
@@ -1563,6 +1820,8 @@ async function openSlDetail(id) {
       ${canEdit ? `<div style="font-size:11px;color:#a78bfa;margin-top:3px">PDF эсвэл зургаар scan хийж оруулна уу</div>` : ""}
     </div>`}
   </div>
+
+  ${renderSlRepairHistory(history, "Авто замын гэрэл")}
 
   <div style="padding:16px 20px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
@@ -1953,6 +2212,7 @@ async function openGerDetail(id, cat) {
   const canEdit = ["director","chief_engineer","engineer"].includes(state.me.role);
   const photos  = rec.photos || [];
   const docs    = rec.docs   || [];
+  const history = rec.history || [];
   const isCamhag = cat === "Цамхагийн гэрэл";
   const catIcon  = isCamhag ? "🗼" : "🏘️";
   const catColor = isCamhag ? "#d97706" : "#0ea5e9";
@@ -2073,6 +2333,8 @@ async function openGerDetail(id, cat) {
     </div>`}
   </div>
 
+  ${renderSlRepairHistory(history, cat)}
+
   <div style="padding:16px 20px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
       <div style="font-size:13px;font-weight:700;color:#344054">📷 Зургийн галерей (${photos.length})</div>
@@ -2185,21 +2447,504 @@ async function deleteGerDoc(docId, gerId, cat) {
 }
 
 function slAssets(cat)     { window._slAssetMode = true; assets(cat); }
+function slHubAsset(cat)   { window._assetEmbedTarget = "slHubContent"; window._slAssetMode = true; assets(cat || "Авто замын гэрэл"); }
 function sl_asset_road()   { slAssets("Авто замын гэрэл"); }
 function sl_asset_ger()    { slAssets("Гэр хорооллын гэрэл"); }
 function sl_asset_tower()  { slAssets("Цамхагийн гэрэл"); }
 function sl_asset_signal() { slAssets("Гэрлэн дохио"); }
 function sl_asset_panel()  { slAssets("Шит/Самбар"); }
+function camera_assets()   { window._slAssetMode = false; assets("Камер"); }
+
+// ── Улсын үзлэг, тооллого ────────────────────────────────────
+
+const INV_STATUSES = [
+  { key: "Хүлээгдэж буй",    label: "Хүлээгдэж буй",    color: "#94a3b8", bg: "#f1f5f9", icon: "⏳" },
+  { key: "Тоологдсон",        label: "Тоологдсон",        color: "#16a34a", bg: "#dcfce7", icon: "✅" },
+  { key: "Зөрүүтэй",          label: "Зөрүүтэй",          color: "#d97706", bg: "#fef3c7", icon: "⚠️" },
+  { key: "Олдоогүй",          label: "Олдоогүй",          color: "#dc2626", bg: "#fee2e2", icon: "❌" },
+  { key: "Актлах саналтай",   label: "Актлах саналтай",   color: "#7c3aed", bg: "#ede9fe", icon: "📋" },
+  { key: "Шилжүүлэх",        label: "Шилжүүлэх",        color: "#0369a1", bg: "#e0f2fe", icon: "🔄" },
+];
+
+function invStatusMeta(key) {
+  return INV_STATUSES.find(s => s.key === key) || INV_STATUSES[0];
+}
+
+async function asset_inventory() {
+  const canWrite = ["director","chief_engineer","accountant"].includes(state.me.role);
+  let sessions;
+  try { sessions = await api("/api/inventory-sessions"); } catch(e) { sessions = []; }
+
+  main.innerHTML = `
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:12px">
+    <div>
+      <h1 style="margin:0 0 4px;font-size:22px;font-weight:800;letter-spacing:-.02em">📋 Улсын үзлэг, тооллого</h1>
+      <div style="font-size:12px;color:#667085">Орон нутгийн өмчийн эд хөрөнгийн бүртгэл шалгалт · 2026-08-31 хүртэл</div>
+    </div>
+    ${canWrite ? `<button class="btn" onclick="openInvSessionForm()" style="white-space:nowrap">+ Шинэ тооллого үүсгэх</button>` : ""}
+  </div>
+
+  <div id="invSessionFormWrap" style="display:none;margin-bottom:18px">
+    <div class="panel" style="padding:18px 22px;max-width:600px">
+      <div style="font-size:14px;font-weight:700;margin-bottom:12px">Шинэ тооллогын сесс</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <div style="grid-column:1/-1">
+          <div style="font-size:11px;color:#667085;margin-bottom:4px">Гарчиг *</div>
+          <input class="input" id="inv_title" placeholder="2026 оны улсын үзлэг, тооллого" value="2026 оны улсын үзлэг, тооллого">
+        </div>
+        <div>
+          <div style="font-size:11px;color:#667085;margin-bottom:4px">Жил *</div>
+          <input class="input" type="number" id="inv_year" value="2026">
+        </div>
+        <div>
+          <div style="font-size:11px;color:#667085;margin-bottom:4px">Эхлэх огноо</div>
+          <input class="input" type="date" id="inv_start" value="2026-05-21">
+        </div>
+        <div>
+          <div style="font-size:11px;color:#667085;margin-bottom:4px">Дуусах огноо</div>
+          <input class="input" type="date" id="inv_end" value="2026-08-31">
+        </div>
+        <div style="grid-column:1/-1">
+          <div style="font-size:11px;color:#667085;margin-bottom:4px">Тэмдэглэл</div>
+          <textarea class="input" id="inv_notes" style="min-height:48px;margin:0" placeholder="ТӨБЗГ 143 дугаар тогтоол, 2026-04-23..."></textarea>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn" onclick="saveInvSession()">Үүсгэх</button>
+        <button class="btn secondary" onclick="closeInvSessionForm()">Болих</button>
+      </div>
+    </div>
+  </div>
+
+  ${sessions.length === 0 ? `
+  <div class="panel" style="padding:48px;text-align:center;color:#94a3b8">
+    <div style="font-size:40px;margin-bottom:12px">📋</div>
+    <div style="font-size:15px;font-weight:600;color:#344054;margin-bottom:6px">Тооллого бүртгэгдээгүй байна</div>
+    <div style="font-size:13px">Шинэ тооллого үүсгэж эхлэнэ үү</div>
+  </div>` : `
+  <div style="display:flex;flex-direction:column;gap:12px">
+    ${sessions.map(s => {
+      const total   = s.total_items || 0;
+      const counted = s.counted     || 0;
+      const pct     = total > 0 ? Math.round(counted / total * 100) : 0;
+      const pctColor = pct >= 90 ? "#16a34a" : pct >= 50 ? "#d97706" : "#dc2626";
+      const statusBg = s.status === "Дууссан" ? "#dcfce7" : "#dbeafe";
+      const statusColor = s.status === "Дууссан" ? "#16a34a" : "#2563eb";
+      return `
+      <div class="panel" style="padding:0;overflow:hidden">
+        <div style="padding:16px 20px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:16px;font-weight:800;color:#172033;margin-bottom:3px">${escapeHtml(s.title)}</div>
+            <div style="font-size:12px;color:#667085">${s.year} он · ${s.start_date||"—"} → ${s.end_date||"2026-08-31"}</div>
+          </div>
+          <span style="font-size:11px;padding:4px 12px;border-radius:20px;background:${statusBg};color:${statusColor};font-weight:700">${s.status}</span>
+          <div style="text-align:right">
+            <div style="font-size:22px;font-weight:800;color:${pctColor}">${pct}%</div>
+            <div style="font-size:11px;color:#94a3b8">гүйцэтгэл</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(6,1fr);border-bottom:1px solid #f1f5f9">
+          ${[
+            ["Нийт",s.total_items||0,"#64748b","#f8fafc"],
+            ["Тоологдсон",s.counted||0,"#16a34a","#f0fdf4"],
+            ["Зөрүүтэй",s.discrepancy||0,"#d97706","#fffbeb"],
+            ["Олдоогүй",s.missing||0,"#dc2626","#fef2f2"],
+            ["Актлах",s.write_off||0,"#7c3aed","#f5f3ff"],
+            ["Шилжүүлэх",s.transfer||0,"#0369a1","#f0f9ff"],
+          ].map(([lbl,val,col,bg])=>`
+            <div style="padding:12px 8px;text-align:center;background:${bg};border-right:1px solid #f1f5f9">
+              <div style="font-size:18px;font-weight:800;color:${col}">${val}</div>
+              <div style="font-size:10px;color:#94a3b8">${lbl}</div>
+            </div>`).join("")}
+        </div>
+        <div style="padding:12px 18px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn" style="font-size:12px;padding:6px 14px" onclick="openInvSession(${s.id})">📝 Тооллого хийх</button>
+          <button class="btn secondary" style="font-size:12px;padding:6px 14px" onclick="openInvReport(${s.id})">📊 Тайлан харах</button>
+          ${canWrite && s.status !== "Дууссан" ? `<button class="btn secondary" style="font-size:12px;padding:6px 14px;color:#16a34a;border-color:#16a34a" onclick="closeInvSession(${s.id})">✓ Дуусгах</button>` : ""}
+        </div>
+      </div>`;
+    }).join("")}
+  </div>`}`;
+}
+
+function openInvSessionForm() {
+  document.getElementById("invSessionFormWrap").style.display = "block";
+  document.getElementById("inv_title").focus();
+}
+function closeInvSessionForm() {
+  document.getElementById("invSessionFormWrap").style.display = "none";
+}
+
+async function saveInvSession() {
+  const g = id => (document.getElementById(id)||{}).value||"";
+  const title = g("inv_title").trim();
+  const year  = parseInt(g("inv_year"));
+  if (!title) { toast("Гарчиг оруулна уу"); return; }
+  if (!year)  { toast("Жил оруулна уу"); return; }
+  try {
+    await api("/api/inventory-sessions", { method:"POST", body:JSON.stringify({
+      title, year, start_date: g("inv_start")||null, end_date: g("inv_end")||null, notes: g("inv_notes")
+    })});
+    toast("Тооллогын сесс үүслээ ✓");
+    closeInvSessionForm();
+    asset_inventory();
+  } catch(e) { toast("Алдаа: " + e.message); }
+}
+
+async function closeInvSession(sid) {
+  if (!confirm("Тооллогыг дуусгах уу? Дуусгасны дараа засах боломжгүй болно.")) return;
+  try {
+    await api(`/api/inventory-sessions/${sid}/close`, { method:"PATCH" });
+    toast("Тооллого дуусгагдлаа ✓");
+    asset_inventory();
+  } catch(e) { toast("Алдаа: " + e.message); }
+}
+
+// ── Тооллогын ажлын дэлгэц ──────────────────────────────────
+
+let _invSessionId = 0;
+let _invItems = [];
+let _invFilter = "";
+let _invStatusFilter = "";
+
+async function openInvSession(sid) {
+  _invSessionId = sid;
+  _invFilter = "";
+  _invStatusFilter = "";
+
+  main.innerHTML = `<div style="padding:40px;text-align:center;color:#667085">
+    <div style="font-size:32px;margin-bottom:10px">⏳</div>Тооллогын мэдээлэл уншиж байна...
+  </div>`;
+
+  let data;
+  try { data = await api(`/api/inventory-sessions/${sid}/items`); }
+  catch(e) { toast("Алдаа: " + e.message); return; }
+
+  _invItems = data.items || [];
+  _renderInvSession(data.session);
+}
+
+function _renderInvSession(session) {
+  const items   = _invItems;
+  const total   = items.length;
+  const counted = items.filter(i => i.inv_status === "Тоологдсон").length;
+  const pending = items.filter(i => i.inv_status === "Хүлээгдэж буй").length;
+  const pct     = total > 0 ? Math.round(counted / total * 100) : 0;
+  const pctColor = pct >= 90 ? "#16a34a" : pct >= 50 ? "#d97706" : "#dc2626";
+
+  const filtered = items.filter(i => {
+    const matchText = !_invFilter ||
+      (i.name||"").toLowerCase().includes(_invFilter) ||
+      (i.asset_code||"").toLowerCase().includes(_invFilter) ||
+      (i.account_code||"").toLowerCase().includes(_invFilter) ||
+      (i.model||"").toLowerCase().includes(_invFilter);
+    const matchStatus = !_invStatusFilter || i.inv_status === _invStatusFilter;
+    return matchText && matchStatus;
+  });
+
+  main.innerHTML = `
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+    <button onclick="asset_inventory()" class="btn secondary" style="font-size:12px;padding:6px 12px">← Буцах</button>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:18px;font-weight:800;color:#172033">${escapeHtml(session.title)}</div>
+      <div style="font-size:12px;color:#667085">${session.year} он · ${session.start_date||"—"} → ${session.end_date||"2026-08-31"} · Нийт ${total} хөрөнгө</div>
+    </div>
+    <button onclick="openInvReport(${session.id})" class="btn secondary" style="font-size:12px;padding:6px 12px">📊 Тайлан</button>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:14px">
+    ${[
+      ["Нийт",total,"#64748b","#f8fafc",""],
+      ["Тоологдсон",counted,"#16a34a","#f0fdf4","Тоологдсон"],
+      ["Зөрүүтэй",items.filter(i=>i.inv_status==="Зөрүүтэй").length,"#d97706","#fffbeb","Зөрүүтэй"],
+      ["Олдоогүй",items.filter(i=>i.inv_status==="Олдоогүй").length,"#dc2626","#fef2f2","Олдоогүй"],
+      ["Актлах",items.filter(i=>i.inv_status==="Актлах саналтай").length,"#7c3aed","#f5f3ff","Актлах саналтай"],
+      ["Хүлээгдэж буй",pending,"#94a3b8","#f1f5f9","Хүлээгдэж буй"],
+    ].map(([lbl,val,col,bg,sf])=>`
+      <div onclick="invSetStatusFilter('${sf}')"
+        style="background:${bg};border:2px solid ${_invStatusFilter===sf&&sf?col:'transparent'};border-radius:10px;padding:10px 8px;text-align:center;cursor:pointer;transition:border .15s">
+        <div style="font-size:20px;font-weight:800;color:${col}">${val}</div>
+        <div style="font-size:10px;color:#94a3b8">${lbl}</div>
+      </div>`).join("")}
+  </div>
+
+  <div style="height:6px;background:#f1f5f9;border-radius:3px;margin-bottom:16px;overflow:hidden">
+    <div style="height:100%;width:${pct}%;background:${pctColor};border-radius:3px;transition:width .6s"></div>
+  </div>
+
+  <div class="panel" style="padding:0;overflow:hidden">
+    <div style="padding:12px 16px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <input placeholder="Нэр, код, загвараар хайх..." oninput="invSetFilter(this.value)"
+        style="flex:1;min-width:180px;padding:7px 12px;border:1px solid #e2e6ed;border-radius:8px;font-size:12px;outline:none">
+      ${INV_STATUSES.map(s=>`
+        <button onclick="invSetStatusFilter('${s.key}')"
+          style="padding:5px 12px;font-size:11px;border-radius:20px;border:1.5px solid ${_invStatusFilter===s.key?s.color:'#e2e6ed'};background:${_invStatusFilter===s.key?s.bg:'#fff'};color:${_invStatusFilter===s.key?s.color:'#667085'};cursor:pointer;white-space:nowrap">
+          ${s.icon} ${s.label}
+        </button>`).join("")}
+    </div>
+    <div class="table-wrap">
+      <table id="invTable">
+        <thead><tr>
+          <th style="width:36px">#</th>
+          <th>Данс</th>
+          <th>Код</th>
+          <th>Хөрөнгийн нэр</th>
+          <th>Загвар</th>
+          <th style="text-align:center">Тоо</th>
+          <th>Огноо</th>
+          <th style="text-align:right">Дансны үнэ ₮</th>
+          <th style="min-width:190px">Тооллогын статус</th>
+          <th>Тэмдэглэл</th>
+        </tr></thead>
+        <tbody>
+          ${filtered.length ? filtered.map((r,i) => {
+            const sm = invStatusMeta(r.inv_status);
+            const isDone = r.inv_status !== "Хүлээгдэж буй";
+            return `<tr style="${isDone?`background:${sm.bg}`:""}" data-id="${r.id}">
+              <td style="color:#94a3b8;font-size:11px">${i+1}</td>
+              <td><span style="font-family:monospace;font-size:11px;background:#eff6ff;color:#1d4ed8;padding:2px 6px;border-radius:4px">${escapeHtml(r.account_code||"—")}</span></td>
+              <td><span style="font-family:monospace;font-size:11px;background:#f1f5f9;padding:2px 6px;border-radius:4px">${escapeHtml(r.asset_code||"—")}</span></td>
+              <td style="font-weight:600;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(r.name)}">${escapeHtml(r.name||"—")}</td>
+              <td style="font-size:11px;color:#667085;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(r.model||"—")}</td>
+              <td style="text-align:center;font-size:12px">${r.initial_qty||1} ${escapeHtml(r.unit||"ш")}</td>
+              <td style="font-size:11px;color:#667085">${r.acquisition_date||"—"}</td>
+              <td style="text-align:right;font-size:12px;font-weight:600;color:#1d4ed8">${(r.book_value||0).toLocaleString()}</td>
+              <td>
+                <select onchange="invUpdateStatus(${r.id},this.value,${_invSessionId})"
+                  style="padding:5px 8px;border-radius:8px;border:2px solid ${sm.color};background:${sm.bg};color:${sm.color};font-size:12px;font-weight:700;cursor:pointer;outline:none;width:100%">
+                  ${INV_STATUSES.map(s=>`<option value="${s.key}" ${r.inv_status===s.key?"selected":""}>${s.icon} ${s.label}</option>`).join("")}
+                </select>
+                ${r.checked_name ? `<div style="font-size:10px;color:#94a3b8;margin-top:3px">✓ ${escapeHtml(r.checked_name)} · ${(r.checked_at||"").slice(0,10)}</div>` : ""}
+              </td>
+              <td>
+                <input value="${escapeHtml(r.note||"")}" placeholder="Тэмдэглэл..."
+                  onblur="invUpdateNote(${r.id},this.value,${_invSessionId})"
+                  onkeydown="if(event.key==='Enter')this.blur()"
+                  style="padding:5px 8px;border:1px solid #e2e6ed;border-radius:8px;font-size:11px;width:130px;outline:none">
+              </td>
+            </tr>`;
+          }).join("") : `<tr><td colspan="10" style="text-align:center;color:#94a3b8;padding:30px">
+            ${_invFilter || _invStatusFilter ? "Хайлтад тохирох хөрөнгө олдсонгүй" : "Тооллогод оруулах хөрөнгө байхгүй байна"}
+          </td></tr>`}
+        </tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+function invSetFilter(val) {
+  _invFilter = val.toLowerCase();
+  _reRenderInvTable();
+}
+
+function invSetStatusFilter(sf) {
+  _invStatusFilter = (_invStatusFilter === sf && sf) ? "" : sf;
+  openInvSession(_invSessionId);
+}
+
+function _reRenderInvTable() {
+  const filtered = _invItems.filter(i => {
+    const matchText = !_invFilter ||
+      (i.name||"").toLowerCase().includes(_invFilter) ||
+      (i.asset_code||"").toLowerCase().includes(_invFilter) ||
+      (i.account_code||"").toLowerCase().includes(_invFilter) ||
+      (i.model||"").toLowerCase().includes(_invFilter);
+    const matchStatus = !_invStatusFilter || i.inv_status === _invStatusFilter;
+    return matchText && matchStatus;
+  });
+  const tbody = document.querySelector("#invTable tbody");
+  if (!tbody) return;
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:#94a3b8;padding:30px">Хайлтад тохирох хөрөнгө олдсонгүй</td></tr>`;
+    return;
+  }
+  tbody.querySelectorAll("tr").forEach(tr => {
+    tr.style.display = filtered.find(f => f.id === parseInt(tr.dataset.id || "0")) ? "" : "none";
+  });
+}
+
+async function invUpdateStatus(assetId, status, sid) {
+  const item = _invItems.find(i => i.id === assetId);
+  const note = item?.note || "";
+  try {
+    await api(`/api/inventory-sessions/${sid}/items/${assetId}`, {
+      method:"PUT", body:JSON.stringify({ inv_status: status, note })
+    });
+    if (item) item.inv_status = status;
+    toast(`${invStatusMeta(status).icon} ${status}`);
+  } catch(e) { toast("Алдаа: " + e.message); }
+}
+
+async function invUpdateNote(assetId, note, sid) {
+  const item = _invItems.find(i => i.id === assetId);
+  const status = item?.inv_status || "Хүлээгдэж буй";
+  try {
+    await api(`/api/inventory-sessions/${sid}/items/${assetId}`, {
+      method:"PUT", body:JSON.stringify({ inv_status: status, note })
+    });
+    if (item) item.note = note;
+  } catch(e) {}
+}
+
+// ── Тооллогын тайлан ────────────────────────────────────────
+
+async function openInvReport(sid) {
+  main.innerHTML = `<div style="padding:40px;text-align:center;color:#667085">
+    <div style="font-size:32px;margin-bottom:10px">⏳</div>Тайлан бэлтгэж байна...
+  </div>`;
+
+  let data;
+  try { data = await api(`/api/inventory-sessions/${sid}/report`); }
+  catch(e) { toast("Алдаа: " + e.message); return; }
+
+  const { session, summary, byAccount } = data;
+  const total = byAccount.reduce((s,r) => s + r.total, 0);
+  const totalCounted = byAccount.reduce((s,r) => s + r.counted, 0);
+  const totalBook = byAccount.reduce((s,r) => s + (r.total_book||0), 0);
+  const totalInitial = byAccount.reduce((s,r) => s + (r.total_initial||0), 0);
+  const pct = total > 0 ? Math.round(totalCounted / total * 100) : 0;
+  const pctColor = pct >= 90 ? "#16a34a" : pct >= 50 ? "#d97706" : "#dc2626";
+
+  const summaryMap = {};
+  summary.forEach(s => summaryMap[s.inv_status] = s);
+
+  main.innerHTML = `
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap">
+    <button onclick="openInvSession(${sid})" class="btn secondary" style="font-size:12px;padding:6px 12px">← Тооллого руу буцах</button>
+    <button onclick="asset_inventory()" class="btn secondary" style="font-size:12px;padding:6px 12px">🏠 Жагсаалт</button>
+    <div style="flex:1"></div>
+    <button onclick="invPrintReport()" class="btn" style="font-size:12px;padding:6px 14px">🖨 Хэвлэх</button>
+  </div>
+
+  <div id="invReportPrint">
+    <div style="text-align:center;margin-bottom:20px">
+      <div style="font-size:11px;color:#667085;letter-spacing:.12em;text-transform:uppercase">ЧОЙБАЛСАН ХӨГЖИЛ ОНӨҮГ</div>
+      <div style="font-size:20px;font-weight:800;margin:6px 0">УЛСЫН ҮЗЛЭГ, ТООЛЛОГЫН ТАЙЛАН</div>
+      <div style="font-size:13px;color:#667085">${escapeHtml(session.title)} · ${session.year} он</div>
+      <div style="font-size:12px;color:#94a3b8">${session.start_date||""} — ${session.end_date||"2026-08-31"}</div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px">
+      <div style="background:#eff6ff;border-radius:10px;padding:14px;text-align:center">
+        <div style="font-size:10px;color:#2563eb;font-weight:600;letter-spacing:.08em;margin-bottom:4px">НИЙТ ХӨРӨНГӨ</div>
+        <div style="font-size:28px;font-weight:800;color:#1d4ed8">${total}</div>
+      </div>
+      <div style="background:#f0fdf4;border-radius:10px;padding:14px;text-align:center">
+        <div style="font-size:10px;color:#16a34a;font-weight:600;letter-spacing:.08em;margin-bottom:4px">ТООЛОГДСОН</div>
+        <div style="font-size:28px;font-weight:800;color:#15803d">${totalCounted}</div>
+        <div style="font-size:13px;font-weight:700;color:${pctColor}">${pct}%</div>
+      </div>
+      <div style="background:#fef2f2;border-radius:10px;padding:14px;text-align:center">
+        <div style="font-size:10px;color:#dc2626;font-weight:600;letter-spacing:.08em;margin-bottom:4px">ОЛДООГҮЙ</div>
+        <div style="font-size:28px;font-weight:800;color:#b91c1c">${(summaryMap["Олдоогүй"]||{cnt:0}).cnt}</div>
+      </div>
+      <div style="background:#f8fafc;border-radius:10px;padding:14px;text-align:center">
+        <div style="font-size:10px;color:#64748b;font-weight:600;letter-spacing:.08em;margin-bottom:4px">ДАНСНЫ ҮНЭ НИЙТ</div>
+        <div style="font-size:13px;font-weight:800;color:#334155">${totalBook.toLocaleString()}₮</div>
+        <div style="font-size:10px;color:#94a3b8">Анхны: ${totalInitial.toLocaleString()}₮</div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:20px">
+      ${INV_STATUSES.slice(1).map(s => {
+        const sd = summaryMap[s.key] || { cnt:0, total_price:0 };
+        return `<div style="background:${s.bg};border:1px solid ${s.color}33;border-radius:10px;padding:12px;display:flex;align-items:center;gap:10px">
+          <div style="font-size:24px">${s.icon}</div>
+          <div>
+            <div style="font-size:11px;color:${s.color};font-weight:700">${s.label}</div>
+            <div style="font-size:20px;font-weight:800;color:${s.color}">${sd.cnt}</div>
+            ${sd.total_price ? `<div style="font-size:10px;color:#94a3b8">${sd.total_price.toLocaleString()}₮</div>` : ""}
+          </div>
+        </div>`;
+      }).join("")}
+    </div>
+
+    <div class="panel" style="padding:0;overflow:hidden;margin-bottom:16px">
+      <div style="padding:12px 16px;border-bottom:1px solid #f1f5f9;font-size:13px;font-weight:700;color:#344054">Дансны дугаараар</div>
+      <table>
+        <thead><tr>
+          <th>Данс</th>
+          <th style="text-align:center">Нийт</th>
+          <th style="text-align:center;color:#16a34a">Тоологдсон</th>
+          <th style="text-align:center;color:#d97706">Зөрүүтэй</th>
+          <th style="text-align:center;color:#dc2626">Олдоогүй</th>
+          <th style="text-align:center;color:#7c3aed">Актлах</th>
+          <th style="text-align:center;color:#94a3b8">Хүлээгдэж буй</th>
+          <th style="text-align:right">Анхны үнэ ₮</th>
+          <th style="text-align:right">Дансны үнэ ₮</th>
+          <th style="text-align:center">Гүйцэтгэл</th>
+        </tr></thead>
+        <tbody>
+          ${byAccount.map(r => {
+            const p = r.total > 0 ? Math.round(r.counted / r.total * 100) : 0;
+            const pc = p >= 90 ? "#16a34a" : p >= 50 ? "#d97706" : "#dc2626";
+            return `<tr>
+              <td><span style="font-family:monospace;font-size:12px;font-weight:700;color:#1d4ed8">${escapeHtml(r.account_code||"—")}</span></td>
+              <td style="text-align:center;font-weight:700">${r.total}</td>
+              <td style="text-align:center;color:#16a34a;font-weight:700">${r.counted}</td>
+              <td style="text-align:center;color:#d97706;font-weight:700">${r.discrepancy}</td>
+              <td style="text-align:center;color:#dc2626;font-weight:700">${r.missing}</td>
+              <td style="text-align:center;color:#7c3aed;font-weight:700">${r.write_off}</td>
+              <td style="text-align:center;color:#94a3b8">${r.pending}</td>
+              <td style="text-align:right;font-size:12px;color:#64748b">${(r.total_initial||0).toLocaleString()}</td>
+              <td style="text-align:right;font-size:12px;font-weight:600;color:#1d4ed8">${(r.total_book||0).toLocaleString()}</td>
+              <td style="text-align:center">
+                <span style="font-size:12px;font-weight:800;color:${pc}">${p}%</span>
+              </td>
+            </tr>`;
+          }).join("")}
+          <tr style="background:#f8fafc;font-weight:800">
+            <td>Нийт дүн</td>
+            <td style="text-align:center">${total}</td>
+            <td style="text-align:center;color:#16a34a">${totalCounted}</td>
+            <td style="text-align:center;color:#d97706">${byAccount.reduce((s,r)=>s+r.discrepancy,0)}</td>
+            <td style="text-align:center;color:#dc2626">${byAccount.reduce((s,r)=>s+r.missing,0)}</td>
+            <td style="text-align:center;color:#7c3aed">${byAccount.reduce((s,r)=>s+r.write_off,0)}</td>
+            <td style="text-align:center;color:#94a3b8">${byAccount.reduce((s,r)=>s+r.pending,0)}</td>
+            <td style="text-align:right">${totalInitial.toLocaleString()}</td>
+            <td style="text-align:right;color:#1d4ed8">${totalBook.toLocaleString()}</td>
+            <td style="text-align:center;color:${pctColor}">${pct}%</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div style="font-size:11px;color:#94a3b8;text-align:right">
+      Тайлан үүссэн: ${new Date().toLocaleString("mn-MN")}
+    </div>
+  </div>`;
+}
+
+function invPrintReport() {
+  const content = document.getElementById("invReportPrint");
+  if (!content) return;
+  const w = window.open("", "_blank");
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+    <title>Тооллогын тайлан</title>
+    <style>
+      body{font-family:sans-serif;padding:24px;color:#1a1a1a}
+      table{width:100%;border-collapse:collapse;font-size:12px}
+      th,td{padding:7px 10px;border:1px solid #e2e6ed;text-align:left}
+      th{background:#f8fafc;font-weight:700}
+      @media print{button{display:none}}
+    </style>
+  </head><body>${content.innerHTML}</body></html>`);
+  w.document.close();
+  w.print();
+}
 
 Object.assign(window, {
   assets, filterAssets,
-  slAssets, sl_asset_road, sl_asset_ger, sl_asset_tower, sl_asset_signal, sl_asset_panel,
+  slAssets, slHubAsset, sl_asset_road, sl_asset_ger, sl_asset_tower, sl_asset_signal, sl_asset_panel,
+  camera_assets,
   openAssetFlagModal, closeAssetFlagModal, saveAssetFlag, resolveAssetFlag,
+  openTrafficSignalJournal, openTrafficSignalCheck, closeTrafficSignalModal,
+  saveTrafficSignalLog, checkTrafficSignalAt,
   deleteGerRow, deleteSlPointRow,
   openAssetForm, closeAssetForm, saveAsset,
   openGerForm, closeGerForm, saveGerForm,
   openSlForm, closeSlForm, saveSlForm,
-  openPassport, closePassport, switchPassportTab,
+  openPassport, closePassport, switchPassportTab, loadAssetSafetyRisks,
   loadPanelMeters, linkMeterToPanel, unlinkMeterFromPanel,
   confirmDeleteAsset, uploadAssetFiles, deleteAssetFile,
   openLightbox, closeLightbox, lightboxNav, slFaultQuickSave,
@@ -2209,4 +2954,7 @@ Object.assign(window, {
   openGerDetail, gerFaultQuickSave,
   saveGerGps, saveGerMeterLink, gerKmzImport, gerSelectKmzPoint,
   uploadGerPhoto, deleteGerPhoto, uploadGerDoc, deleteGerDoc,
+  asset_inventory, openInvSessionForm, closeInvSessionForm, saveInvSession, closeInvSession,
+  openInvSession, invSetFilter, invSetStatusFilter, invUpdateStatus, invUpdateNote,
+  openInvReport, invPrintReport,
 });

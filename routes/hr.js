@@ -1,5 +1,6 @@
 const express = require("express");
 const bcrypt  = require("bcryptjs");
+const crypto  = require("crypto");
 const fs   = require("fs");
 const path = require("path");
 const { run, all, get, auth, audit, upload, UPLOAD_DIR } = require("../db");
@@ -20,7 +21,7 @@ router.get("/me", auth, async (req, res) => {
 
 router.get("/users", auth, async (_, res) => {
   res.json(await all(
-    "SELECT id,username,full_name,role,position,department,phone,active,permissions FROM users WHERE active=1 ORDER BY id"));
+    "SELECT id,username,full_name,role,position,department,phone,email,active,can_login,permissions FROM users WHERE active=1 ORDER BY id"));
 });
 
 // Full user list for HR module (salary masked for non-hr/director)
@@ -30,8 +31,8 @@ router.get("/users-full", auth, async (req, res) => {
     `SELECT id,username,full_name,role,position,department,phone,email,
             register_no,address,hire_date,contract_type,contract_end,
             status_hr,job_category,education,gender,birthdate,nationality,
-            emergency_contact,active,created_at,contract_scan_url,
-            ${canSeeSalary ? "salary" : "NULL AS salary"}
+            emergency_contact,active,can_login,created_at,contract_scan_url,
+            ${canSeeSalary ? "salary,skill_allowance_rate,skill_allowance,tenure_years,tenure_allowance_rate,tenure_allowance,meal_allowance" : "NULL AS salary,NULL AS skill_allowance_rate,NULL AS skill_allowance,NULL AS tenure_years,NULL AS tenure_allowance_rate,NULL AS tenure_allowance,NULL AS meal_allowance"}
      FROM users WHERE active=1 ORDER BY full_name`);
   res.json(rows);
 });
@@ -48,6 +49,24 @@ router.put("/users/:id/hr", auth, requirePermission("hr_write"), async (req, res
   const salary = Number(b.salary);
   if (b.salary !== undefined && (isNaN(salary) || salary < 0))
     return res.status(400).json({ error: "Цалингийн дүн 0-ээс их байх ёстой" });
+  const skillAllowance = Number(b.skill_allowance);
+  if (b.skill_allowance !== undefined && (isNaN(skillAllowance) || skillAllowance < 0))
+    return res.status(400).json({ error: "Ур чадварын нэмэгдэл 0-ээс их байх ёстой" });
+  const skillAllowanceRate = Math.floor(Number(b.skill_allowance_rate));
+  if (b.skill_allowance_rate !== undefined && (isNaN(skillAllowanceRate) || skillAllowanceRate < 0 || skillAllowanceRate > 25))
+    return res.status(400).json({ error: "Ур чадварын нэмэгдлийн хувь 0-25 хооронд байх ёстой" });
+  const tenureAllowance = Number(b.tenure_allowance);
+  if (b.tenure_allowance !== undefined && (isNaN(tenureAllowance) || tenureAllowance < 0))
+    return res.status(400).json({ error: "Ажилласан жилийн нэмэгдэл 0-ээс их байх ёстой" });
+  const tenureYears = Math.floor(Number(b.tenure_years));
+  if (b.tenure_years !== undefined && (isNaN(tenureYears) || tenureYears < 0))
+    return res.status(400).json({ error: "Ажилласан жил 0-ээс их байх ёстой" });
+  const tenureAllowanceRate = Number(b.tenure_allowance_rate);
+  if (b.tenure_allowance_rate !== undefined && (isNaN(tenureAllowanceRate) || tenureAllowanceRate < 0 || tenureAllowanceRate > 25))
+    return res.status(400).json({ error: "Ажилласан жилийн нэмэгдлийн хувь 0-25 хооронд байх ёстой" });
+  const mealAllowance = Number(b.meal_allowance);
+  if (b.meal_allowance !== undefined && (isNaN(mealAllowance) || mealAllowance < 0))
+    return res.status(400).json({ error: "Хоолны нэмэгдэл 0-ээс их байх ёстой" });
 
   if (b.hire_date && isNaN(Date.parse(b.hire_date)))
     return res.status(400).json({ error: "Ажилд орсон огноо буруу форматтай байна" });
@@ -67,14 +86,14 @@ router.put("/users/:id/hr", auth, requirePermission("hr_write"), async (req, res
     register_no=?,hire_date=?,contract_type=?,contract_end=?,
     status_hr=?,job_category=?,education=?,gender=?,birthdate=?,
     nationality=?,emergency_contact=?,role=?,active=?
-    ${canEditSalary ? ",salary=?" : ""}
+    ${canEditSalary ? ",salary=?,skill_allowance_rate=?,skill_allowance=?,tenure_years=?,tenure_allowance_rate=?,tenure_allowance=?,meal_allowance=?" : ""}
     WHERE id=?`,
     [b.full_name.trim(),b.position||"",b.department||"",b.phone||"",b.email||null,
      b.address||"",b.register_no||"",b.hire_date||null,b.contract_type||"Байнгын",
      b.contract_end||null,b.status_hr||"Идэвхтэй",b.job_category||"Захиргааны ажилтан",
      b.education||"",b.gender||"",b.birthdate||null,b.nationality||"Монгол",
      b.emergency_contact||"",b.role||"engineer",b.active!==false?1:0,
-     ...(canEditSalary ? [salary||0] : []),
+     ...(canEditSalary ? [salary||0, skillAllowanceRate||0, skillAllowance||0, tenureYears||0, tenureAllowanceRate||0, tenureAllowance||0, mealAllowance||0] : []),
      req.params.id]);
   await audit(req.user.id,"UPDATE","users",req.params.id,b.full_name.trim());
   res.json({ ok:true });
@@ -134,10 +153,27 @@ router.post("/users", auth, requirePermission("hr_write"), async (req, res) => {
     return res.status(400).json({ error: "Овог нэр шаардлагатай" });
 
   const username = (b.username || ("emp" + Date.now())).trim();
-  const password = b.password || "1234";
+  const password = b.password || crypto.randomBytes(18).toString("base64url");
 
   if (b.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(b.email))
     return res.status(400).json({ error: "Имэйл хаяг буруу форматтай байна" });
+  for (const [key, label] of [
+    ["salary", "Цалингийн дүн"],
+    ["skill_allowance_rate", "Ур чадварын нэмэгдлийн хувь"],
+    ["skill_allowance", "Ур чадварын нэмэгдэл"],
+    ["tenure_years", "Ажилласан жил"],
+    ["tenure_allowance_rate", "Ажилласан жилийн нэмэгдлийн хувь"],
+    ["tenure_allowance", "Ажилласан жилийн нэмэгдэл"],
+    ["meal_allowance", "Хоолны нэмэгдэл"],
+  ]) {
+    const value = Number(b[key] || 0);
+    if (isNaN(value) || value < 0)
+      return res.status(400).json({ error: `${label} 0-ээс их байх ёстой` });
+  }
+  if (Number(b.skill_allowance_rate || 0) > 25)
+    return res.status(400).json({ error: "Ур чадварын нэмэгдлийн хувь 25%-иас их байж болохгүй" });
+  if (Number(b.tenure_allowance_rate || 0) > 25)
+    return res.status(400).json({ error: "Ажилласан жилийн нэмэгдлийн хувь 25%-иас их байж болохгүй" });
 
   const existing = await get("SELECT id FROM users WHERE username=?", [username]);
   if (existing)
@@ -147,12 +183,14 @@ router.post("/users", auth, requirePermission("hr_write"), async (req, res) => {
   try {
     r = await run(`
       INSERT INTO users(username,password_hash,full_name,role,position,
-        register_no,address,phone,department,email,active)
-      VALUES(?,?,?,?,?,?,?,?,?,?,1)`,
+        register_no,address,phone,department,email,salary,skill_allowance_rate,skill_allowance,tenure_years,tenure_allowance_rate,tenure_allowance,meal_allowance,active,can_login)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?)`,
       [username, bcrypt.hashSync(password, 10), b.full_name.trim(),
        b.role || "engineer", b.position || "",
-       b.register_no || "", b.address || "", b.phone || "", b.department || "",
-       b.email || null]);
+        b.register_no || "", b.address || "", b.phone || "", b.department || "",
+        b.email || null, Number(b.salary || 0), Math.floor(Number(b.skill_allowance_rate || 0)), Number(b.skill_allowance || 0),
+        Math.floor(Number(b.tenure_years || 0)), Number(b.tenure_allowance_rate || 0), Number(b.tenure_allowance || 0), Number(b.meal_allowance || 0),
+        b.can_login ? 1 : 0]);
   } catch (e) {
     if (e.message?.includes("UNIQUE")) return res.status(409).json({ error: "Нэвтрэх нэр давхардаж байна" });
     throw e;
@@ -167,11 +205,11 @@ router.put("/users/:id", auth, requirePermission("hr_write"), async (req, res) =
   const b = req.body;
   await run(`
     UPDATE users SET full_name=?,role=?,position=?,register_no=?,
-      address=?,phone=?,department=?,email=?,active=?,permissions=? WHERE id=?`,
+      address=?,phone=?,department=?,email=?,active=?,can_login=?,permissions=? WHERE id=?`,
     [b.full_name, b.role || "engineer", b.position || "",
      b.register_no || "", b.address || "", b.phone || "",
      b.department || "", b.email || null, b.active ? 1 : 0,
-     b.permissions || null, req.params.id]);
+      b.can_login ? 1 : 0, b.permissions || null, req.params.id]);
 
   await audit(req.user.id, "UPDATE", "users", req.params.id, b.full_name);
   res.json({ ok: true });
