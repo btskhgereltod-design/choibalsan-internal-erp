@@ -3203,7 +3203,6 @@ async function initFiberMap(cameraRows = []) {
   _fiberGpsRows = cameraRows;
   _fiberCameraMarkers = [];
   _fiberPointMarkers = [];
-  _fiberMap = L.map("fiberMap", { zoomControl: true }).setView([48.072, 114.532], 13);
   _fiberRouteLayers = [];
   _fiberMap = L.map("fiberMap", { zoomControl: true }).setView(CHOIBALSAN_MAP_CENTER, 13);
   const streetLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -3296,7 +3295,6 @@ async function initFiberMap(cameraRows = []) {
   });
   syncFiberRouteLayerVisibility();
   if (points.length) _fiberMap.fitBounds(points, { padding: [30, 30], maxZoom: 16 });
-  if (msg) msg.textContent = `GPS-тэй камер: ${cameraRows.filter(r => Number.isFinite(Number(r.gps_lat)) && Number.isFinite(Number(r.gps_lng))).length} · Трасс: ${_fiberRoutes.length} · Цэг: ${_fiberPoints.length}`;
   else _fiberMap.setView(CHOIBALSAN_MAP_CENTER, 13);
   if (msg) msg.textContent = `GPS-тэй камер: ${cameraRows.filter(r => isChoibalsanMapLatLng(r.gps_lat, r.gps_lng)).length} · Трасс: ${_fiberRoutes.length}`;
   const gpsSelect = document.getElementById("fiberGpsAssetSelect");
