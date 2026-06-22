@@ -35,6 +35,12 @@ let _fiberCameraMoveMode = false;
 let _fiberCameraMarkers = [];
 let _fiberPointMarkers = [];
 let _fiberCameraLayerVisible = true;
+let _fiberWorkspaceFull = false;
+let _fiberRouteLayerVisible = true;
+let _fiberRouteLayers = [];
+let _fiberCoreLayerVisible = {};
+let _fiberWorkspaceBodyOverflow = null;
+let _fiberWorkspaceKeyHandlerAttached = false;
 
 const FIBER_CORE_OPTIONS = [
   { core: 4, color: "#16a34a" },
@@ -45,6 +51,7 @@ const FIBER_CORE_OPTIONS = [
   { core: 48, color: "#7c3aed" },
   { core: 96, color: "#111827" },
 ];
+FIBER_CORE_OPTIONS.forEach(o => { _fiberCoreLayerVisible[o.core] = true; });
 
 const FIBER_POINT_TYPES = ["Муфт", "Холболтын хайрцаг", "ODF", "Кросс", "Splitter", "Бусад"];
 const FIBER_SPLICE_COLORS = [
@@ -2705,6 +2712,7 @@ function sl_asset_signal() { slAssets("Гэрлэн дохио"); }
 function sl_asset_panel()  { slAssets("Шит/Самбар"); }
 function cameraAssetTab(tab) {
   _cameraAssetTab = tab === "list" ? "dashboard" : (tab || "dashboard");
+  if (_cameraAssetTab !== "fiber") closeFiberWorkspace();
   camera_assets();
 }
 
@@ -2746,6 +2754,51 @@ function fiberRouteLengthM(latlngs) {
 
 function fmtFiberLength(m) {
   return Number(m || 0) >= 1000 ? `${(Number(m) / 1000).toFixed(2)} км` : `${Math.round(Number(m || 0))} м`;
+}
+
+const CHOIBALSAN_MAP_CENTER = [48.072, 114.532];
+const CHOIBALSAN_MAP_BOUNDS = { minLat: 47.5, maxLat: 48.6, minLng: 113.8, maxLng: 115.3 };
+const CHOIBALSAN_MAP_TOLERANCE = 0.15;
+
+function isValidFiberLatLng(lat, lng) {
+  lat = Number(lat);
+  lng = Number(lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+  if (Math.abs(lat) < 0.000001 && Math.abs(lng) < 0.000001) return false;
+  return true;
+}
+
+function isChoibalsanMapLatLng(lat, lng, tolerance = CHOIBALSAN_MAP_TOLERANCE) {
+  lat = Number(lat);
+  lng = Number(lng);
+  if (!isValidFiberLatLng(lat, lng)) return false;
+  return lat >= CHOIBALSAN_MAP_BOUNDS.minLat - tolerance &&
+    lat <= CHOIBALSAN_MAP_BOUNDS.maxLat + tolerance &&
+    lng >= CHOIBALSAN_MAP_BOUNDS.minLng - tolerance &&
+    lng <= CHOIBALSAN_MAP_BOUNDS.maxLng + tolerance;
+}
+
+function isStrictChoibalsanMapLatLng(lat, lng) {
+  lat = Number(lat);
+  lng = Number(lng);
+  if (!isValidFiberLatLng(lat, lng)) return false;
+  return lat >= 47.5 && lat <= 48.6 && lng >= 113.8 && lng <= 115.3;
+}
+
+function fiberWorkspaceKeyHandler(e) {
+  if (e.key === "Escape" && _fiberWorkspaceFull) closeFiberWorkspace();
+}
+
+function attachFiberWorkspaceKeyHandler() {
+  if (_fiberWorkspaceKeyHandlerAttached) return;
+  document.addEventListener("keydown", fiberWorkspaceKeyHandler);
+  _fiberWorkspaceKeyHandlerAttached = true;
+}
+
+function detachFiberWorkspaceKeyHandler() {
+  if (!_fiberWorkspaceKeyHandlerAttached) return;
+  document.removeEventListener("keydown", fiberWorkspaceKeyHandler);
+  _fiberWorkspaceKeyHandlerAttached = false;
 }
 
 function fiberCoreColor(core) {
@@ -2854,8 +2907,95 @@ function syncFiberCameraMarkerVisibility() {
   updateFiberCameraLayerButton();
 }
 
+function syncFiberRouteLayerVisibility() {
+  if (!_fiberMap) return;
+  _fiberRouteLayers.forEach(item => {
+    const visible = _fiberRouteLayerVisible && _fiberCoreLayerVisible[item.core] !== false;
+    if (visible) {
+      if (!_fiberMap.hasLayer(item.line)) item.line.addTo(_fiberMap);
+    } else if (_fiberMap.hasLayer(item.line)) {
+      item.line.remove();
+    }
+  });
+}
+
+function toggleFiberRouteLayer() {
+  _fiberRouteLayerVisible = !_fiberRouteLayerVisible;
+  const cb = document.getElementById("fiberLayerRoutes");
+  if (cb) cb.checked = _fiberRouteLayerVisible;
+  syncFiberRouteLayerVisibility();
+}
+
+function toggleFiberCoreLayer(core, checked) {
+  _fiberCoreLayerVisible[Number(core)] = !!checked;
+  syncFiberRouteLayerVisibility();
+}
+
+function fiberLayerPanelHtml() {
+  return `
+    <div style="border:1px solid #e2e8f0;border-radius:8px;margin-bottom:10px;overflow:hidden">
+      <div style="background:#f8fafc;padding:9px 10px;font-size:12px;font-weight:900;color:#1e293b">Layers</div>
+      <label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-top:1px solid #eef2f7;font-size:12px;font-weight:700;color:#334155;cursor:pointer">
+        <input type="checkbox" ${_fiberCameraLayerVisible ? "checked" : ""} onchange="toggleFiberCameraLayer()"> Камерын цэгүүд
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-top:1px solid #eef2f7;font-size:12px;font-weight:700;color:#334155;cursor:pointer">
+        <input id="fiberLayerRoutes" type="checkbox" ${_fiberRouteLayerVisible ? "checked" : ""} onchange="toggleFiberRouteLayer()"> Шилэн трасс
+      </label>
+      <div style="padding:8px 10px;border-top:1px solid #eef2f7">
+        <div style="font-size:11px;font-weight:900;color:#64748b;margin-bottom:6px">Core давхарга</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
+          ${FIBER_CORE_OPTIONS.map(o => `
+            <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:#334155;font-weight:700;cursor:pointer">
+              <input type="checkbox" ${_fiberCoreLayerVisible[o.core] !== false ? "checked" : ""} onchange="toggleFiberCoreLayer(${o.core}, this.checked)">
+              <span style="width:14px;height:4px;border-radius:10px;background:${o.color};display:inline-block"></span>${o.core}
+            </label>
+          `).join("")}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function setFiberSelectedFeature(type, item = {}) {
+  const box = document.getElementById("fiberPropertiesPanel");
+  if (!box) return;
+  if (type === "camera") {
+    const hasGps = isChoibalsanMapLatLng(item.gps_lat, item.gps_lng);
+    box.innerHTML = `
+      <div style="font-size:13px;font-weight:900;color:#1e293b;margin-bottom:10px">Сонгосон камер</div>
+      <div style="font-size:14px;font-weight:900;color:#1d4ed8">${escapeHtml(item.name || "Камер")}</div>
+      <div style="font-family:monospace;font-size:11px;color:#475569;margin-top:4px">${escapeHtml(item.asset_code || "")}</div>
+      <div style="font-size:12px;color:#475569;margin-top:8px">${escapeHtml(item.location || "Байршил оруулаагүй")}</div>
+      <div style="margin-top:12px;font-size:11px;color:#64748b;font-weight:800">GPS</div>
+      <div style="font-family:monospace;font-size:12px;color:${hasGps ? "#15803d" : "#dc2626"}">${hasGps ? `${Number(item.gps_lat).toFixed(6)}, ${Number(item.gps_lng).toFixed(6)}` : "GPS байхгүй"}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:14px">
+        <button class="btn secondary" style="padding:5px 10px;font-size:11px" onclick="pickFiberCameraGps(${item.id})">GPS оноох</button>
+        <button class="btn secondary" style="padding:5px 10px;font-size:11px" onclick="openPassport(${item.id})">Паспорт</button>
+      </div>
+    `;
+    return;
+  }
+  if (type === "route") {
+    const core = fiberRouteCore(item);
+    box.innerHTML = `
+      <div style="font-size:13px;font-weight:900;color:#1e293b;margin-bottom:10px">Сонгосон трасс</div>
+      <div style="font-size:14px;font-weight:900;color:#1d4ed8">${escapeHtml(item.name || "Шилэн трасс")}</div>
+      <div style="display:flex;align-items:center;gap:7px;margin-top:8px;font-size:12px;font-weight:800;color:#334155">
+        <span style="width:26px;height:5px;border-radius:20px;background:${item.color || fiberCoreColor(core)};display:inline-block"></span>${core} core
+      </div>
+      <div style="font-size:12px;color:#475569;margin-top:8px">${escapeHtml(item.status || "")}</div>
+      <div style="font-size:12px;color:#475569;margin-top:8px">Урт: ${fmtFiberLength(item.length_m)}</div>
+      ${item.note ? `<div style="margin-top:10px;font-size:12px;color:#334155;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px">${escapeHtml(item.note)}</div>` : ""}
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:14px">
+        <button class="btn danger" style="padding:5px 10px;font-size:11px" onclick="deleteFiberRoute(${item.id})">Устгах</button>
+      </div>
+    `;
+    return;
+  }
+  box.innerHTML = `<div style="font-size:12px;color:#64748b;line-height:1.5">Map дээр камер эсвэл трасс дарахад мэдээлэл энд гарна.</div>`;
+}
+
 function loadLeaflet() {
-  if (window.L) return Promise.resolve();
   return new Promise((resolve, reject) => {
     if (!document.querySelector("style[data-fiber-map]")) {
       const style = document.createElement("style");
@@ -2871,9 +3011,157 @@ function loadLeaflet() {
           padding: 2px 6px;
           box-shadow: 0 2px 8px rgba(15,23,42,.12);
         }
+        .fiber-map-main {
+          padding: 0 !important;
+          border: 1px solid #b8c7d6 !important;
+          border-radius: 8px;
+          background: linear-gradient(180deg,#f8fbff,#edf4fa) !important;
+          box-shadow: 0 10px 22px rgba(31,55,77,.08);
+          overflow: hidden;
+        }
+        .fiber-map-toolbar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 12px 14px;
+          border-bottom: 1px solid #b8c7d6;
+          background: #edf4fb;
+        }
+        .fiber-map-sub {
+          font-size: 12px;
+          color: #58728b;
+          margin-top: 3px;
+        }
+        .fiber-map-tools,
+        .fiber-map-control-row {
+          display: flex;
+          gap: 8px;
+          align-items: center;
+          flex-wrap: wrap;
+          padding: 10px 14px;
+          border-bottom: 1px solid #d5e0ea;
+          background: #f8fbff;
+        }
+        .fiber-map-tools {
+          justify-content: space-between;
+        }
+        .fiber-map-control-row {
+          background: #fff;
+        }
+        .fiber-map-canvas {
+          height: 560px !important;
+          width: 100%;
+          border: none !important;
+          border-radius: 0 !important;
+          background: #d7e1eb !important;
+        }
+        .fiber-workspace.is-full .fiber-map-canvas {
+          height: auto !important;
+        }
+        .fiber-workspace.is-full {
+          position: fixed;
+          top: 8px !important;
+          right: 8px !important;
+          bottom: 8px !important;
+          left: 8px !important;
+          width: calc(100vw - 16px) !important;
+          height: calc(100vh - 16px) !important;
+          z-index: 10000;
+          margin: 0 !important;
+          display: grid;
+          grid-template-columns: 320px minmax(0, 1fr) 300px;
+          grid-template-rows: auto minmax(0, 1fr);
+          background: #fff;
+          border-radius: 10px;
+          box-shadow: 0 24px 80px rgba(15,23,42,.28);
+          overflow: hidden;
+        }
+        .fiber-workspace.is-full .fiber-header {
+          grid-column: 1 / 4;
+        }
+        .fiber-workspace.is-full .fiber-map-main {
+          grid-column: 2;
+          grid-row: 2;
+          min-height: 0;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+          border-radius: 0;
+          box-shadow: none;
+        }
+        .fiber-workspace.is-full .fiber-sidebar {
+          grid-column: 1;
+          grid-row: 2;
+          min-height: 0;
+          overflow: auto;
+          border-right: 1px solid #e2e8f0;
+          border-bottom: none !important;
+          padding: 12px !important;
+        }
+        .fiber-workspace.is-full .fiber-properties {
+          display: block !important;
+          grid-column: 3;
+          grid-row: 2;
+          min-height: 0;
+          overflow: auto;
+          border-left: 1px solid #e2e8f0;
+          padding: 12px !important;
+          background: #fff;
+        }
+        .fiber-workspace.is-full .fiber-cable-table {
+          display: none;
+        }
+        .fiber-workspace.is-full .fiber-gps-list {
+          max-height: calc(100vh - 300px) !important;
+        }
+        .fiber-workspace.is-full #fiberMap {
+          height: auto !important;
+          flex: 1;
+          min-height: 0;
+          border-radius: 8px;
+        }
+        .fiber-workspace.is-full .fiber-map-main > div:first-child,
+        .fiber-workspace.is-full .fiber-map-main > div:nth-child(2),
+        .fiber-workspace.is-full .fiber-map-main > div:nth-child(3) {
+          margin-left: 0 !important;
+          margin-right: 0 !important;
+        }
+        @media (max-width: 900px) {
+          .fiber-workspace.is-full {
+            grid-template-columns: 1fr;
+            grid-template-rows: auto minmax(0, 1fr) 220px;
+          }
+          .fiber-workspace.is-full .fiber-header,
+          .fiber-workspace.is-full .fiber-map-main,
+          .fiber-workspace.is-full .fiber-sidebar {
+            grid-column: 1;
+          }
+          .fiber-workspace.is-full .fiber-map-main {
+            grid-row: 2;
+          }
+          .fiber-workspace.is-full .fiber-sidebar {
+            grid-row: 3;
+            border-right: none;
+            border-top: 1px solid #e2e8f0;
+          }
+          .fiber-workspace.is-full .fiber-properties {
+            display: none !important;
+          }
+          .fiber-map-toolbar,
+          .fiber-map-tools,
+          .fiber-map-control-row {
+            align-items: stretch;
+            flex-direction: column;
+          }
+          .fiber-map-canvas {
+            height: 460px !important;
+          }
+        }
       `;
       document.head.appendChild(style);
     }
+    if (window.L) return resolve();
     if (!document.querySelector("link[data-leaflet]")) {
       const link = document.createElement("link");
       link.rel = "stylesheet";
@@ -2916,6 +3204,8 @@ async function initFiberMap(cameraRows = []) {
   _fiberCameraMarkers = [];
   _fiberPointMarkers = [];
   _fiberMap = L.map("fiberMap", { zoomControl: true }).setView([48.072, 114.532], 13);
+  _fiberRouteLayers = [];
+  _fiberMap = L.map("fiberMap", { zoomControl: true }).setView(CHOIBALSAN_MAP_CENTER, 13);
   const streetLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,
     attribution: "&copy; OpenStreetMap"
@@ -2941,7 +3231,7 @@ async function initFiberMap(cameraRows = []) {
   const points = [];
   cameraRows.forEach(r => {
     const lat = Number(r.gps_lat), lng = Number(r.gps_lng);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    if (!isChoibalsanMapLatLng(lat, lng)) return;
     points.push([lat, lng]);
     const marker = L.marker([lat, lng], { icon: fiberCameraIcon(), draggable: _fiberCameraMoveMode })
       .bindPopup(`<b>${escapeHtml(r.name || "Камер")}</b><br>${escapeHtml(r.asset_code || "")}<br>${escapeHtml(r.location || "")}<br><span style="font-size:11px;color:#64748b">GPS товчоор сонгоод map дээр дарна, эсвэл Камер зөөх горимоор чирнэ</span>`);
@@ -2954,6 +3244,7 @@ async function initFiberMap(cameraRows = []) {
       const saved = await saveCameraGpsFromMap(r.id, pos.lat, pos.lng, { refresh: false });
       if (!saved && e.target._oldLatLng) e.target.setLatLng(e.target._oldLatLng);
     });
+    marker.on("click", () => setFiberSelectedFeature("camera", r));
     _fiberCameraMarkers.push(marker);
     if (_fiberCameraLayerVisible) marker.addTo(_fiberMap);
   });
@@ -2964,8 +3255,11 @@ async function initFiberMap(cameraRows = []) {
   _fiberRoutes.forEach(route => {
     const coords = route?.geojson?.geometry?.coordinates || [];
     if (coords.length < 2) return;
-    const latlngs = coords.map(p => [Number(p[1]), Number(p[0])]);
-    points.push(...latlngs);
+    const latlngs = coords
+      .map(p => [Number(p[1]), Number(p[0])])
+      .filter(p => isValidFiberLatLng(p[0], p[1]));
+    if (latlngs.length < 2) return;
+    points.push(...latlngs.filter(p => isChoibalsanMapLatLng(p[0], p[1])));
     const core = fiberRouteCore(route);
     const color = route.color || fiberCoreColor(core);
     const line = L.polyline(latlngs, { color, weight: 7, opacity: 0.9 }).addTo(_fiberMap).bindPopup(`
@@ -2995,17 +3289,26 @@ async function initFiberMap(cameraRows = []) {
       <button onclick="deleteFiberPoint(${point.id})" style="margin-top:6px;border:1px solid #fecaca;background:#fef2f2;color:#dc2626;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer">Устгах</button>
     `);
     _fiberPointMarkers.push(marker);
+    line.on("click", () => setFiberSelectedFeature("route", route));
+    const label = route.note || route.name || `${core} core`;
+    if (label) line.bindTooltip(escapeHtml(label), { permanent: true, direction: "center", className: "fiber-route-label" });
+    _fiberRouteLayers.push({ line, core, route });
   });
+  syncFiberRouteLayerVisibility();
   if (points.length) _fiberMap.fitBounds(points, { padding: [30, 30], maxZoom: 16 });
   if (msg) msg.textContent = `GPS-тэй камер: ${cameraRows.filter(r => Number.isFinite(Number(r.gps_lat)) && Number.isFinite(Number(r.gps_lng))).length} · Трасс: ${_fiberRoutes.length} · Цэг: ${_fiberPoints.length}`;
+  else _fiberMap.setView(CHOIBALSAN_MAP_CENTER, 13);
+  if (msg) msg.textContent = `GPS-тэй камер: ${cameraRows.filter(r => isChoibalsanMapLatLng(r.gps_lat, r.gps_lng)).length} · Трасс: ${_fiberRoutes.length}`;
   const gpsSelect = document.getElementById("fiberGpsAssetSelect");
   if (gpsSelect) {
-    const missing = cameraRows.filter(r => !Number.isFinite(Number(r.gps_lat)) || !Number.isFinite(Number(r.gps_lng)));
+    const missing = cameraRows.filter(r => !isChoibalsanMapLatLng(r.gps_lat, r.gps_lng));
     gpsSelect.innerHTML = `<option value="">— GPS оруулах камер сонгох —</option>` +
       missing.map(r => `<option value="${r.id}">${escapeHtml(r.asset_code || "")} · ${escapeHtml(r.name || "Камер")}</option>`).join("");
     const gpsCount = document.getElementById("fiberGpsMissingCount");
     if (gpsCount) gpsCount.textContent = `${missing.length} GPS-гүй`;
   }
+  updateFiberWorkspaceButton();
+  setFiberSelectedFeature();
   setTimeout(() => _fiberMap?.invalidateSize(), 80);
   _fiberMap.on("click", e => {
     if (_fiberGpsPickAssetId) {
@@ -3061,6 +3364,45 @@ function toggleFiberCameraLayer() {
   syncFiberCameraMarkerVisibility();
 }
 
+function updateFiberWorkspaceButton() {
+  const btn = document.getElementById("fiberWorkspaceBtn");
+  if (!btn) return;
+  btn.textContent = _fiberWorkspaceFull ? "Буцаах" : "GIS горим";
+  btn.style.background = _fiberWorkspaceFull ? "#111827" : "";
+  btn.style.borderColor = _fiberWorkspaceFull ? "#111827" : "";
+  btn.style.color = _fiberWorkspaceFull ? "#fff" : "";
+}
+
+function closeFiberWorkspace() {
+  if (!_fiberWorkspaceFull) {
+    detachFiberWorkspaceKeyHandler();
+    return;
+  }
+  _fiberWorkspaceFull = false;
+  const box = document.getElementById("fiberWorkspace");
+  if (box) box.classList.remove("is-full");
+  document.body.style.overflow = _fiberWorkspaceBodyOverflow ?? "";
+  _fiberWorkspaceBodyOverflow = null;
+  detachFiberWorkspaceKeyHandler();
+  updateFiberWorkspaceButton();
+  setTimeout(() => _fiberMap?.invalidateSize(), 120);
+}
+
+function toggleFiberWorkspace() {
+  if (_fiberWorkspaceFull) {
+    closeFiberWorkspace();
+    return;
+  }
+  _fiberWorkspaceFull = true;
+  attachFiberWorkspaceKeyHandler();
+  _fiberWorkspaceBodyOverflow = document.body.style.overflow;
+  const box = document.getElementById("fiberWorkspace");
+  if (box) box.classList.add("is-full");
+  document.body.style.overflow = "hidden";
+  updateFiberWorkspaceButton();
+  setTimeout(() => _fiberMap?.invalidateSize(), 120);
+}
+
 function pickFiberCameraGps(assetId) {
   if (!_fiberMap) return toast("Газрын зураг ачаалагдаагүй байна");
   if (!_fiberCameraLayerVisible) {
@@ -3081,6 +3423,10 @@ function pickFiberCameraGps(assetId) {
 
 async function saveCameraGpsFromMap(assetId, lat, lng, opts = {}) {
   const row = _fiberGpsRows.find(r => String(r.id) === String(assetId));
+  if (!isStrictChoibalsanMapLatLng(lat, lng)) {
+    toast("Чойбалсан хот орчмын байрлал сонгоно уу");
+    return false;
+  }
   if (!confirm(`${row?.name || "Камер"} цэгийн GPS-г энд хадгалах уу?\n${lat.toFixed(6)}, ${lng.toFixed(6)}`)) return false;
   try {
     await api(`/api/assets/${assetId}/gps`, {
@@ -3632,19 +3978,22 @@ async function camera_assets() {
   </div>
 
   ${_cameraAssetTab === "fiber" ? `
-  <div class="panel">
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #e2e6ed;gap:12px;flex-wrap:wrap">
+  <div id="fiberWorkspace" class="panel fiber-workspace ${_fiberWorkspaceFull ? "is-full" : ""}">
+    <div class="fiber-header" style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #e2e6ed;gap:12px;flex-wrap:wrap">
       <div>
         <div style="font-size:14px;font-weight:800">🧵 Шилэн кабелийн бүртгэл <span style="font-size:12px;color:#667085;font-weight:400">(${searchedFibers.length})</span></div>
         <div style="font-size:11px;color:#667085;margin-top:2px">Камерын сүлжээний шилэн кабель, байршил, хариуцагч, файл</div>
       </div>
-      ${canCreate ? `<button class="btn" onclick="window._assetCat='Шилэн кабель';openAssetForm()" style="padding:6px 14px;font-size:12px">+ Кабель нэмэх</button>` : ""}
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button id="fiberWorkspaceBtn" class="btn secondary" type="button" onclick="toggleFiberWorkspace()" style="padding:6px 14px;font-size:12px">${_fiberWorkspaceFull ? "Буцаах" : "GIS горим"}</button>
+        ${canCreate ? `<button class="btn" onclick="window._assetCat='Шилэн кабель';openAssetForm()" style="padding:6px 14px;font-size:12px">+ Кабель нэмэх</button>` : ""}
+      </div>
     </div>
-    <div style="padding:14px 18px;border-bottom:1px solid #e2e6ed;background:#fbfdff">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+    <div class="fiber-map-main">
+      <div class="fiber-map-toolbar">
         <div>
           <div style="font-size:13px;font-weight:800;color:#1e293b">🗺 Шилэн кабелийн трассын зураг</div>
-          <div id="fiberMapHint" style="font-size:11px;color:#667085;margin-top:2px">Газрын зураг ачааллаж байна...</div>
+          <div id="fiberMapHint" class="fiber-map-sub">Газрын зураг ачааллаж байна...</div>
         </div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           <span id="fiberDrawHint" style="font-size:11px;color:#667085;margin-right:4px">Зураг дээр трасс зурж болно</span>
@@ -3653,7 +4002,7 @@ async function camera_assets() {
           <button class="btn secondary" style="padding:6px 12px;font-size:12px" onclick="cancelFiberDraw()">Цуцлах</button>
         </div>
       </div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px">
+      <div class="fiber-map-tools">
         <div style="font-size:12px;font-weight:800;color:#334155">Core / өнгө</div>
         <select id="fiberCoreSelect" class="input" style="width:130px;margin:0;padding:7px 10px;font-size:12px">
           ${FIBER_CORE_OPTIONS.map(o => `<option value="${o.core}" ${o.core === 24 ? "selected" : ""}>${o.core} core</option>`).join("")}
@@ -3676,20 +4025,23 @@ async function camera_assets() {
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px">
         <div style="font-size:12px;font-weight:800;color:#334155">GPS оруулах</div>
+      <div class="fiber-map-control-row">
+        <div style="font-size:12px;font-weight:800;color:#334155">📍 GPS оруулах</div>
         <select id="fiberGpsAssetSelect" class="input" onchange="setFiberGpsTarget(this.value)" style="width:min(360px,100%);margin:0;padding:7px 10px;font-size:12px"></select>
         <span id="fiberGpsMissingCount" style="font-size:11px;color:#94a3b8;font-weight:700"></span>
         <button id="fiberCameraLayerBtn" class="btn secondary" type="button" onclick="toggleFiberCameraLayer()" style="padding:6px 12px;font-size:12px">Камер: ON</button>
         <button id="fiberCameraMoveBtn" class="btn secondary" type="button" onclick="toggleFiberCameraMoveMode()" style="padding:6px 12px;font-size:12px">Камер зөөх</button>
         <span id="fiberGpsPickHint" style="font-size:11px;color:#667085">Камер сонгоод map дээр байршлыг дарна</span>
       </div>
-      <div id="fiberMap" style="height:430px;border:1px solid #dbe3ef;border-radius:8px;overflow:hidden;background:#e5edf7"></div>
+      <div id="fiberMap" class="fiber-map-canvas"></div>
     </div>
-    <div style="padding:12px 18px;border-bottom:1px solid #e2e6ed;background:#fff">
+    <div class="fiber-sidebar" style="padding:12px 18px;border-bottom:1px solid #e2e6ed;background:#fff">
+      ${fiberLayerPanelHtml()}
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px">
         <div style="font-size:13px;font-weight:800;color:#1e293b">🎥 Камерын GPS жагсаалт <span style="font-size:12px;color:#667085;font-weight:400">(${fiberMapCameraRows.length})</span></div>
         <div style="font-size:11px;color:#667085">GPS товч дараад map дээр шинэ байрлал дарна</div>
       </div>
-      <div style="max-height:260px;overflow:auto;border:1px solid #e2e8f0;border-radius:8px">
+      <div class="fiber-gps-list" style="max-height:260px;overflow:auto;border:1px solid #e2e8f0;border-radius:8px">
         <table style="width:100%;border-collapse:collapse">
           <thead><tr style="background:#f8fafc">
             <th style="text-align:left;padding:9px 10px;font-size:11px;color:#475569">#</th>
@@ -3700,7 +4052,7 @@ async function camera_assets() {
           </tr></thead>
           <tbody>
             ${fiberMapCameraRows.map((r, i) => {
-              const hasGps = Number.isFinite(Number(r.gps_lat)) && Number.isFinite(Number(r.gps_lng));
+              const hasGps = isChoibalsanMapLatLng(r.gps_lat, r.gps_lng);
               return `<tr style="border-top:1px solid #eef2f7">
                 <td style="padding:8px 10px;font-size:11px;color:#94a3b8">${i + 1}</td>
                 <td style="padding:8px 10px"><span style="font-family:monospace;font-size:11px;background:#f1f5f9;padding:2px 6px;border-radius:4px">${escapeHtml(r.asset_code || "—")}</span></td>
@@ -3718,7 +4070,13 @@ async function camera_assets() {
         </table>
       </div>
     </div>
-    <div class="table-wrap">
+    <div class="fiber-properties" style="display:none;padding:12px 18px;background:#fff;border-bottom:1px solid #e2e6ed">
+      <div style="font-size:12px;font-weight:900;color:#64748b;margin-bottom:8px">Properties</div>
+      <div id="fiberPropertiesPanel" style="border:1px solid #e2e8f0;border-radius:8px;padding:10px;min-height:120px;background:#fff">
+        <div style="font-size:12px;color:#64748b;line-height:1.5">Map дээр камер эсвэл трасс дарахад мэдээлэл энд гарна.</div>
+      </div>
+    </div>
+    <div class="table-wrap fiber-cable-table">
       <table id="cameraAssetTable">
         <thead><tr>
           <th style="width:40px">#</th>
@@ -3893,6 +4251,7 @@ async function camera_assets() {
   if (_cameraAssetTab === "report") loadCameraAnalytics();
   if (_cameraAssetTab === "repair") setTimeout(camRepairFilterTable, 0);
   if (_cameraAssetTab === "fiber") setTimeout(() => initFiberMap(rows), 0);
+  else closeFiberWorkspace();
 }
 
 async function loadCameraAnalytics() {
@@ -4591,6 +4950,9 @@ Object.assign(window, {
   openFiberSpliceModal, closeFiberSpliceModal, fiberSpliceAddRow, fiberSpliceAutoFill, saveFiberSplice,
   setFiberGpsTarget, toggleFiberCameraMoveMode,
   toggleFiberCameraLayer, pickFiberCameraGps,
+  startFiberDraw, cancelFiberDraw, saveFiberDraw, deleteFiberRoute, setFiberGpsTarget, toggleFiberCameraMoveMode,
+  toggleFiberCameraLayer, pickFiberCameraGps, toggleFiberWorkspace, closeFiberWorkspace,
+  toggleFiberRouteLayer, toggleFiberCoreLayer,
   openAssetFlagModal, closeAssetFlagModal, saveAssetFlag, resolveAssetFlag,
   openTrafficSignalJournal, openTrafficSignalCheck, closeTrafficSignalModal,
   saveTrafficSignalLog, checkTrafficSignalAt,

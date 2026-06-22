@@ -1,6 +1,6 @@
 import { state, api, toast, initFloatingScrollbar } from './modules/common.js';
 import './modules/dashboard.js?v=20260526dashboardorder';
-import './modules/assets.js?v=20260619cameragpslist';
+import './modules/assets.js?v=20260621fibergismapfix';
 import './modules/operations.js?v=20260609autoprogress';
 import './modules/warehouse.js';
 import './modules/hr.js?v=20260612attendanceovertime';
@@ -14,7 +14,7 @@ import './modules/admin_hub.js';
 import './modules/streetlights.js?v=20260618noloratab';
 import './modules/lighting_schedule.js?v=20260527engineeredit';
 import './modules/lora_monitor.js?v=20260618redirect';
-import './modules/iot_monitor.js?v=20260618iotchart';
+import './modules/iot_monitor.js?v=20260622segmentloadcolor';
 import './modules/settings.js?v=20260527loginrights';
 import './modules/eng_hub.js?v=20260529monthfilter';
 import './modules/field.js?v=20260608hseacktarget';
@@ -676,6 +676,7 @@ function updateActiveMenu(m) {
 }
 
 async function show(m) {
+  if (m !== "camera_assets") window.closeFiberWorkspace?.();
   state.current = m;
   updateActiveMenu(m);
   if (state.clockTimer) { clearInterval(state.clockTimer); state.clockTimer = null; }

@@ -12,6 +12,8 @@ const FIN_TABS = [
   ["cash_journal",  "📋", "Мөнгөн журнал"],
   ["payables",      "↓",  "Өглөг"],
   ["receivables",   "↑",  "Авлага"],
+  ["fin_materials",  "📦", "Бараа материал"],
+  ["fin_budget_performance", "📊", "Төсөв гүйцэтгэл"],
   ["fixed_ledger",  "🏢", "Үндсэн хөрөнгө"],
   ["fin_reports",   "📑", "Тайлан"],
 ];
@@ -115,6 +117,34 @@ function budgetPlanForPeriod(row, from, to) {
     }
   }
   return sum;
+}
+
+function finBudgetCodeOf(row) {
+  const text = [
+    row.cash_flow_type, row.econ_category, row.corr_account,
+    row.purpose, row.debit_account, row.credit_account, row.description
+  ].filter(Boolean).join(" ");
+  const m = String(text).match(/(^|\D)(\d{1,6})(?=\D|$)/);
+  const code = m ? m[2] : "";
+  return FIN_BUDGET_CODE_ALIASES[code] || code;
+}
+
+function finBudgetPerformanceRows(cashRows, from, to) {
+  const expenseRows = (cashRows || [])
+    .filter(r => r.txn_type === "Зарлага")
+    .map(r => ({ ...r, _budgetCode: finBudgetCodeOf(r) }));
+  const rows = FIN_BUDGET_PLAN_2026.map(row => {
+    const actualRows = expenseRows.filter(r => {
+      if (!row.code || !r._budgetCode) return false;
+      if (row.code.length < 6) return r._budgetCode.startsWith(row.code);
+      return r._budgetCode === row.code;
+    });
+    const actual = actualRows.reduce((s, r) => s + Number(r.amount || 0), 0);
+    const plan = budgetPlanForPeriod(row, from, to);
+    return { ...row, plan, actual, count: actualRows.length, diff: plan - actual };
+  });
+  const unmatched = expenseRows.filter(r => !r._budgetCode || !FIN_BUDGET_PLAN_2026.some(b => r._budgetCode.startsWith(b.code) || b.code.startsWith(r._budgetCode)));
+  return { rows, expenseRows, unmatched };
 }
 
 let _financeTab = "fin_dashboard";
@@ -814,25 +844,66 @@ async function receivables() {
 
 async function fixed_ledger() {
   let rows = [], assets = [];
+  let ledgerYear = Number(window._fixedLedgerYear || new Date().getFullYear());
+  let ledgerMonth = Number(window._fixedLedgerMonth || new Date().getMonth() + 1);
   async function load() {
     try { [rows, assets] = await Promise.all([api("/api/fixed-ledger"), api("/api/assets")]); }
     catch(e) { rows = []; assets = []; }
     render();
   }
   function render() {
-    const totalInit  = rows.reduce((s,r)=>s+Number(r.initial_value),0);
-    const totalAccum = rows.reduce((s,r)=>s+Number(r.accumulated_depreciation),0);
-    const totalBook  = rows.reduce((s,r)=>s+Number(r.book_value),0);
+    const deprMonthKey = `depr_m${ledgerMonth}`;
+    const sum = (key, fallback) => rows.reduce((s, r) => s + Number((fallback ? fallback(r) : r[key]) || 0), 0);
+    const assetOpening = sum("initial_value");
+    const assetIncome = sum("intake_amount");
+    const assetExpense = sum("issue_amount_fa");
+    const assetFinal = sum("final_amount", r => {
+      const stored = Number(r.final_amount || 0);
+      if (stored) return stored;
+      return Number(r.initial_value || 0) + Number(r.intake_amount || 0) - Number(r.issue_amount_fa || 0)
+        + Number(r.improve_income || 0) - Number(r.improve_expense || 0);
+    });
+    const deprOpeningBase = sum("depr_opening", r => Number(r.depr_opening || r.accumulated_depreciation || 0));
+    const deprAdded = sum(deprMonthKey);
+    const deprAddedToMonth = rows.reduce((s, r) => {
+      let total = 0;
+      for (let m = 1; m <= ledgerMonth; m++) total += Number(r[`depr_m${m}`] || 0);
+      return s + total;
+    }, 0);
+    const deprDeducted = sum("depr_deducted");
+    const deprFinal = deprOpeningBase + deprAddedToMonth - deprDeducted;
+    const bookFinal = assetFinal - deprFinal;
     main.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
       <div><h1 style="margin:0 0 4px">🏢 Үндсэн хөрөнгийн дансны бүртгэл</h1>
         <div style="font-size:12px;color:#667085">Fixed Assets Ledger · Элэгдлийн тооцоо</div></div>
-      ${canEdit()?`<button class="btn" onclick="openLedgerForm()">+ Бүртгэл нэмэх</button>`:""}
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+        <div style="display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:8px 10px">
+          <span style="font-size:12px;font-weight:800;color:#475569">Сар</span>
+          <select class="input" style="width:92px;margin:0;padding:6px 8px;font-size:12px" onchange="setFixedLedgerPeriod(this.value,null)">
+            ${Array.from({ length: 6 }, (_, i) => 2024 + i).map(y => `<option value="${y}" ${y === ledgerYear ? "selected" : ""}>${y}</option>`).join("")}
+          </select>
+          <select class="input" style="width:105px;margin:0;padding:6px 8px;font-size:12px" onchange="setFixedLedgerPeriod(null,this.value)">
+            ${Array.from({ length: 12 }, (_, i) => i + 1).map(m => `<option value="${m}" ${m === ledgerMonth ? "selected" : ""}>${m}-р сар</option>`).join("")}
+          </select>
+        </div>
+        ${canEdit()?`<button class="btn" onclick="openLedgerForm()">+ Бүртгэл нэмэх</button>`:""}
+      </div>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px">
-      ${statCard("Анхны өртөг (нийт)", fmt(totalInit)+"₮", "#2563eb")}
-      ${statCard("Нийт хуримтлагдсан элэгдэл", fmt(totalAccum)+"₮", "#d97706")}
-      ${statCard("Дансны үнэ (нийт)", fmt(totalBook)+"₮", "#16a34a")}
+    <div style="font-size:12px;font-weight:800;color:#475569;margin:0 0 8px">${ledgerYear} оны ${ledgerMonth}-р сарын үндсэн хөрөнгийн өртгийн хөдөлгөөн</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px">
+      ${statCard("Эхний үлдэгдэл", fmt(assetOpening)+"₮", "#2563eb")}
+      ${statCard("Орлого", fmt(assetIncome)+"₮", "#16a34a")}
+      ${statCard("Зарлага", fmt(assetExpense)+"₮", "#dc2626")}
+      ${statCard("Эцсийн үлдэгдэл", fmt(assetFinal)+"₮", "#7c3aed")}
+    </div>
+    <div style="font-size:12px;font-weight:800;color:#475569;margin:0 0 8px">Элэгдлийн хөдөлгөөн</div>
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:18px">
+      ${statCard("Элэгдлийн эхний үлдэгдэл", fmt(deprOpeningBase)+"₮", "#64748b")}
+      ${statCard("Нэмэгдсэн элэгдэл", fmt(deprAdded)+"₮", "#d97706", `${ledgerMonth}-р сарын элэгдэл`)}
+      ${statCard("Хасагдсан элэгдэл", fmt(deprDeducted)+"₮", "#dc2626")}
+      ${statCard("Элэгдлийн эцсийн үлдэгдэл", fmt(deprFinal)+"₮", "#9333ea")}
+      ${statCard("Дансны үнэ", fmt(bookFinal)+"₮", bookFinal >= 0 ? "#16a34a" : "#dc2626")}
     </div>
     <div class="panel">
       <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid #e2e6ed;flex-wrap:wrap">
@@ -945,6 +1016,13 @@ async function fixed_ledger() {
       document.getElementById("lg_life").value   = "120";
       document.getElementById("lg_method").value = "Шулуун шугам";
       document.getElementById("ledgerModal").style.display = "flex";
+    };
+    window.setFixedLedgerPeriod = (year, month) => {
+      if (year !== null && year !== undefined) ledgerYear = Number(year);
+      if (month !== null && month !== undefined) ledgerMonth = Number(month);
+      window._fixedLedgerYear = ledgerYear;
+      window._fixedLedgerMonth = ledgerMonth;
+      render();
     };
     window.editLedger = (id) => {
       const r = rows.find(x=>x.id===id); if (!r) return;
@@ -1183,6 +1261,301 @@ async function payroll() {
     };
   }
   load();
+}
+
+// ── Бараа материал / Төсөв / Гүйцэтгэл ───────────────────────
+
+async function fin_materials() {
+  main.innerHTML = `<div style="text-align:center;padding:60px 0;color:#94a3b8">Уншиж байна...</div>`;
+  let summary = {}, rows = [];
+  try {
+    [summary, rows] = await Promise.all([
+      api("/api/nyarav/summary").catch(() => ({})),
+      api("/api/nyarav/balance").catch(() => [])
+    ]);
+  } catch(e) {}
+  const totalValue = Number(summary.totalValue?.total || 0);
+  const lowCount = Array.isArray(summary.lowStock) ? summary.lowStock.length : 0;
+  const incomeTotal = Number(summary.monthIncome?.total || 0);
+  const expenseTotal = Number(summary.monthExpense?.total || 0);
+  main.innerHTML = `
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:18px">
+    <div>
+      <h1 style="margin:0 0 4px">📦 Бараа материал</h1>
+      <div style="font-size:12px;color:#667085">Няравын бараа материалын үлдэгдэл, орлого зарлагын санхүүгийн тойм</div>
+    </div>
+    <button class="btn secondary sm" onclick="fin_materials()">↻ Шинэчлэх</button>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px">
+    ${statCard("Нийт материал", fmt(summary.totalItems?.total || rows.length), "#2563eb")}
+    ${statCard("Үлдэгдлийн дүн", fmt(totalValue)+"₮", "#16a34a")}
+    ${statCard("Бага үлдэгдэл", fmt(lowCount), lowCount ? "#dc2626" : "#64748b")}
+    ${statCard("Сарын зарлага", fmt(expenseTotal)+"₮", "#d97706", summary.month || "")}
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px">
+    ${statCard("Сарын орлого", fmt(incomeTotal)+"₮", "#0891b2", "Няравын орлогын гүйлгээ")}
+    ${statCard("Сарын цэвэр хөдөлгөөн", fmt(incomeTotal - expenseTotal)+"₮", incomeTotal >= expenseTotal ? "#16a34a" : "#dc2626")}
+  </div>
+  <div class="panel">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #e2e6ed;gap:10px;flex-wrap:wrap">
+      <span style="font-size:14px;font-weight:800">Материалын үлдэгдлийн бүртгэл</span>
+      <input placeholder="🔍 Хайх..." oninput="filterFinanceMaterialTable(this.value)"
+        style="padding:7px 12px;border:1px solid #e2e6ed;border-radius:8px;font-size:12px;width:220px;outline:none">
+    </div>
+    <div style="overflow:auto">
+      <table id="finMaterialTable" style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="background:#f8fafc;border-bottom:1px solid #e2e8f0">
+          <th style="padding:9px;text-align:left">Код</th>
+          <th style="padding:9px;text-align:left">Материал</th>
+          <th style="padding:9px;text-align:left">Ангилал</th>
+          <th style="padding:9px;text-align:right">Үлдэгдэл</th>
+          <th style="padding:9px;text-align:left">Нэгж</th>
+          <th style="padding:9px;text-align:right">Нэгж үнэ</th>
+          <th style="padding:9px;text-align:right">Нийт дүн</th>
+          <th style="padding:9px;text-align:center">Төлөв</th>
+        </tr></thead>
+        <tbody>
+          ${rows.length ? rows.map(r => {
+            const qty = Number(r.current_qty || 0);
+            const price = Number(r.unit_price || 0);
+            const low = Number(r.min_qty || 0) > 0 && qty <= Number(r.min_qty || 0);
+            return `<tr style="border-bottom:1px solid #f1f5f9;background:${low ? "#fff7ed" : "#fff"}">
+              <td style="padding:9px;color:#64748b">${escapeHtml(r.category_code || "")}</td>
+              <td style="padding:9px;font-weight:800;color:#0f172a">${escapeHtml(r.name || "")}</td>
+              <td style="padding:9px;color:#64748b">${escapeHtml(r.category_name || "—")}</td>
+              <td style="padding:9px;text-align:right;font-weight:900;color:${low ? "#dc2626" : "#0f172a"}">${fmt(qty)}</td>
+              <td style="padding:9px;color:#64748b">${escapeHtml(r.unit || "")}</td>
+              <td style="padding:9px;text-align:right">${fmt(price)}₮</td>
+              <td style="padding:9px;text-align:right;font-weight:900;color:#16a34a">${fmt(qty * price)}₮</td>
+              <td style="padding:9px;text-align:center">${low ? `<span class="pill bad">Бага</span>` : `<span class="pill ok">Хэвийн</span>`}</td>
+            </tr>`;
+          }).join("") : `<tr><td colspan="8" style="text-align:center;padding:28px;color:#94a3b8">Бараа материал бүртгэгдээгүй байна</td></tr>`}
+        </tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+function filterFinanceMaterialTable(value = "") {
+  const q = String(value || "").toLowerCase();
+  document.querySelectorAll("#finMaterialTable tbody tr").forEach(tr => {
+    tr.style.display = tr.textContent.toLowerCase().includes(q) ? "" : "none";
+  });
+}
+
+async function fin_budget() {
+  const total = FIN_BUDGET_PLAN_2026.find(r => r.code === "2")?.plan || 0;
+  main.innerHTML = `
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:18px">
+    <div>
+      <h1 style="margin:0 0 4px">📊 Төсөв</h1>
+      <div style="font-size:12px;color:#667085">2026 оны батлагдсан төсвийн сарын хуваарь</div>
+    </div>
+    ${statCard("Нийт төсөв", fmt(total)+"₮", "#2563eb")}
+  </div>
+  <div class="panel">
+    <div style="padding:14px 18px;border-bottom:1px solid #e2e6ed;font-weight:800">Төсвийн задаргаа</div>
+    <div style="overflow:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:11px;min-width:1180px">
+        <thead><tr style="background:#f8fafc;border-bottom:1px solid #e2e8f0">
+          <th style="padding:8px;text-align:left">Код</th>
+          <th style="padding:8px;text-align:left">Төсвийн ангилал</th>
+          ${Array.from({ length: 12 }, (_, i) => `<th style="padding:8px;text-align:right">${i + 1}-р сар</th>`).join("")}
+          <th style="padding:8px;text-align:right">Нийт</th>
+        </tr></thead>
+        <tbody>
+          ${FIN_BUDGET_PLAN_2026.map(r => {
+            const isGroup = r.level <= 1;
+            return `<tr style="border-bottom:1px solid #f1f5f9;background:${isGroup ? "#f8fafc" : "#fff"}">
+              <td style="padding:8px;font-weight:900;color:#475569">${escapeHtml(r.code)}</td>
+              <td style="padding:8px;font-weight:${isGroup ? 900 : 600};padding-left:${8 + r.level * 14}px;color:#0f172a">${escapeHtml(r.name)}</td>
+              ${r.monthly.map(v => `<td style="padding:8px;text-align:right;white-space:nowrap">${fmt(v)}₮</td>`).join("")}
+              <td style="padding:8px;text-align:right;font-weight:900;color:#2563eb;white-space:nowrap">${fmt(r.plan)}₮</td>
+            </tr>`;
+          }).join("")}
+        </tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+async function fin_performance() {
+  const now = new Date();
+  const from = window._finPerfFrom || `${now.getFullYear()}-01-01`;
+  const to = window._finPerfTo || today();
+  main.innerHTML = `<div style="text-align:center;padding:60px 0;color:#94a3b8">Уншиж байна...</div>`;
+  let cashRows = [];
+  try { cashRows = await api(`/api/cash-journal?from=${from}&to=${to}`); } catch(e) {}
+  const perf = finBudgetPerformanceRows(cashRows, from, to);
+  const rows = perf.rows;
+  const plannedTotal = rows.find(r => r.code === "2")?.plan || rows.reduce((s, r) => s + r.plan, 0);
+  const actualTotal = rows.find(r => r.code === "2")?.actual || perf.expenseRows.reduce((s, r) => s + Number(r.amount || 0), 0);
+  const topRows = rows.filter(r => r.level === 1 && r.actual > 0);
+  main.innerHTML = `
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px">
+    <div>
+      <h1 style="margin:0 0 4px">⚙️ Гүйцэтгэл</h1>
+      <div style="font-size:12px;color:#667085">Мөнгөн журналын зарлагыг төсвийн кодоор тулгасан тайлан</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:8px 10px">
+      <input type="date" class="input" value="${from}" style="width:150px;padding:7px 10px;font-size:13px" onchange="window._finPerfFrom=this.value; fin_performance()">
+      <span style="color:#94a3b8">—</span>
+      <input type="date" class="input" value="${to}" style="width:150px;padding:7px 10px;font-size:13px" onchange="window._finPerfTo=this.value; fin_performance()">
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
+    ${statCard("Батлагдсан төсөв", fmt(plannedTotal)+"₮", "#2563eb")}
+    ${statCard("Гүйцэтгэл", fmt(actualTotal)+"₮", "#16a34a")}
+    ${statCard("Үлдэгдэл", fmt(plannedTotal - actualTotal)+"₮", plannedTotal >= actualTotal ? "#7c3aed" : "#dc2626")}
+  </div>
+  <div class="panel" style="margin-bottom:16px">
+    <div style="padding:14px 18px;border-bottom:1px solid #e2e6ed;font-weight:800">Ангиллаар гүйцэтгэл</div>
+    <div style="padding:16px 18px">
+      ${topRows.length ? topRows.map(r => {
+        const pct = actualTotal ? Math.round(r.actual / actualTotal * 100) : 0;
+        return `<div style="display:grid;grid-template-columns:minmax(220px,1fr) 3fr 120px;gap:10px;align-items:center;margin-bottom:10px">
+          <div style="font-size:12px;font-weight:800;color:#0f172a">${escapeHtml(r.name)}</div>
+          <div style="height:12px;background:#e2e8f0;border-radius:999px;overflow:hidden"><div style="width:${Math.min(pct,100)}%;height:100%;background:#2563eb"></div></div>
+          <div style="font-size:12px;font-weight:900;color:#2563eb;text-align:right">${fmt(r.actual)}₮</div>
+        </div>`;
+      }).join("") : `<div style="font-size:12px;color:#94a3b8;text-align:center;padding:20px">Зарлагын гүйцэтгэл бүртгэгдээгүй байна</div>`}
+    </div>
+  </div>
+  <div class="panel">
+    <div style="padding:14px 18px;border-bottom:1px solid #e2e6ed;font-weight:800">Төсөв vs гүйцэтгэл</div>
+    <div style="overflow:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:11px;min-width:860px">
+        <thead><tr style="background:#f8fafc;border-bottom:1px solid #e2e8f0">
+          <th style="padding:8px;text-align:left">Код</th><th style="padding:8px;text-align:left">Ангилал</th>
+          <th style="padding:8px;text-align:right">Төсөв</th><th style="padding:8px;text-align:right">Гүйцэтгэл</th>
+          <th style="padding:8px;text-align:right">Зөрүү</th><th style="padding:8px;text-align:center">%</th><th style="padding:8px;text-align:center">Гүйлгээ</th>
+        </tr></thead>
+        <tbody>
+          ${rows.map(r => {
+            const pct = r.plan ? Math.round(r.actual / r.plan * 100) : (r.actual ? 100 : 0);
+            const isGroup = r.level <= 1;
+            return `<tr style="border-bottom:1px solid #f1f5f9;background:${isGroup ? "#f8fafc" : "#fff"}">
+              <td style="padding:8px;font-weight:900;color:#475569">${escapeHtml(r.code)}</td>
+              <td style="padding:8px;font-weight:${isGroup ? 900 : 600};padding-left:${8 + r.level * 14}px;color:#0f172a">${escapeHtml(r.name)}</td>
+              <td style="padding:8px;text-align:right;white-space:nowrap">${fmt(r.plan)}₮</td>
+              <td style="padding:8px;text-align:right;font-weight:900;color:#16a34a;white-space:nowrap">${fmt(r.actual)}₮</td>
+              <td style="padding:8px;text-align:right;font-weight:900;color:${r.diff >= 0 ? "#2563eb" : "#dc2626"};white-space:nowrap">${fmt(r.diff)}₮</td>
+              <td style="padding:8px;text-align:center;font-weight:900;color:${pct > 100 ? "#dc2626" : "#2563eb"}">${pct}%</td>
+              <td style="padding:8px;text-align:center;color:#64748b">${r.count}</td>
+            </tr>`;
+          }).join("")}
+        </tbody>
+      </table>
+    </div>
+    ${perf.unmatched.length ? `<div style="font-size:12px;color:#dc2626;padding:10px 18px">Код таараагүй ${perf.unmatched.length} зарлагын мөр байна.</div>` : ""}
+  </div>`;
+}
+
+async function fin_budget_performance() {
+  const now = new Date();
+  const from = window._finBudgetPerfFrom || `${now.getFullYear()}-01-01`;
+  const to = window._finBudgetPerfTo || today();
+  main.innerHTML = `<div style="text-align:center;padding:60px 0;color:#94a3b8">Уншиж байна...</div>`;
+
+  let cashRows = [];
+  try { cashRows = await api(`/api/cash-journal?from=${from}&to=${to}`); } catch(e) {}
+
+  const incomeRows = cashRows.filter(r => r.txn_type === "Орлого");
+  const expenseRows = cashRows.filter(r => r.txn_type === "Зарлага");
+  const incomeTotal = incomeRows.reduce((s, r) => s + Number(r.amount || 0), 0);
+  const expenseTotal = expenseRows.reduce((s, r) => s + Number(r.amount || 0), 0);
+  const incomeByType = Object.values(incomeRows.reduce((acc, r) => {
+    const key = r.cash_flow_type || r.econ_category || r.corr_account || r.purpose || "Ангилалгүй орлого";
+    if (!acc[key]) acc[key] = { name: key, amount: 0, count: 0 };
+    acc[key].amount += Number(r.amount || 0);
+    acc[key].count += 1;
+    return acc;
+  }, {})).sort((a, b) => b.amount - a.amount);
+
+  const perf = finBudgetPerformanceRows(cashRows, from, to);
+  const rows = perf.rows;
+  const plannedTotal = rows.find(r => r.code === "2")?.plan || rows.reduce((s, r) => s + r.plan, 0);
+  const actualTotal = rows.find(r => r.code === "2")?.actual || expenseTotal;
+  const topExpenseRows = rows.filter(r => r.level === 1 && r.actual > 0);
+
+  main.innerHTML = `
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px">
+    <div>
+      <h1 style="margin:0 0 4px">📊 Төсөв гүйцэтгэл</h1>
+      <div style="font-size:12px;color:#667085">Орлого, зарлага тусдаа · ${from} - ${to}</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:8px 10px">
+      <input type="date" class="input" value="${from}" style="width:150px;padding:7px 10px;font-size:13px" onchange="window._finBudgetPerfFrom=this.value; fin_budget_performance()">
+      <span style="color:#94a3b8">—</span>
+      <input type="date" class="input" value="${to}" style="width:150px;padding:7px 10px;font-size:13px" onchange="window._finBudgetPerfTo=this.value; fin_budget_performance()">
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
+    ${statCard("Нийт орлого", fmt(incomeTotal)+"₮", "#16a34a", `${incomeRows.length} гүйлгээ`)}
+    ${statCard("Батлагдсан зарлагын төсөв", fmt(plannedTotal)+"₮", "#2563eb")}
+    ${statCard("Зарлагын гүйцэтгэл", fmt(actualTotal)+"₮", "#dc2626", `${expenseRows.length} гүйлгээ`)}
+    ${statCard("Зарлагын үлдэгдэл", fmt(plannedTotal - actualTotal)+"₮", plannedTotal >= actualTotal ? "#7c3aed" : "#dc2626")}
+  </div>
+
+  <div style="display:grid;grid-template-columns:minmax(360px, 1fr) minmax(520px, 1.4fr);gap:16px;align-items:start">
+    <div class="panel">
+      <div style="padding:14px 18px;border-bottom:1px solid #e2e6ed;font-weight:800;color:#166534">Орлого</div>
+      <div style="padding:16px 18px">
+        <div style="font-size:12px;color:#64748b;margin-bottom:12px">Мөнгөн журналын орлогын гүйлгээний задаргаа</div>
+        ${incomeByType.length ? incomeByType.map(r => {
+          const pct = incomeTotal ? Math.round(r.amount / incomeTotal * 100) : 0;
+          return `<div style="display:grid;grid-template-columns:minmax(150px,1fr) 2fr 98px;gap:10px;align-items:center;margin-bottom:10px">
+            <div style="font-size:12px;font-weight:800;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(r.name)}">${escapeHtml(r.name)}</div>
+            <div style="height:11px;background:#dcfce7;border-radius:999px;overflow:hidden">
+              <div style="width:${Math.min(pct,100)}%;height:100%;background:#16a34a"></div>
+            </div>
+            <div style="font-size:12px;font-weight:900;color:#16a34a;text-align:right">${fmt(r.amount)}₮</div>
+          </div>`;
+        }).join("") : `<div style="font-size:12px;color:#94a3b8;text-align:center;padding:22px">Орлогын гүйлгээ бүртгэгдээгүй байна</div>`}
+      </div>
+    </div>
+
+    <div class="panel">
+      <div style="padding:14px 18px;border-bottom:1px solid #e2e6ed;font-weight:800;color:#991b1b">Зарлага / төсвийн гүйцэтгэл</div>
+      <div style="padding:16px 18px;border-bottom:1px solid #eef2f7">
+        ${topExpenseRows.length ? topExpenseRows.map(r => {
+          const pct = actualTotal ? Math.round(r.actual / actualTotal * 100) : 0;
+          return `<div style="display:grid;grid-template-columns:minmax(190px,1fr) 2fr 110px;gap:10px;align-items:center;margin-bottom:10px">
+            <div style="font-size:12px;font-weight:800;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(r.name)}">${escapeHtml(r.name)}</div>
+            <div style="height:11px;background:#fee2e2;border-radius:999px;overflow:hidden">
+              <div style="width:${Math.min(pct,100)}%;height:100%;background:#dc2626"></div>
+            </div>
+            <div style="font-size:12px;font-weight:900;color:#dc2626;text-align:right">${fmt(r.actual)}₮</div>
+          </div>`;
+        }).join("") : `<div style="font-size:12px;color:#94a3b8;text-align:center;padding:20px">Зарлагын гүйцэтгэл бүртгэгдээгүй байна</div>`}
+      </div>
+      <div style="overflow:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:11px;min-width:820px">
+          <thead><tr style="background:#f8fafc;border-bottom:1px solid #e2e8f0">
+            <th style="padding:8px;text-align:left">Код</th><th style="padding:8px;text-align:left">Ангилал</th>
+            <th style="padding:8px;text-align:right">Төсөв</th><th style="padding:8px;text-align:right">Гүйцэтгэл</th>
+            <th style="padding:8px;text-align:right">Үлдэгдэл</th><th style="padding:8px;text-align:center">%</th>
+          </tr></thead>
+          <tbody>
+            ${rows.map(r => {
+              const pct = r.plan ? Math.round(r.actual / r.plan * 100) : (r.actual ? 100 : 0);
+              const isGroup = r.level <= 1;
+              return `<tr style="border-bottom:1px solid #f1f5f9;background:${isGroup ? "#f8fafc" : "#fff"}">
+                <td style="padding:8px;font-weight:900;color:#475569">${escapeHtml(r.code)}</td>
+                <td style="padding:8px;font-weight:${isGroup ? 900 : 600};padding-left:${8 + r.level * 14}px;color:#0f172a">${escapeHtml(r.name)}</td>
+                <td style="padding:8px;text-align:right;white-space:nowrap">${fmt(r.plan)}₮</td>
+                <td style="padding:8px;text-align:right;font-weight:900;color:#dc2626;white-space:nowrap">${fmt(r.actual)}₮</td>
+                <td style="padding:8px;text-align:right;font-weight:900;color:${r.diff >= 0 ? "#2563eb" : "#dc2626"};white-space:nowrap">${fmt(r.diff)}₮</td>
+                <td style="padding:8px;text-align:center;font-weight:900;color:${pct > 100 ? "#dc2626" : "#2563eb"}">${pct}%</td>
+              </tr>`;
+            }).join("")}
+          </tbody>
+        </table>
+      </div>
+      ${perf.unmatched.length ? `<div style="font-size:12px;color:#dc2626;padding:10px 18px">Код таараагүй ${perf.unmatched.length} зарлагын мөр байна.</div>` : ""}
+    </div>
+  </div>`;
 }
 
 // ── 7. Санхүүгийн тайлан ────────────────────────────────────
@@ -1612,5 +1985,6 @@ window.siCommit = async () => {
 Object.assign(window, {
   finance, finOpen,
   fin_dashboard, cash_journal, payables, receivables,
+  fin_materials, fin_budget, fin_performance, fin_budget_performance, filterFinanceMaterialTable,
   fixed_ledger, payroll, fin_reports, openImportModal, openSmartImport
 });

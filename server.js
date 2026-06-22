@@ -2090,6 +2090,113 @@ async function initDb() {
     FOREIGN KEY(uploaded_by) REFERENCES users(id)
   )`);
 
+  await run(`CREATE TABLE IF NOT EXISTS sl_network_routes (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    name          TEXT NOT NULL,
+    meter_no      TEXT,
+    route_type    TEXT DEFAULT 'feed',
+    status        TEXT DEFAULT 'draft',
+    color         TEXT DEFAULT '#f59e0b',
+    geometry_json TEXT NOT NULL,
+    lamp_count    INTEGER,
+    notes         TEXT,
+    created_by    INTEGER,
+    created_at    TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at    TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(created_by) REFERENCES users(id)
+  )`);
+
+  await run(`CREATE TABLE IF NOT EXISTS sl_network_poles (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    code        TEXT,
+    name        TEXT,
+    meter_no    TEXT,
+    route_id    INTEGER,
+    gps_lat     REAL NOT NULL,
+    gps_lng     REAL NOT NULL,
+    pole_type   TEXT DEFAULT 'pole',
+    status      TEXT DEFAULT 'active',
+    notes       TEXT,
+    created_by  INTEGER,
+    created_at  TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at  TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(route_id) REFERENCES sl_network_routes(id),
+    FOREIGN KEY(created_by) REFERENCES users(id)
+  )`);
+
+  // Migrate sl_network_routes: add lamp_count column if missing
+  try { await run("ALTER TABLE sl_network_routes ADD COLUMN lamp_count INTEGER"); } catch (_) {}
+  try { await run("ALTER TABLE sl_network_routes ADD COLUMN parent_route_id INTEGER"); } catch (_) {}
+  try { await run("ALTER TABLE sl_network_routes ADD COLUMN feed_pole_id INTEGER"); } catch (_) {}
+  try { await run("ALTER TABLE sl_network_routes ADD COLUMN pole_start INTEGER"); } catch (_) {}
+  try { await run("ALTER TABLE sl_network_routes ADD COLUMN pole_end INTEGER"); } catch (_) {}
+  try { await run("ALTER TABLE sl_network_routes ADD COLUMN wire_install_type TEXT"); } catch (_) {}
+  try { await run("ALTER TABLE sl_network_routes ADD COLUMN wire_phase TEXT"); } catch (_) {}
+  try { await run("ALTER TABLE sl_network_routes ADD COLUMN wire_profile TEXT"); } catch (_) {}
+  try { await run("ALTER TABLE sl_network_routes ADD COLUMN segment_status TEXT DEFAULT 'on'"); } catch (_) {}
+
+  await run(`CREATE TABLE IF NOT EXISTS sl_corridor (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    name          TEXT NOT NULL,
+    geometry_json TEXT NOT NULL DEFAULT '[]',
+    bearing       REAL,
+    notes         TEXT,
+    created_by    INTEGER,
+    created_at    TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at    TEXT DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  await run(`CREATE TABLE IF NOT EXISTS sl_alignment (
+    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+    corridor_id          INTEGER NOT NULL,
+    side_key             TEXT DEFAULT 'A',
+    side_label           TEXT,
+    numbering_direction  TEXT DEFAULT 'start_to_end',
+    notes                TEXT,
+    created_at           TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at           TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(corridor_id) REFERENCES sl_corridor(id)
+  )`);
+
+  await run(`CREATE TABLE IF NOT EXISTS sl_feed_point (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL,
+    gps_lat     REAL NOT NULL,
+    gps_lng     REAL NOT NULL,
+    type        TEXT DEFAULT 'panel',
+    notes       TEXT,
+    created_by  INTEGER,
+    created_at  TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at  TEXT DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  await run(`CREATE TABLE IF NOT EXISTS sl_feeder_cable (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    feed_point_id      INTEGER,
+    cable_segment_id   INTEGER,
+    connection_pole_no INTEGER,
+    geometry_json      TEXT DEFAULT '[]',
+    notes              TEXT,
+    created_at         TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(feed_point_id)    REFERENCES sl_feed_point(id),
+    FOREIGN KEY(cable_segment_id) REFERENCES sl_network_routes(id)
+  )`);
+
+  await run(`CREATE TABLE IF NOT EXISTS sl_feed_point_device (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    feed_point_id INTEGER NOT NULL,
+    dev_eui       TEXT NOT NULL,
+    role          TEXT DEFAULT 'controller',
+    notes         TEXT,
+    created_at    TEXT DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(feed_point_id, dev_eui),
+    FOREIGN KEY(feed_point_id) REFERENCES sl_feed_point(id)
+  )`);
+
+  try { await run("ALTER TABLE sl_network_poles ADD COLUMN alignment_id INTEGER"); } catch (_) {}
+  try { await run("ALTER TABLE sl_network_poles ADD COLUMN pole_no INTEGER"); } catch (_) {}
+  try { await run("ALTER TABLE sl_network_poles ADD COLUMN display_code TEXT"); } catch (_) {}
+
   // Migrate existing sl_bills → electricity_bill_imports
   try {
     const slBills = await all("SELECT * FROM sl_bills");
