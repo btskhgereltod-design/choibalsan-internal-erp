@@ -22,6 +22,7 @@ security:
   - bearerAuth: []
 
 components:
+  schemas: {}
   securitySchemes:
     bearerAuth:
       type: http
@@ -171,13 +172,11 @@ paths:
     get:
       operationId: getLightingScheduleToday
       summary: Өнөөдрийн гэрэлтүүлгийн асах/унтрах хуваарь
-      description: |
-        Гэрэлтүүлгийн категори бүрийн өнөөдрийн эцсийн хуваарийг буцаана.
-        Шийдвэрийн эх сурвалж: emergency_override > manual_today > schedule > no_data
-
-        Дуудах үед: "Гэрэл өнөөдөр хэдэд асах вэ?", "Гэрэл хэдэд унтрах вэ?",
-        "Өнөөдрийн гэрэлтүүлгийн хуваарь ямар байна?",
-        "Гар удирдлага идэвхтэй байна уу?", "Яаралтай унтраалт байна уу?".
+      description: >
+        Өнөөдрийн гэрэлтүүлгийн хуваарийг категори бүрээр буцаана.
+        Эх сурвалж: emergency_override > manual_today > schedule > no_data.
+        Дуудах үед: "Гэрэл хэдэд асах?", "Унтрах цаг?", "Хуваарь ямар?",
+        "Гар удирдлага?", "Яаралтай унтраалт?".
       tags: [Гэрэлтүүлэг]
       security:
         - bearerAuth: []
