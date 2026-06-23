@@ -2534,6 +2534,7 @@ app.use("/api", require("./routes/iot"));
 app.use("/api", require("./routes/hr_extended"));
 app.use("/api", require("./routes/chat"));
 app.use("/api", require("./routes/ai_test"));
+app.use("/api", require("./routes/ai_advisor"));
 require("./services/mcp/server").installMcpRoutes(app);
 
 // ── Global error handler ──────────────────────────────────────

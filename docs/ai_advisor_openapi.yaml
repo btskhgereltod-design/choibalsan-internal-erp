@@ -1,0 +1,1241 @@
+openapi: 3.1.0
+
+info:
+  title: Чойбалсан ERP — AI Стратегийн Зөвлөх
+  description: |
+    Энэ API нь ChatGPT Custom GPT-д ERP-ийн мэдээллийг read-only байдлаар
+    нийлүүлнэ. Хэрэглэгч Монгол хэлээр асуухад ChatGPT доорх endpoint-уудаас
+    мэдээлэл цуглуулж хүний хэлээр хариулна.
+
+    ## Хэрэглэгчийн асуултаар endpoint сонголт
+
+    | Асуулт | Хамгийн тохирох endpoint |
+    |--------|--------------------------|
+    | "ERP өнөөдөр ямар байна?", "Яаралтай зүйл?" | **getExecutiveDailySummary** |
+    | "Гэрэл хэдэд асах?", "Хуваарь ямар байна?" | **getLightingScheduleToday** |
+    | "Аль цэг offline?", "Аль цэг асуудалтай?" | **getControlPointsStatus** |
+    | "IoT node хэвийн байна уу?", "Offline node?" | **getIotDetailed** |
+    | "Ямар ажил хоцорч байна?", "Яаралтай ажил?" | **searchWorkOrders** |
+    | "Гэмтэл яагаад хаагдаагүй байна?" | **getFaultWorkflowStatus** |
+    | "AI юуг уншсан бэ?", "AI-ийн ашиглалт?" | **getAiAuditSummary** |
+    | "ERP ерөнхий байдал", "Нэгтгэл тоо" | getErpOverview |
+    | "Гэрэлтүүлгийн зардал, нийт тоо" | getLightingSummary |
+    | "Ажилчид, хүний нөөц" | getEmployeesSummary |
+    | "Сарын тайлан, дутуу байна уу?" | getMonthlyReports |
+    | "Лог, хэн юу хийсэн?" | getRecentAuditLog |
+    | "ERP юу агуулдаг?" | getModulesCatalog |
+    | Олон module-ийн context нэгэн зэрэг | postAiQuestion |
+
+    ## Аюулгүй байдал
+    - Зөвхөн GET болон POST /ai/ask
+    - DELETE, PUT, PATCH **хэзээ ч** дуудахгүй
+    - Нууц мэдээлэл (цалин, регистр, утас, хаяг) API-с гарахгүй
+    - Бүх хандалт сервер дээр immutable audit log-д хадгалагдана
+
+  version: "1.0.0"
+  contact:
+    name: Чойбалсан хөгжил ОНӨААТҮГ
+
+servers:
+  - url: https://YOUR_DOMAIN_OR_NGROK_URL
+    description: |
+      Таны серверийн public хаяг.
+      Локал тест хийхэд: https://xxxx.ngrok-free.app
+      Продакшн: https://erp.choibalsan.mn эсвэл таны домэйн
+
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT token. AI_READONLY role-той хэрэглэгчийн token.
+        POST /api/login хаягаас авна (username: chatgpt_ai).
+
+  schemas:
+    Risk:
+      type: object
+      properties:
+        level:
+          type: string
+          enum: [low, medium, high]
+        msg:
+          type: string
+
+    AuditLogEntry:
+      type: object
+      properties:
+        id:          { type: integer }
+        user:        { type: string }
+        role:        { type: string }
+        action:      { type: string }
+        module:      { type: string }
+        entity_id:   { type: [integer, "null"] }
+        timestamp:   { type: string, format: date-time }
+        detail_summary: { type: [string, "null"] }
+
+paths:
+
+  # ════════════════════════════════════════════════════════════
+  # 1. ERP-ийн ерөнхий зураглал
+  # ════════════════════════════════════════════════════════════
+  /api/ai/context/overview:
+    get:
+      operationId: getErpOverview
+      summary: ERP-ийн өнөөдрийн ерөнхий байдал
+      description: |
+        Байгууллагын ерөнхий статистик, эрсдэлийн жагсаалтыг нэг хэлбэрээр буцаана.
+
+        **Хэзээ дуудах:**
+        - "ERP маань ямар байна?"
+        - "Өнөөдрийн байдал хэрхэн байна?"
+        - "Удирдлагад товч мэдээлэл өг"
+        - "Ямар асуудал байна?"
+        - Хэрэглэгч ерөнхий дүгнэлт хүсэхэд
+
+        **Буцаах мэдээлэл:** нийт ажилтан, гэрэлтүүлгийн цэг,
+        IoT device, нээлттэй гэмтэл, ажлын даалгавар, эрсдэлийн жагсаалт.
+      tags: [Ерөнхий]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Ерөнхий нэгтгэл
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generated_at:
+                    type: string
+                    format: date-time
+                  organization:
+                    type: object
+                    properties:
+                      name:  { type: string, example: "Чойбалсан хөгжил ОНӨААТҮГ" }
+                      city:  { type: string, example: "Чойбалсан хот" }
+                      aimag: { type: string, example: "Хэнтий аймаг" }
+                  summary:
+                    type: object
+                    properties:
+                      total_employees:       { type: integer, description: "Нийт ажилтан" }
+                      active_employees:      { type: integer, description: "Идэвхтэй ажилтан" }
+                      total_lighting_points: { type: integer, description: "Гэрэлтүүлгийн цэгийн тоо" }
+                      total_feed_points:     { type: integer, description: "Удирдлагын цэгийн тоо" }
+                      active_iot_devices:    { type: integer, description: "Идэвхтэй IoT device" }
+                      open_lighting_faults:  { type: integer, description: "Нээлттэй гэрэлтүүлгийн гэмтэл" }
+                      faults_last_30_days:   { type: integer, description: "Сүүлийн 30 хоногийн гэмтэл" }
+                      open_work_orders:      { type: integer, description: "Нээлттэй ажлын даалгавар" }
+                      overdue_work_orders:   { type: integer, description: "Хугацаа хэтэрсэн ажил" }
+                  risks:
+                    type: array
+                    description: Анхаарал хандуулах эрсдэлүүд
+                    items:
+                      $ref: "#/components/schemas/Risk"
+        "401": { description: "Token алдаатай эсвэл байхгүй" }
+        "403": { description: "AI эрх хүрэхгүй" }
+        "429": { description: "Хэт олон хүсэлт — 1 минут хүлээнэ" }
+
+  # ════════════════════════════════════════════════════════════
+  # 2. ERP module тайлбар
+  # ════════════════════════════════════════════════════════════
+  /api/ai/context/modules:
+    get:
+      operationId: getModulesCatalog
+      summary: ERP-д байгаа бүх module, table, entity тайлбар
+      description: |
+        ERP-ийн бүтэц, ямар мэдээлэл хаана хадгалагддагийг тайлбарлана.
+
+        **Хэзээ дуудах:**
+        - "ERP маань юу агуулдаг вэ?"
+        - "Ямар модуль байдаг вэ?"
+        - "Хэрэглэгчийн мэдээлэл хаана байдаг вэ?"
+        - ChatGPT шинэ контекст ойлгох хэрэгтэй үед
+      tags: [Ерөнхий]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Module, table, field тайлбар
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generated_at: { type: string, format: date-time }
+                  modules:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        key:              { type: string }
+                        label:            { type: string }
+                        tables:           { type: array, items: { type: string } }
+                        key_fields:       { type: object }
+                        sensitive_fields: { type: array, items: { type: string } }
+                        relationships:    { type: array, items: { type: string } }
+                        api_endpoint:     { type: [string, "null"] }
+
+  # ════════════════════════════════════════════════════════════
+  # 3. Ажилчдын нэгтгэл
+  # ════════════════════════════════════════════════════════════
+  /api/ai/employees/summary:
+    get:
+      operationId: getEmployeesSummary
+      summary: Ажилчдын нэгтгэл — нууц мэдээлэл агуулахгүй
+      description: |
+        Ажилчдын тоо, ролиор ангилал, идэвхжилтийн түүх.
+        Регистр, утас, цалин, хаяг зэрэг нууц талбарууд хасагдсан.
+
+        **Хэзээ дуудах:**
+        - "Хэдэн ажилтан байна?"
+        - "Хүний нөөцийн байдал хэрхэн байна?"
+        - "Ажилчдын статус ямар байна?"
+        - "Хэн идэвхтэй ажиллаж байна вэ?"
+      tags: [Хүний нөөц]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Ажилчдын нэгтгэл
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generated_at:    { type: string, format: date-time }
+                  total_employees: { type: integer }
+                  active_count:    { type: integer, description: "Идэвхтэй ажилтан" }
+                  inactive_count:  { type: integer }
+                  by_role:
+                    type: array
+                    description: Ролиор ангилал
+                    items:
+                      type: object
+                      properties:
+                        role:  { type: string }
+                        count: { type: integer }
+                  most_active_roles:
+                    type: array
+                    description: Сүүлийн 30 хоногт хамгийн идэвхтэй ролиуд
+                    items:
+                      type: object
+                      properties:
+                        role:           { type: string }
+                        activity_count: { type: integer }
+                  hr_risks:
+                    type: array
+                    items: { type: string }
+                  note: { type: string }
+
+  # ════════════════════════════════════════════════════════════
+  # 4. Хөрөнгийн нэгтгэл
+  # ════════════════════════════════════════════════════════════
+  /api/ai/assets/summary:
+    get:
+      operationId: getAssetsSummary
+      summary: Ажлын үйл ажиллагаа болон хөрөнгийн нэгтгэл
+      description: |
+        Ажлын даалгаврын категори, статус, хугацаа хэтрэлт.
+
+        **Хэзээ дуудах:**
+        - "Өчигдөр юу хийгдсэн бэ?"
+        - "Сүүлийн ажлуудын явц ямар байна?"
+        - "Ямар ажил хугацаандаа хийгдсэн бэ?"
+        - "Хөрөнгийн засвар хэрхэн байна?"
+      tags: [Ажлын даалгавар]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Хөрөнгийн ажлын нэгтгэл
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generated_at:       { type: string, format: date-time }
+                  by_category:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        category: { type: string }
+                        cnt:      { type: integer }
+                  by_status:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        status: { type: string }
+                        cnt:    { type: integer }
+                  overdue_count:      { type: integer, description: "Хугацаа хэтэрсэн ажлын тоо" }
+                  avg_progress_open:  { type: number, description: "Нээлттэй ажлын дундаж явц (%)" }
+                  recent_30_days:
+                    type: array
+                    description: Сүүлийн 30 хоногийн ажлын жагсаалт
+                    items:
+                      type: object
+                      properties:
+                        id:        { type: integer }
+                        title:     { type: string }
+                        category:  { type: string }
+                        status:    { type: string }
+                        progress:  { type: integer }
+                        work_date: { type: string }
+                  risks:
+                    type: array
+                    items: { type: string }
+
+  # ════════════════════════════════════════════════════════════
+  # 5. Гэрэлтүүлгийн нэгтгэл
+  # ════════════════════════════════════════════════════════════
+  /api/ai/lighting/summary:
+    get:
+      operationId: getLightingSummary
+      summary: Гудамжны гэрэлтүүлгийн бүрэн нэгтгэл
+      description: |
+        Гудамжны гэрэлтүүлгийн цэг, гэмтэл, эрчим хүчний хэрэглээ,
+        байгууллагаар ангилал, сарын тооцоо.
+
+        **Хэзээ дуудах:**
+        - "Гэрэл өнөөдөр хэдэд асах вэ?" (хуваарийн мэдээллийн хамт)
+        - "Гэрэлтүүлгийн ерөнхий байдал ямар байна?"
+        - "Хэдэн гэрэлтүүлэг ажиллаж байна?"
+        - "Гэмтэл хэдэн байна вэ?"
+        - "Цахилгааны зардал хэд вэ?"
+        - "Аль байгууллагад хэдэн гэрэлтүүлэг байна?"
+        - "Сарын эрчим хүчний хэрэглээ хэд байна?"
+      tags: [Гэрэлтүүлэг]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Гэрэлтүүлгийн нэгтгэл
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generated_at:               { type: string, format: date-time }
+                  total_active_points:        { type: integer, description: "Идэвхтэй гэрэлтүүлгийн цэг" }
+                  total_active_lamps:         { type: integer, description: "Нийт чийдэнгийн тоо" }
+                  total_watt:                 { type: number,  description: "Нийт чадал (Ватт)" }
+                  total_kw:                   { type: number,  description: "Нийт чадал (кВт)" }
+                  estimated_monthly_kwh:      { type: number,  description: "Сарын ойролцоо хэрэглээ (кВтц)" }
+                  estimated_monthly_amount_mnT: { type: number, description: "Сарын ойролцоо зардал (₮)" }
+                  total_feed_points:          { type: integer, description: "Удирдлагын цэгийн тоо" }
+                  open_faults:                { type: integer, description: "Нээлттэй гэмтэл" }
+                  faults_last_30_days:        { type: integer, description: "Сүүлийн 30 хоногийн гэмтэл" }
+                  faults_by_category:
+                    type: array
+                    description: Гэмтэл категориор
+                    items:
+                      type: object
+                      properties:
+                        category:     { type: string }
+                        cnt:          { type: integer }
+                        total_broken: { type: integer }
+                  by_organization:
+                    type: array
+                    description: Байгууллагаар гэрэлтүүлгийн тоо
+                    items:
+                      type: object
+                      properties:
+                        org_name:    { type: string }
+                        point_count: { type: integer }
+                        lamp_count:  { type: integer }
+                        total_watt:  { type: number }
+                  energy_monthly_last_12:
+                    type: array
+                    description: Сүүлийн 12 сарын эрчим хүчний хэрэглээ
+                    items:
+                      type: object
+                      properties:
+                        year:         { type: integer }
+                        month:        { type: integer }
+                        total_kwh:    { type: number }
+                        total_amount: { type: number }
+                  risks:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Risk"
+
+  # ════════════════════════════════════════════════════════════
+  # 6. Удирдлагын цэгүүд (Control Points)
+  # ════════════════════════════════════════════════════════════
+  /api/ai/lighting/control-points:
+    get:
+      operationId: getControlPoints
+      summary: Удирдлагын 241 цэгийн байдал + IoT холболт
+      description: |
+        Feed point (асаалтын цэг) бүрийн онлайн/оффлайн байдал,
+        хүчдэл, гүйдэл, реле, IoT холболтын байдал.
+
+        **Хэзээ дуудах:**
+        - "Аль цэг offline байна?"
+        - "241 цэгээс хэд нь хэвийн байна?"
+        - "Аль удирдлагын цэгт IoT device байхгүй вэ?"
+        - "Реле/relay байдал ямар байна?"
+        - "GPS байршил хаана байна?"
+        - "Хүчдэл/voltage хэд байна?"
+        - Тодорхой цэгийн нэрийг хайхад
+
+        **Анхаарал:** 241 цэгийн бүрэн жагсаалт ирнэ.
+        ChatGPT үүнийг шүүж, хамааралтай цэгүүдийг нь хариулна.
+      tags: [Гэрэлтүүлэг]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Удирдлагын цэгүүдийн жагсаалт
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generated_at:  { type: string, format: date-time }
+                  total:         { type: integer, description: "Нийт цэгийн тоо" }
+                  iot_online:    { type: integer, description: "IoT online цэг" }
+                  iot_offline:   { type: integer, description: "IoT offline цэг (1 цагаас дээш)" }
+                  no_iot_device: { type: integer, description: "IoT байхгүй цэг" }
+                  control_points:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:            { type: integer }
+                        name:          { type: string,  description: "Цэгийн нэр" }
+                        latitude:      { type: [number, "null"], description: "GPS өргөрөг" }
+                        longitude:     { type: [number, "null"], description: "GPS уртраг" }
+                        panel_type:    { type: string,  description: "Самбарын төрөл (panel/cabinet...)" }
+                        dev_eui:       { type: [string, "null"], description: "IoT device EUI" }
+                        has_iot_device:{ type: integer, description: "IoT device холбогдсон эсэх (1/0)" }
+                        voltage:       { type: [number, "null"], description: "Хүчдэл (В)" }
+                        current:       { type: [number, "null"], description: "Гүйдэл (А)" }
+                        power:         { type: [number, "null"], description: "Чадал (кВт)" }
+                        energy:        { type: [number, "null"], description: "Эрчим хүчний нийлбэр (кВтц)" }
+                        relay_state:   { type: [string, "null"], description: "Реле байдал (on/off/null)" }
+                        rssi:          { type: [number, "null"], description: "Дохионы чанар (дБ)" }
+                        last_seen:     { type: [string, "null"], description: "Сүүлийн холболтын цаг" }
+
+  # ════════════════════════════════════════════════════════════
+  # 7. IoT нэгтгэл
+  # ════════════════════════════════════════════════════════════
+  /api/ai/iot/summary:
+    get:
+      operationId: getIotSummary
+      summary: IoT / LoRa төхөөрөмжүүдийн байдал
+      description: |
+        LoRa/IoT device бүрийн online/offline байдал, хэмжилтийн утга,
+        гэмтлийн дохио, сүүлийн харилцааны цаг.
+
+        **Хэзээ дуудах:**
+        - "IoT node-ууд хэвийн байна уу?"
+        - "LoRa device-ууд ямар байна?"
+        - "Аль device offline байна?"
+        - "Аль device alarm өгч байна?"
+        - "Voltage/current хэмжилт хэд байна?"
+        - "Сүүлийн ulink хэзээ ирсэн бэ?"
+        - "Signal чанар ямар байна?"
+      tags: [IoT]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: IoT төхөөрөмжүүдийн нэгтгэл
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generated_at:         { type: string, format: date-time }
+                  total_active_devices: { type: integer, description: "Нийт идэвхтэй device" }
+                  fault_devices:        { type: integer, description: "Гэмтлийн дохиотой device" }
+                  offline_devices:      { type: integer, description: "1 цагаас дээш offline device" }
+                  devices:
+                    type: array
+                    description: Device бүрийн дэлгэрэнгүй
+                    items:
+                      type: object
+                      properties:
+                        id:             { type: integer }
+                        device_name:    { type: string }
+                        device_eui:     { type: string }
+                        model:          { type: string, description: "Device model (AWD300...)" }
+                        phase:          { type: string, description: "Фаз (1Ф/3Ф)" }
+                        last_seen:      { type: [string, "null"] }
+                        last_voltage:   { type: [number, "null"] }
+                        last_current:   { type: [number, "null"] }
+                        last_power:     { type: [number, "null"] }
+                        last_status:    { type: string, description: "on/off/fault/unknown" }
+                        sl_point_code:  { type: [string, "null"], description: "Холбогдсон гэрэлтүүлгийн цэгийн код" }
+                        sl_point_name:  { type: [string, "null"] }
+                        connectivity:   { type: string, enum: [online, offline, never], description: "Холболтын байдал" }
+                  recent_telemetry:
+                    type: array
+                    description: Сүүлийн 20 хэмжилтийн бүртгэл
+                    items:
+                      type: object
+                      properties:
+                        dev_eui:     { type: string }
+                        voltage:     { type: [number, "null"] }
+                        current:     { type: [number, "null"] }
+                        power:       { type: [number, "null"] }
+                        energy:      { type: [number, "null"] }
+                        do_state:    { type: [string, "null"] }
+                        rssi:        { type: [number, "null"] }
+                        received_at: { type: string }
+                  risks:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Risk"
+
+  # ════════════════════════════════════════════════════════════
+  # 8. Ажлын даалгаврын нэгтгэл
+  # ════════════════════════════════════════════════════════════
+  /api/ai/work-orders/summary:
+    get:
+      operationId: getWorkOrdersSummary
+      summary: Ажлын даалгавар — статус, хугацаа, давтамж
+      description: |
+        Ажлын даалгаврын статус, хэлтэсээр ангилал, хугацаа хэтрэлт,
+        давтагдаж байгаа гэмтэл.
+
+        **Хэзээ дуудах:**
+        - "Нээлттэй ажлын даалгавар хэд байна?"
+        - "Ямар ажил хугацаа хэтэрсэн байна?"
+        - "Өчигдөр ямар ажил хийгдсэн бэ?"
+        - "Ажлын яаралтай асуудал байна уу?"
+        - "Давтагдаж байгаа гэмтэл байна уу?"
+        - "SLA зөрчигдсөн байна уу?"
+      tags: [Ажлын даалгавар]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Ажлын даалгаврын нэгтгэл
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generated_at:    { type: string, format: date-time }
+                  by_status:
+                    type: array
+                    description: Статусаар ангилал
+                    items:
+                      type: object
+                      properties:
+                        status: { type: string }
+                        cnt:    { type: integer }
+                  overdue_count:   { type: integer, description: "Хугацаа хэтэрсэн ажил" }
+                  by_category:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        category: { type: string }
+                        cnt:      { type: integer }
+                  by_department:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        department: { type: string }
+                        cnt:        { type: integer }
+                  recent:
+                    type: array
+                    description: Сүүлийн 25 ажлын жагсаалт
+                    items:
+                      type: object
+                      properties:
+                        id:         { type: integer }
+                        title:      { type: string }
+                        category:   { type: string }
+                        department: { type: [string, "null"] }
+                        status:     { type: string }
+                        progress:   { type: integer }
+                        work_date:  { type: string }
+                        end_date:   { type: [string, "null"] }
+                  repeat_faults_last_90_days:
+                    type: array
+                    description: Сүүлийн 90 хоногт давтагдсан гэмтэл
+                    items:
+                      type: object
+                      properties:
+                        title:      { type: string }
+                        repeat_cnt: { type: integer }
+                  sla_risks:
+                    type: array
+                    items: { type: string }
+
+  # ════════════════════════════════════════════════════════════
+  # 9. Тайлангийн каталог
+  # ════════════════════════════════════════════════════════════
+  /api/ai/reports/monthly:
+    get:
+      operationId: getMonthlyReports
+      summary: Тайлангийн жагсаалт — автомат/гараар
+      description: |
+        ERP-д байгаа тайлангийн каталог болон сүүлийн тайлангуудын байдал.
+        Аль нь автомат, аль нь гараар хийгддэгийг ялгана.
+
+        **Хэзээ дуудах:**
+        - "Сарын тайлан бэлэн болсон уу?"
+        - "Тайлан дутуу байна уу?"
+        - "Ямар тайлан автоматаар гарах вэ?"
+        - "ХАБЭА тайлан хэзээ хийгдсэн бэ?"
+        - "Инженерийн тайлан хэдэн бэлдсэн бэ?"
+      tags: [Тайлан]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Тайлангийн каталог
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generated_at: { type: string, format: date-time }
+                  catalog:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        key:                { type: string }
+                        label:              { type: string }
+                        source_table:       { type: string }
+                        is_auto_exportable: { type: boolean, description: "API-ээр автоматаар гаргах боломжтой эсэх" }
+                        is_manual:          { type: boolean }
+                        recent:
+                          type: array
+                          description: Сүүлийн бэлдсэн тайлангууд
+                          items: { type: object }
+                        note: { type: [string, "null"] }
+
+  # ════════════════════════════════════════════════════════════
+  # 10. Audit log
+  # ════════════════════════════════════════════════════════════
+  /api/ai/audit/recent:
+    get:
+      operationId: getRecentAuditLog
+      summary: Сүүлийн 100 audit log
+      description: |
+        Системд хэн, хэзээ, юу хийсний бүртгэл.
+        AI-ийн өөрийн хандалт мөн энд бүртгэгдэнэ.
+
+        **Хэзээ дуудах:**
+        - "Хэн юу хийсэн бэ?"
+        - "Сүүлийн үйл ажиллагааны лог харуул"
+        - "AI хэзээ хандсан бэ?"
+        - "Аюулгүй байдлын лог байна уу?"
+        - "Хэрэглэгч системд орсон уу?"
+      tags: [Аудит]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Сүүлийн audit бүртгэл
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generated_at:      { type: string, format: date-time }
+                  total_returned:    { type: integer }
+                  ai_access_in_set:  { type: integer, description: "Буцаасан лог дотор AI хандалтын тоо" }
+                  logs:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AuditLogEntry"
+
+  # ════════════════════════════════════════════════════════════
+  # 11. AI асуулт + context
+  # ════════════════════════════════════════════════════════════
+  /api/ai/ask:
+    post:
+      operationId: postAiQuestion
+      summary: Асуулт бүртгэж ERP context-ийг буцаах
+      description: |
+        Хэрэглэгчийн асуултыг бүртгэж, хамааралтай ERP мэдээллийг
+        нэг дуудалтаар авах endpoint.
+
+        **Хэзээ дуудах:**
+        - Нэг дуудалтаар олон module-ийн context хэрэгтэй үед
+        - Асуулт хэдэн module-д хамаатай тодорхойгүй үед
+        - Бүх хандалтыг нэг audit_id-тэй хадгалах хэрэгтэй үед
+
+        **scope утгууд:** lighting, iot, work_orders, assets, employees
+        (хоосон бол бүх үндсэн module)
+
+        **Чухал:** Энэ endpoint хариулт өгдөггүй — зөвхөн ERP context өгнө.
+        ChatGPT context-ийг ашиглаж Монгол хэлээр хариулна.
+      tags: [AI]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [question]
+              properties:
+                question:
+                  type: string
+                  maxLength: 2000
+                  description: Хэрэглэгчийн асуулт (Монгол/Англи)
+                  example: "Өнөөдөр гэрэлтүүлгийн байдал ямар байна вэ?"
+                scope:
+                  type: array
+                  description: Хамаарах module-ийн жагсаалт (хоосон = бүх үндсэн)
+                  items:
+                    type: string
+                    enum: [lighting, iot, work_orders, assets, employees]
+                  example: ["lighting", "iot"]
+      responses:
+        "200":
+          description: ERP context snippet + audit бүртгэлийн ID
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  question:
+                    type: string
+                  scope:
+                    type: array
+                    items: { type: string }
+                  answer_context:
+                    type: object
+                    description: |
+                      Scope-д тохирох ERP мэдээлэл.
+                      ChatGPT энэ мэдээллийг ашиглаж хариулна.
+                    properties:
+                      lighting:
+                        type: object
+                        properties:
+                          active_points:         { type: integer }
+                          total_lamps:           { type: integer }
+                          open_faults:           { type: integer }
+                          current_month_kwh:     { type: [number, "null"] }
+                          current_month_amount:  { type: [number, "null"] }
+                      iot:
+                        type: object
+                        properties:
+                          total_devices:   { type: integer }
+                          fault_devices:   { type: integer }
+                          offline_devices: { type: integer }
+                      work_orders:
+                        type: object
+                        properties:
+                          by_status: { type: array, items: { type: object } }
+                          overdue:   { type: integer }
+                      assets:
+                        type: object
+                        properties:
+                          by_category: { type: array, items: { type: object } }
+                      employees:
+                        type: object
+                        properties:
+                          by_role: { type: array, items: { type: object } }
+                  sources:
+                    type: array
+                    items: { type: string }
+                    description: Ашигласан endpoint-уудын жагсаалт
+                  audit_id:
+                    type: integer
+                    description: Лог бүртгэлийн ID (reference болгон хадгалах)
+        "400": { description: "question хоосон эсвэл богино" }
+        "401": { description: "Token алдаатай" }
+        "403": { description: "AI эрх хүрэхгүй" }
+        "429": { description: "Rate limit — минутанд 60 хүсэлт" }
+
+  # ════════════════════════════════════════════════════════════
+  # 12. Захиралын өдөр тутмын нэгтгэл
+  # ════════════════════════════════════════════════════════════
+  /api/ai/executive/daily:
+    get:
+      operationId: getExecutiveDailySummary
+      summary: Өнөөдрийн бүрэн захиралын нэгтгэл
+      description: |
+        Нэг дуудалтаар байгууллагын өдрийн бүрэн дүр зургийг буцаана:
+        гэрэлтүүлэг, гэмтэл, ажил, IoT, агуулах, ирц, эрсдэл, санал.
+
+        **Хэзээ дуудах:**
+        - "ERP маань өнөөдөр ямар байна?"
+        - "Яаралтай шийдэх зүйл байна уу?"
+        - "Захиралд тайлагнах мэдээлэл өг"
+        - "Өнөөдрийн нэгтгэл харуул"
+        - "Мөнгө, хүмүүс, гэрэл, IoT — бүгд ямар байна?"
+      tags: [Захирал]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Захиралын өдрийн нэгтгэл
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generated_at: { type: string, format: date-time }
+                  date:         { type: string, format: date }
+                  lighting:
+                    type: object
+                    properties:
+                      availability_pct:   { type: [number, "null"] }
+                      open_faults:        { type: integer }
+                      oldest_open_faults:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:            { type: integer }
+                            location_name: { type: string }
+                            category:      { type: string }
+                            broken_count:  { type: integer }
+                            report_date:   { type: string }
+                            days_open:     { type: integer }
+                  work_orders:
+                    type: object
+                    properties:
+                      overdue_count:   { type: integer }
+                      today_by_status: { type: array, items: { type: object } }
+                  iot:
+                    type: object
+                    properties:
+                      offline_count: { type: integer }
+                      alarm_count:   { type: integer }
+                  inventory:
+                    type: object
+                    properties:
+                      low_stock_warehouse:  { type: array, items: { type: object } }
+                      total_low_stock_items:{ type: integer }
+                  attendance_this_month:
+                    type: object
+                    properties:
+                      records_count: { type: integer }
+                      total_absent:  { type: number }
+                      total_late:    { type: integer }
+                  top_risks:
+                    type: array
+                    description: Хамгийн чухал 5 эрсдэл
+                    items:
+                      type: object
+                      properties:
+                        level: { type: string, enum: [high, medium, low] }
+                        area:  { type: string }
+                        msg:   { type: string }
+                  recommended_actions:
+                    type: array
+                    description: Захиралд зориулсан дараагийн алхмуудын санал
+                    items: { type: string }
+
+  # ════════════════════════════════════════════════════════════
+  # 13. Өнөөдрийн гэрэлтүүлгийн хуваарь
+  # ════════════════════════════════════════════════════════════
+  /api/ai/lighting/schedule-today:
+    get:
+      operationId: getLightingScheduleToday
+      summary: Өнөөдрийн гэрэлтүүлгийн асах/унтрах хуваарь
+      description: |
+        Өнөөдрийн гэрэлтүүлгийн хуваарийг эцсийн шийдвэрийн эх сурвалжтай нь буцаана.
+        Priority: emergency_override > manual_today > schedule > no_data
+
+        **Хэзээ дуудах:**
+        - "Гэрэл өнөөдөр хэдэд асах вэ?"
+        - "Гэрэл хэдэд унтрах вэ?"
+        - "Өнөөдрийн гэрэлтүүлгийн хуваарь ямар байна?"
+        - "Гар удирдлага идэвхтэй байна уу?"
+        - "Яаралтай унтраалт байна уу?"
+      tags: [Гэрэлтүүлэг]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Өнөөдрийн хуваарь
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generated_at:          { type: string, format: date-time }
+                  date:                  { type: string, format: date }
+                  manual_override_count: { type: integer, description: "Өнөөдөр гараар тохируулсан тоо" }
+                  priority_order:
+                    type: array
+                    items: { type: string }
+                  schedules:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        category:          { type: string }
+                        final_on_time:     { type: [string, "null"], description: "Эцсийн асах цаг (HH:MM)" }
+                        final_off_time:    { type: [string, "null"], description: "Эцсийн унтрах цаг (HH:MM)" }
+                        is_always_off:     { type: boolean }
+                        decision_source:   { type: string, enum: [emergency_override, manual_today, schedule, no_data] }
+                        decision_priority: { type: string }
+                        override_detail:   { type: [object, "null"] }
+                        default_schedule:  { type: [object, "null"] }
+
+  # ════════════════════════════════════════════════════════════
+  # 14. Control point дэлгэрэнгүй байдал (health нэмсэн)
+  # ════════════════════════════════════════════════════════════
+  /api/ai/lighting/control-points-status:
+    get:
+      operationId: getControlPointsStatus
+      summary: 241 control point — health, fault, relay, IoT нэгтгэл
+      description: |
+        Control point бүрийн эрүүл мэнд (healthy/warning/fault/offline/no_iot),
+        гэмтэл, реле байдал, IoT холболт, хүчдэл.
+
+        **Хэзээ дуудах:**
+        - "Аль цэг offline байна?"
+        - "Аль цэг асуудалтай байна?"
+        - "241 цэгээс хэд нь хэвийн байна?"
+        - "Реле байдал ямар байна?"
+        - "Voltage хэвийн бус цэг байна уу?"
+        - "Аль цэгт IoT байхгүй вэ?"
+      tags: [Гэрэлтүүлэг]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Control point бүрийн дэлгэрэнгүй байдал
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generated_at: { type: string, format: date-time }
+                  total:        { type: integer }
+                  summary:
+                    type: object
+                    description: Эрүүл мэндийн тоолол
+                    properties:
+                      healthy:  { type: integer }
+                      warning:  { type: integer }
+                      fault:    { type: integer }
+                      offline:  { type: integer }
+                      no_iot:   { type: integer }
+                  health_legend:
+                    type: object
+                    description: health_status утга бүрийн тайлбар
+                  control_points:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:             { type: integer }
+                        name:           { type: string }
+                        latitude:       { type: [number, "null"] }
+                        longitude:      { type: [number, "null"] }
+                        phase_type:     { type: [string, "null"] }
+                        has_iot_device: { type: boolean }
+                        iot_device_eui: { type: [string, "null"] }
+                        last_seen:      { type: [string, "null"] }
+                        voltage:        { type: [number, "null"] }
+                        relay_status:   { type: [string, "null"] }
+                        schedule_status:{ type: string }
+                        alarm_status:   { type: string, enum: [normal, voltage_abnormal] }
+                        fault_count:    { type: integer }
+                        fault_status:   { type: string, enum: [has_open_faults, no_faults] }
+                        health_status:  { type: string, enum: [healthy, warning, fault, offline, no_iot] }
+                        connectivity:   { type: string, enum: [online, offline, never_seen, no_iot] }
+
+  # ════════════════════════════════════════════════════════════
+  # 15. IoT дэлгэрэнгүй (signal, offline бүлэг)
+  # ════════════════════════════════════════════════════════════
+  /api/ai/iot/detailed:
+    get:
+      operationId: getIotDetailed
+      summary: IoT node-уудын дэлгэрэнгүй — offline бүлэг, signal, гэмтэл
+      description: |
+        Node бүрийн online/offline байдлыг 1ц/6ц/24ц бүлгээр,
+        signal чанар, fault node, хамгийн асуудалтай node-ууд.
+
+        **Хэзээ дуудах:**
+        - "IoT node-ууд хэвийн байна уу?"
+        - "Аль node 24 цагаас дээш offline байна?"
+        - "Signal муутай node байна уу?"
+        - "Хамгийн их асуудалтай node хаана байна?"
+        - "Gateway хэдэн node-тэй байна?"
+      tags: [IoT]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: IoT дэлгэрэнгүй нэгтгэл
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generated_at: { type: string, format: date-time }
+                  counts:
+                    type: object
+                    properties:
+                      total_active_nodes:     { type: integer }
+                      feed_point_controllers: { type: integer }
+                      online:                 { type: integer }
+                      offline_1h:             { type: integer }
+                      offline_6h:             { type: integer }
+                      offline_24h:            { type: integer }
+                      fault_nodes:            { type: integer }
+                      weak_signal_nodes:      { type: integer }
+                  fault_nodes:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        device_name: { type: string }
+                        device_eui:  { type: string }
+                        last_seen:   { type: [string, "null"] }
+                        last_status: { type: string }
+                  top_problem_nodes:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        device_name: { type: string }
+                        device_eui:  { type: string }
+                        problem:     { type: string, enum: [fault, weak_signal] }
+                  all_devices:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        device_name:  { type: string }
+                        device_eui:   { type: string }
+                        connectivity: { type: string, enum: [online, offline_1h, offline_6h, offline_24h, never] }
+                        last_voltage: { type: [number, "null"] }
+                        last_status:  { type: string }
+                        sl_point_name:{ type: [string, "null"] }
+
+  # ════════════════════════════════════════════════════════════
+  # 16. Ажлын даалгавар хайх (filter + risk)
+  # ════════════════════════════════════════════════════════════
+  /api/ai/work-orders/search:
+    get:
+      operationId: searchWorkOrders
+      summary: Ажлын даалгавар хайх — filter, risk_level, дараагийн алхам
+      description: |
+        Ажлын даалгаврыг шүүж, эрсдэл болон дараагийн шаардлагатай үйлдлийг буцаана.
+
+        **Query parameters:**
+        - overdue_only=true → зөвхөн хугацаа хэтэрсэн
+        - due_today=true → өнөөдөр хийх ёстой
+        - due_this_week=true → энэ долоо хоногт
+        - assigned_unit=Гэрэлтүүлэг → хэлтэсээр шүүх
+        - status=Явцтай → статусаар шүүх
+
+        **Хэзээ дуудах:**
+        - "Ямар ажил хоцорч байна?"
+        - "Өнөөдөр ямар ажил хийх ёстой вэ?"
+        - "Гэрэлтүүлгийн хэлтсийн ажил ямар байна?"
+        - "Яаралтай ажил байна уу?"
+      tags: [Ажлын даалгавар]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: overdue_only
+          in: query
+          schema: { type: string, enum: ["true", "false"] }
+          description: Зөвхөн хоцорсон ажлыг буцаах
+        - name: due_today
+          in: query
+          schema: { type: string, enum: ["true", "false"] }
+          description: Өнөөдрийн ажлуудыг буцаах
+        - name: due_this_week
+          in: query
+          schema: { type: string, enum: ["true", "false"] }
+          description: Энэ долоо хоногийн ажлуудыг буцаах
+        - name: assigned_unit
+          in: query
+          schema: { type: string }
+          description: Хэлтэс/байгууллагын нэрээр шүүх
+        - name: status
+          in: query
+          schema: { type: string }
+          description: Статусаар шүүх (Явцтай / Дууссан / ...)
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50, maximum: 100 }
+      responses:
+        "200":
+          description: Шүүгдсэн ажлын жагсаалт
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generated_at:     { type: string, format: date-time }
+                  filters_applied:  { type: object }
+                  summary:
+                    type: object
+                    properties:
+                      total:    { type: integer }
+                      overdue:  { type: integer }
+                      critical: { type: integer }
+                      high:     { type: integer }
+                  work_orders:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:                   { type: integer }
+                        title:                { type: string }
+                        category:             { type: string }
+                        department:           { type: [string, "null"] }
+                        status:               { type: string }
+                        progress:             { type: integer }
+                        work_date:            { type: string }
+                        end_date:             { type: [string, "null"] }
+                        assigned_to:          { type: [string, "null"] }
+                        is_overdue:           { type: boolean }
+                        days_overdue:         { type: integer }
+                        risk_level:           { type: string, enum: [low, medium, high, critical] }
+                        next_required_action: { type: string }
+
+  # ════════════════════════════════════════════════════════════
+  # 17. Гэмтлийн workflow байдал
+  # ════════════════════════════════════════════════════════════
+  /api/ai/faults/workflow-status:
+    get:
+      operationId: getFaultWorkflowStatus
+      summary: Гэмтлийн workflow — ямар статусаас хэр удаж байгаа
+      description: |
+        Гэмтлийн статус дарааллын байдал, stuck (7+ хоногт нэг статуст байгаа),
+        ажил дууссан ч хаагдаагүй гэмтлийн жагсаалт.
+
+        Workflow: Нээлттэй → Засагдсан → Баталгаажсан → Хаагдсан
+
+        **Хэзээ дуудах:**
+        - "Гэмтэл яагаад хаагдаагүй байна?"
+        - "7 хоногоос дээш нээлттэй гэмтэл байна уу?"
+        - "Ажил дуусгавар болсон ч хаагдаагүй байна уу?"
+        - "Гэмтлийн workflow зөв явагдаж байна уу?"
+      tags: [Гэрэлтүүлэг]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Гэмтлийн workflow байдал
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generated_at:       { type: string, format: date-time }
+                  workflow_definition:
+                    type: object
+                    properties:
+                      steps: { type: array, items: { type: string } }
+                      note:  { type: string }
+                  by_status:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        status: { type: string }
+                        cnt:    { type: integer }
+                  stuck_open_over_7days:
+                    type: array
+                    description: 7 хоногоос дээш нээлттэй гэмтэл
+                    items:
+                      type: object
+                      properties:
+                        id:            { type: integer }
+                        location_name: { type: string }
+                        category:      { type: string }
+                        days_open:     { type: integer }
+                  recently_repaired:
+                    type: array
+                    items: { type: object }
+                  possibly_missed_close:
+                    type: array
+                    description: Ажил 100% боловч гэмтэл хаагдаагүй байж болзошгүй
+                    items: { type: object }
+                  risks:
+                    type: array
+                    items: { type: string }
+
+  # ════════════════════════════════════════════════════════════
+  # 18. AI-ийн өөрийн ашиглалтын аудит
+  # ════════════════════════════════════════════════════════════
+  /api/ai/audit/ai-summary:
+    get:
+      operationId: getAiAuditSummary
+      summary: AI-ийн ERP хандалтын аудит нэгтгэл
+      description: |
+        ChatGPT ERP-ийн аль endpoint-уудад хэдэн удаа хандсан,
+        аль асуулт тавьсан, rate limit тулгарсан эсэхийг харуулна.
+
+        **Хэзээ дуудах:**
+        - "AI энэ долоо хоногт юуг уншсан бэ?"
+        - "AI аль хэсэгт хамгийн их хандсан бэ?"
+        - "Rate limit тулгарсан байна уу?"
+        - "AI-ийн ашиглалтын тайлан харуул"
+
+        **Query parameter:**
+        - days=7 (default) — хэдэн өдрийн түүх (max 30)
+      tags: [Аудит]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: days
+          in: query
+          schema: { type: integer, default: 7, maximum: 30 }
+          description: Хэдэн өдрийн аудит харах (хамгийн ихдээ 30)
+      responses:
+        "200":
+          description: AI хандалтын аудит нэгтгэл
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generated_at:       { type: string, format: date-time }
+                  period_days:        { type: integer }
+                  totals:
+                    type: object
+                    properties:
+                      total_ai_reads:     { type: integer }
+                      total_ai_questions: { type: integer }
+                  reads_last_hour:    { type: integer }
+                  rate_limit_warning: { type: boolean }
+                  by_endpoint:
+                    type: array
+                    description: Endpoint бүрийн дуудалтын тоо
+                    items:
+                      type: object
+                      properties:
+                        endpoint:   { type: string }
+                        call_count: { type: integer }
+                        first_call: { type: string }
+                        last_call:  { type: string }
+                  by_day:
+                    type: array
+                    description: Өдөр бүрийн дуудалтын тоо
+                    items:
+                      type: object
+                      properties:
+                        day:   { type: string }
+                        calls: { type: integer }
+                  recent_questions:
+                    type: array
+                    description: Сүүлийн 20 асуулт
+                    items:
+                      type: object
+                      properties:
+                        timestamp: { type: string }
+                        question:  { type: string }
+                        scope:     { type: array, items: { type: string } }
