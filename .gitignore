@@ -21,3 +21,7 @@ data/*.csv
 .claude/
 .vscode/
 *.log
+
+# Local database and backups
+data/
+*.db
