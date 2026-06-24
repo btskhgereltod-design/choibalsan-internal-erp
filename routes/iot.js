@@ -4,6 +4,21 @@ const { requirePermission } = require("../middleware/roles");
 
 const router = express.Router();
 
+// ChirpStack HTTP integration дотор X-IOT-SECRET header тохируулна
+function requireIotSecret(req, res, next) {
+  const secret = process.env.IOT_WEBHOOK_SECRET;
+  if (!secret) {
+    console.warn("[IoT] IOT_WEBHOOK_SECRET not configured — webhook endpoint unprotected");
+    return next();
+  }
+  const provided = req.headers["x-iot-secret"];
+  if (!provided || provided !== secret) {
+    console.warn(`[IoT] Invalid X-IOT-SECRET from ${req.ip}`);
+    return res.status(401).json({ ok: false, error: "Invalid IoT webhook secret" });
+  }
+  next();
+}
+
 function normalizeDevEui(value) {
   return String(value || "").trim().toUpperCase();
 }
@@ -324,7 +339,7 @@ function latestDeviceSelect(whereClause = "") {
   `;
 }
 
-router.post("/iot/chirpstack/uplink", async (req, res) => {
+router.post("/iot/chirpstack/uplink", requireIotSecret, async (req, res) => {
   const body = req.body || {};
   const obj = decodedObject(body);
   const deviceInfo = body.deviceInfo || {};
@@ -480,7 +495,7 @@ async function recordCommandEvent({ body, eventType, status, responseColumn }) {
   return { ok: true, devEui, status };
 }
 
-router.post("/iot/chirpstack/txack", async (req, res) => {
+router.post("/iot/chirpstack/txack", requireIotSecret, async (req, res) => {
   const result = await recordCommandEvent({
     body: req.body || {},
     eventType: "chirpstack_txack",
@@ -490,7 +505,7 @@ router.post("/iot/chirpstack/txack", async (req, res) => {
   res.status(result.ok ? 200 : 400).json(result);
 });
 
-router.post("/iot/chirpstack/ack", async (req, res) => {
+router.post("/iot/chirpstack/ack", requireIotSecret, async (req, res) => {
   const result = await recordCommandEvent({
     body: req.body || {},
     eventType: "chirpstack_ack",

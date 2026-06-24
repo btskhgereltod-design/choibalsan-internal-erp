@@ -4,6 +4,22 @@ const { run, all, get, auth, upload, audit } = require("../db");
 
 const router = express.Router();
 
+// IP тус бүр 10 минутанд 5 submit — public citizen endpoint-уудад
+const _publicLimiter = new Map();
+function publicRateLimit(req, res, next) {
+  const ip = String(req.ip || req.socket?.remoteAddress || "unknown");
+  const now = Date.now();
+  const WINDOW = 10 * 60 * 1000;
+  const LIMIT  = 5;
+  let rec = _publicLimiter.get(ip);
+  if (!rec || now > rec.reset) rec = { count: 1, reset: now + WINDOW };
+  else rec.count += 1;
+  _publicLimiter.set(ip, rec);
+  if (rec.count > LIMIT)
+    return res.status(429).json({ error: "Хэт олон хүсэлт. 10 минутын дараа дахин оролдоно уу." });
+  next();
+}
+
 async function ensureCitizenReportTable() {
   await run(`CREATE TABLE IF NOT EXISTS citizen_reports (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -207,7 +223,7 @@ router.get("/public-portal/alerts", async (_req, res) => {
   res.json(rows.map(normalizeAlert));
 });
 
-router.post("/public-portal/reports", upload.single("image"), async (req, res) => {
+router.post("/public-portal/reports", publicRateLimit, upload.single("image"), async (req, res) => {
   await ensureCitizenReportTable();
   const issueType = String(req.body.issue_type || "").trim();
   const location = String(req.body.location || "").trim();
@@ -387,6 +403,79 @@ router.patch("/public-alerts/:id", auth, upload.single("image"), async (req, res
   res.json(normalizeAlert(updated));
 });
 
+router.get("/citizen-reports/monthly-stats", auth, async (req, res) => {
+  await ensureCitizenReportTable();
+  const now = new Date();
+  const year = String(req.query.year || now.getFullYear());
+  const month = String(req.query.month || (now.getMonth() + 1)).padStart(2, "0");
+  const ym = `${year}-${month}`;
+  const [received, done, rejected, open] = await Promise.all([
+    get(`SELECT COUNT(*) cnt FROM citizen_reports WHERE strftime('%Y-%m', created_at)=?`, [ym]),
+    get(`SELECT COUNT(*) cnt FROM citizen_reports WHERE strftime('%Y-%m', COALESCE(closed_at, updated_at))=? AND status='done'`, [ym]),
+    get(`SELECT COUNT(*) cnt FROM citizen_reports WHERE strftime('%Y-%m', updated_at)=? AND status='rejected'`, [ym]),
+    get(`SELECT COUNT(*) cnt FROM citizen_reports WHERE strftime('%Y-%m', created_at)=? AND status IN ('new','accepted','working')`, [ym]),
+  ]);
+  res.json({
+    year: Number(year), month: Number(month),
+    received: Number(received?.cnt || 0),
+    done:     Number(done?.cnt     || 0),
+    rejected: Number(rejected?.cnt || 0),
+    open:     Number(open?.cnt     || 0),
+  });
+});
+
+router.post("/citizen-reports/:id/assign", auth, async (req, res) => {
+  if (!["director","chief_engineer","safety","hr"].includes(req.user?.role))
+    return res.status(403).json({ error: "Эрх хүрэлцэхгүй байна" });
+  await ensureCitizenReportTable();
+  const row = await get("SELECT * FROM citizen_reports WHERE id=?", [req.params.id]);
+  if (!row) return res.status(404).json({ error: "Мэдээлэл олдсонгүй" });
+
+  const { category, assigned_to, note } = req.body;
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Citizen report-н ангилалыг Gantt-н category руу хөрвүүлнэ
+  const WORK_CAT_MAP = {
+    "Гэрэлтүүлэг": "Гэрэлтүүлэг засвар",
+    "Камер":        "Камер засвар",
+    "Замын дохио":  "Замын дохио",
+    "Замын засвар": "Засвар",
+    "Бусад":        "Иргэний санал хүсэлт",
+  };
+  const workCategory = WORK_CAT_MAP[category] || category || "Иргэний санал хүсэлт";
+  // Гэрэлтүүлэг засвар-д sl_sub_category='other' байхгүй бол Gantt шүүгчид харагдахгүй
+  const slSubCat = workCategory === "Гэрэлтүүлэг засвар" ? "other" : null;
+
+  let workLogId = null;
+  if (assigned_to) {
+    const title = `[Иргэний санал] ${row.issue_type} · ${row.location}`;
+    const desc = `${row.tracking_code}: ${row.description || ""}${note ? "\nТэмдэглэл: " + note : ""}`;
+    const wl = await run(
+      `INSERT INTO asset_events(title,category,sl_sub_category,department,location,description,
+         status,progress,assigned_to,created_by,work_date,start_date,end_date,citizen_report_id)
+       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [title, workCategory, slSubCat, "", row.location || "", desc,
+       "in_progress", 0, assigned_to, req.user.id, today, today, today, row.id]
+    ).catch(() =>
+      run(`INSERT INTO asset_events(title,category,sl_sub_category,department,location,description,
+             status,progress,assigned_to,created_by,work_date,start_date,end_date)
+           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [title, workCategory, slSubCat, "", row.location || "", desc,
+         "in_progress", 0, assigned_to, req.user.id, today, today, today])
+    );
+    workLogId = wl?.id || null;
+  }
+
+  await run(
+    `UPDATE citizen_reports SET status='accepted', assigned_to=?, resolution_note=?,
+       work_log_id=COALESCE(?,work_log_id), updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+    [assigned_to || null, note || row.resolution_note || "", workLogId, req.params.id]
+  );
+  await audit(req.user.id, "UPDATE", "citizen_reports", req.params.id,
+    `${row.tracking_code} → accepted, assigned=${assigned_to}, workLog=${workLogId}`);
+  res.json({ ok: true, workLogId });
+});
+
 router.patch("/citizen-reports/:id", auth, upload.fields([
   { name: "before_image", maxCount: 1 },
   { name: "after_image", maxCount: 1 },
@@ -415,6 +504,16 @@ router.patch("/citizen-reports/:id", auth, upload.fields([
   await audit(req.user.id, "UPDATE", "citizen_reports", req.params.id, `${row.tracking_code} -> ${status}`);
   const updated = await get("SELECT * FROM citizen_reports WHERE id=?", [req.params.id]);
   res.json(normalizeReport(updated));
+});
+
+router.delete("/citizen-reports/:id", auth, async (req, res) => {
+  if (!["director", "chief_engineer"].includes(req.user?.role))
+    return res.status(403).json({ error: "Устгах эрх хүрэлцэхгүй байна" });
+  const row = await get("SELECT * FROM citizen_reports WHERE id=?", [req.params.id]);
+  if (!row) return res.status(404).json({ error: "Мэдээлэл олдсонгүй" });
+  await run("DELETE FROM citizen_reports WHERE id=?", [req.params.id]);
+  await audit(req.user.id, "DELETE", "citizen_reports", req.params.id, row.tracking_code);
+  res.json({ ok: true });
 });
 
 module.exports = router;

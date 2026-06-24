@@ -3,6 +3,20 @@ const { run, all, get, auth, audit } = require("../db");
 const { requirePermission } = require("../middleware/roles");
 const router = express.Router();
 
+function requireIotSecret(req, res, next) {
+  const secret = process.env.IOT_WEBHOOK_SECRET;
+  if (!secret) {
+    console.warn("[LoRa] IOT_WEBHOOK_SECRET not configured — uplink endpoint unprotected");
+    return next();
+  }
+  const provided = req.headers["x-iot-secret"];
+  if (!provided || provided !== secret) {
+    console.warn(`[LoRa] Invalid X-IOT-SECRET from ${req.ip}`);
+    return res.status(401).json({ ok: false, error: "Invalid IoT webhook secret" });
+  }
+  next();
+}
+
 // ── Devices ───────────────────────────────────────────────────
 router.get("/lora-devices", auth, async (req, res) => {
   try {
@@ -139,7 +153,7 @@ router.get("/lora-summary", auth, async (req, res) => {
 });
 
 // ── LoRaWAN uplink webhook (ChirpStack v4 / TTN v3) ──────────
-router.post("/lora-uplink", async (req, res) => {
+router.post("/lora-uplink", requireIotSecret, async (req, res) => {
   try {
     const body = req.body;
     // Normalize EUI from either ChirpStack or TTN format

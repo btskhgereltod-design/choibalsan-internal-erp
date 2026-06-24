@@ -228,7 +228,7 @@ function renderSidebar() {
     </div>
     <div class="erp-s-item ${_view==="ai"?"active":""}" onclick="switchView('ai')">
       <span style="font-size:15px">🤖</span>
-      <span>ERP туслах</span>
+      <span>Чойбалсан ERP зөвлөх</span>
     </div>
     <div class="erp-s-sep"></div>
     <div style="padding:6px 10px 2px;font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px">Ажилтнууд</div>
@@ -259,7 +259,7 @@ function renderChatHead() {
       <b>${escapeHtml(_recip.full_name)}</b>
       <span style="font-size:11px;color:${online?"#22c55e":"#94a3b8"};margin-left:4px">${online?"● Онлайн":"○ Оффлайн"}</span>`;
   } else if (_view === "ai") {
-    el.innerHTML = `<span>🤖</span> <b>ERP туслах</b> <span style="font-size:11px;color:#94a3b8;margin-left:4px">Сургалт · Заавар · Зөвлөгөө</span>`;
+    el.innerHTML = `<span>🤖</span> <b>Чойбалсан ERP зөвлөх</b> <span style="font-size:11px;color:#94a3b8;margin-left:4px">ERP дата · Зөвлөгөө · Заавар</span>`;
   }
 }
 
@@ -271,7 +271,7 @@ function renderChatBody() {
   if (_view === "ai") {
     el.className = "erp-ai-body";
     if (!history.length) {
-      history.push({ role: "bot", text: "Сайн байна уу. Би ERP ашиглах богино заавар, бүртгэл хийх дараалал, тайлангийн зөвлөгөө өгнө.\n\nДэлгэрэнгүй хэрэгтэй бол \"алхам алхмаар\" гэж бичээрэй." });
+      history.push({ role: "bot", text: "Сайн байна уу. Би **Чойбалсан ERP зөвлөх** — ERP системийн бодит датаас уншиж хариулах, зөвлөгөө өгөх AI туслах.\n\n**Юу асуух вэ?**\n• Ажилтан, ирц, ажлын явц → бодит ERP датаас\n• Тайлан, ХАБЭА, гэрэлтүүлэг, IoT зөвлөгөө → AI туслах\n• ERP ашиглах заавар, алхам алхмаар\n\nМэдээлэл олдохгүй бол зохиохгүй, шууд хэлнэ." });
     }
     el.innerHTML = history.map((m, i) => {
       if (m.thinking) return `<div class="erp-ai-msg erp-ai-bot"><div class="erp-ai-thinking"><div class="erp-ai-dot"></div><div class="erp-ai-dot"></div><div class="erp-ai-dot"></div></div></div>`;
@@ -468,7 +468,7 @@ async function switchView(view, userId) {
   }
   // On mobile: activate chat panel, update header title
   if (view === "group")       mobileGoToChat("👥 Бүлгийн чат");
-  else if (view === "ai")     mobileGoToChat("🤖 ERP туслах");
+  else if (view === "ai")     mobileGoToChat("🤖 Чойбалсан ERP зөвлөх");
   else if (view === "dm" && _recip) mobileGoToChat(_recip.full_name);
   renderAll();
   if (view !== "ai") {
@@ -821,7 +821,7 @@ function recentChatTranscript(limit = 6) {
   return history
     .filter(m => !m.thinking && m.role && m.text)
     .slice(-limit)
-    .map(m => `${m.role === "user" ? "Хэрэглэгч" : "ERP туслах"}: ${m.text}`)
+    .map(m => `${m.role === "user" ? "Хэрэглэгч" : "Чойбалсан ERP зөвлөх"}: ${m.text}`)
     .join("\n\n")
     .slice(0, 1800);
 }
@@ -858,7 +858,7 @@ async function saveBadAnswerDevRequest(msgIdx, logId, comment) {
   const msg = history[msgIdx];
   const question = previousUserQuestion(msgIdx);
   const description = [
-    "ERP туслах буруу/дутуу хариулсан.",
+    "Чойбалсан ERP зөвлөх буруу/дутуу хариулсан.",
     "",
     `Одоогийн дэлгэц: ${currentModuleName()}`,
     `Log ID: ${logId || "—"}`,

@@ -218,7 +218,7 @@ function renderDevRequestStats(rows) {
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
         <div>
           <div style="font-size:13px;font-weight:900;color:#172033">ERP хөгжүүлэлтийн санал/алдаа</div>
-          <div style="font-size:11px;color:#64748b">Ажилчдын ERP туслахаар илгээсэн хүсэлтүүд</div>
+          <div style="font-size:11px;color:#64748b">Ажилчдын ERP зөвлөхөөр илгээсэн хүсэлтүүд</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <span class="pill ${high ? 'bad' : 'ok'}">Яаралтай ${high}</span>
@@ -261,7 +261,7 @@ function renderAiSummary(aiSummary) {
           <div style="font-size:13px;font-weight:800;color:#fff">💬 AI Өдрийн тойм &nbsp;<span style="font-weight:400;font-size:11px;color:#94a3b8">· ${aiSummary.today}</span></div>
           <div style="font-size:11px;color:#cbd5e1;margin-top:2px">Системийн өнөөдрийн байдал — асуулт дарж илгээх</div>
         </div>
-        <button onclick="toggleErpAssistant(true)" style="border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.1);color:#e2e8f0;border-radius:8px;padding:5px 14px;cursor:pointer;font-size:11px;font-weight:700">ERP туслахтай ярих →</button>
+        <button onclick="toggleErpAssistant(true)" style="border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.1);color:#e2e8f0;border-radius:8px;padding:5px 14px;cursor:pointer;font-size:11px;font-weight:700">ERP зөвлөхтэй ярих →</button>
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">
         ${badge("⚡", "Гэрлэн гэмтэл", aiSummary.open_light_faults, true)}
@@ -1235,8 +1235,8 @@ export async function dashboard() {
         ${newCitizenReports.length ? `
           <div class="alertItem bad" style="padding:9px 12px;font-size:12px;margin-bottom:6px;cursor:pointer" onclick="show('citizen_reports')">
             <span>📣</span>
-            <div><b>${newCitizenReports.length} шинэ иргэдийн мэдээлэл</b> хүлээгдэж байна<br>
-              <span style="color:var(--ink3)">Иргэдийн мэдээлэл хэсэгт орж шалгана уу</span>
+            <div><b>${newCitizenReports.length} шинэ иргэдийн санал хүсэлт</b> хүлээгдэж байна<br>
+              <span style="color:var(--ink3)">Иргэдийн санал хүсэлт хэсэгт орж шалгана уу</span>
             </div>
           </div>` : ''}
         ${lightWarnings.length ? lightWarnings.map(w => `

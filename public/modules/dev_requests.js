@@ -299,7 +299,7 @@ function drKind(r) {
 
 function drKindLabel(k) {
   return {
-    chatbot: "ERP туслах / AI хариулт",
+    chatbot: "Чойбалсан ERP зөвлөх / AI хариулт",
     report: "Тайлан / хэвлэх",
     upload: "Файл / зураг upload",
     ui: "UI / харагдах байдал",

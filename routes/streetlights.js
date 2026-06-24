@@ -363,7 +363,7 @@ router.post("/sl-points/:id/photos", auth, upload.single("file"), async (req, re
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-router.delete("/sl-point-photos/:photoId", auth, async (req, res) => {
+router.delete("/sl-point-photos/:photoId", auth, requirePermission("lighting_edit"), async (req, res) => {
   try {
     await run("DELETE FROM sl_point_photos WHERE id=?", [req.params.photoId]);
     res.json({ ok: true });
@@ -387,7 +387,7 @@ router.post("/sl-points/:id/docs", auth, upload.single("file"), async (req, res)
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-router.delete("/sl-point-docs/:docId", auth, async (req, res) => {
+router.delete("/sl-point-docs/:docId", auth, requirePermission("lighting_edit"), async (req, res) => {
   try {
     await run("DELETE FROM sl_point_docs WHERE id=?", [req.params.docId]);
     res.json({ ok: true });
@@ -1251,7 +1251,7 @@ router.post("/sl-ger-inventory/:id/photos", auth, upload.single("file"), async (
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-router.delete("/sl-ger-photos/:photoId", auth, async (req, res) => {
+router.delete("/sl-ger-photos/:photoId", auth, requirePermission("sl_ger_write"), async (req, res) => {
   try {
     await run("DELETE FROM sl_ger_photos WHERE id=?", [req.params.photoId]);
     res.json({ ok: true });
@@ -1271,7 +1271,7 @@ router.post("/sl-ger-inventory/:id/docs", auth, upload.single("file"), async (re
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-router.delete("/sl-ger-docs/:docId", auth, async (req, res) => {
+router.delete("/sl-ger-docs/:docId", auth, requirePermission("sl_ger_write"), async (req, res) => {
   try {
     await run("DELETE FROM sl_ger_docs WHERE id=?", [req.params.docId]);
     res.json({ ok: true });
@@ -1381,7 +1381,7 @@ router.put("/sl-faults/:id", auth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-router.delete("/sl-faults/:id", auth, async (req, res) => {
+router.delete("/sl-faults/:id", auth, requirePermission("sl_technical"), async (req, res) => {
   try {
     await run("DELETE FROM sl_fault_repairs WHERE fault_id=?", [req.params.id]);
     await run("DELETE FROM sl_faults WHERE id=?", [req.params.id]);

@@ -6,6 +6,22 @@ const { requirePermission } = require("../middleware/roles");
 
 const router = express.Router();
 
+// IP тус бүр 10 минутанд 5 submit — public survey submit
+const _publicSurveyLimiter = new Map();
+function publicRateLimit(req, res, next) {
+  const ip = String(req.ip || req.socket?.remoteAddress || "unknown");
+  const now = Date.now();
+  const WINDOW = 10 * 60 * 1000;
+  const LIMIT  = 5;
+  let rec = _publicSurveyLimiter.get(ip);
+  if (!rec || now > rec.reset) rec = { count: 1, reset: now + WINDOW };
+  else rec.count += 1;
+  _publicSurveyLimiter.set(ip, rec);
+  if (rec.count > LIMIT)
+    return res.status(429).json({ error: "Хэт олон хүсэлт. 10 минутын дараа дахин оролдоно уу." });
+  next();
+}
+
 // ── Job Postings ──────────────────────────────────────────────
 router.get("/job-postings", auth, async (req, res) => {
   res.json(await all("SELECT * FROM job_postings ORDER BY created_at DESC"));
@@ -270,7 +286,7 @@ router.get("/public-surveys/:token", async (req, res) => {
   res.json(s);
 });
 
-router.post("/public-survey-responses", async (req, res) => {
+router.post("/public-survey-responses", publicRateLimit, async (req, res) => {
   const b = req.body || {};
   const token = String(b.token || "").trim();
   const s = await get("SELECT id,status,deadline FROM surveys WHERE public_token=?", [token]);

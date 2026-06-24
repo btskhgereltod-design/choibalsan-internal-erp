@@ -1977,6 +1977,7 @@ async function initDb() {
   try { await run("ALTER TABLE sl_ger_inventory ADD COLUMN asset_id INTEGER REFERENCES assets(id)"); } catch(_) {}
   try { await run("ALTER TABLE work_executions ADD COLUMN gps_lat REAL"); } catch(_) {}
   try { await run("ALTER TABLE work_executions ADD COLUMN gps_lng REAL"); } catch(_) {}
+  try { await run("ALTER TABLE asset_events ADD COLUMN citizen_report_id INTEGER"); } catch(_) {}
 
   await run(`CREATE TABLE IF NOT EXISTS sl_ger_photos (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2545,6 +2546,50 @@ require("./services/mcp/server").installMcpRoutes(app);
 app.get("/", (_req, res) => res.sendFile(path.join(__dirname, "public", "portal.html")));
 app.get("/portal", (_req, res) => res.sendFile(path.join(__dirname, "public", "portal.html")));
 app.get(["/login", "/erp"], (_req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
+
+// ── /tools/code-export — ERP архитектур татах хуудас (director only) ─────────
+app.get("/tools/code-export", (_req, res) => {
+  res.send(`<!DOCTYPE html><html lang="mn"><head><meta charset="utf-8">
+<title>ERP Архитектур татах</title>
+<style>
+  body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f5f5f5}
+  .card{background:#fff;border-radius:12px;padding:40px 48px;box-shadow:0 2px 16px #0001;text-align:center;max-width:420px}
+  h2{margin:0 0 8px;font-size:1.3rem}
+  p{color:#666;margin:0 0 28px;font-size:.95rem}
+  button{background:#1a56db;color:#fff;border:none;padding:14px 32px;border-radius:8px;font-size:1rem;cursor:pointer;width:100%}
+  button:hover{background:#1447c0}
+  button:disabled{background:#aaa;cursor:not-allowed}
+  .msg{margin-top:16px;font-size:.9rem;color:#555}
+  .err{color:#c0392b}
+</style></head><body>
+<div class="card">
+  <h2>📦 ERP Архитектур татах</h2>
+  <p>ChatGPT Project-д upload хийх <code>.md</code> файлыг бэлдэнэ.<br>Нэвтэрсэн байх шаардлагатай.</p>
+  <button id="btn" onclick="dl()">Татах</button>
+  <div class="msg" id="msg"></div>
+</div>
+<script>
+async function dl(){
+  const btn=document.getElementById('btn'), msg=document.getElementById('msg');
+  const token=localStorage.getItem('token');
+  if(!token){msg.innerHTML='<span class=err>ERP-д нэвтрээгүй байна. Эхлээд <a href="/login">нэвтрэх</a> хуудас руу орно уу.</span>';return;}
+  btn.disabled=true; btn.textContent='Бэлдэж байна...'; msg.textContent='';
+  try{
+    const r=await fetch('/api/ai/code-export',{headers:{Authorization:'Bearer '+token}});
+    if(!r.ok){const e=await r.json();msg.innerHTML='<span class=err>Алдаа: '+e.error+'</span>';btn.disabled=false;btn.textContent='Татах';return;}
+    const blob=await r.blob();
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    const cd=r.headers.get('Content-Disposition')||'';
+    const fn=cd.match(/filename="([^"]+)"/)?.[1]||'erp-architecture.md';
+    a.href=url; a.download=fn; a.click();
+    URL.revokeObjectURL(url);
+    msg.textContent='✅ Татагдлаа! ChatGPT Project-д upload хийнэ үү.';
+    btn.textContent='Дахин татах'; btn.disabled=false;
+  }catch(e){msg.innerHTML='<span class=err>'+e.message+'</span>';btn.disabled=false;btn.textContent='Татах';}
+}
+</script></body></html>`);
+});
 
 // ── Global error handler ──────────────────────────────────────
 app.use((err, req, res, _next) => {

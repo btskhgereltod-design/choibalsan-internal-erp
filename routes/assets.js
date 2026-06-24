@@ -654,7 +654,7 @@ router.post("/assets/:id/files", auth, requirePermission("assets_write"), upload
   res.json({ id: r.id, file_path: relative });
 });
 
-router.delete("/asset-files/:id", auth, async (req, res) => {
+router.delete("/asset-files/:id", auth, requirePermission("assets_write"), async (req, res) => {
   const f = await get("SELECT * FROM asset_files WHERE id=?", [req.params.id]);
   if (f) {
     fs.unlink(path.join(UPLOAD_DIR, path.basename(f.file_path)), () => {});
@@ -694,7 +694,7 @@ router.put("/asset-flags/:id/resolve", auth, async (req, res) => {
   res.json({ ok: true });
 });
 
-router.delete("/asset-flags/:id", auth, async (req, res) => {
+router.delete("/asset-flags/:id", auth, requirePermission("assets_write"), async (req, res) => {
   await run("DELETE FROM asset_flags WHERE id=?", [req.params.id]);
   res.json({ ok: true });
 });

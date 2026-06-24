@@ -2,6 +2,7 @@ const express = require("express");
 const path    = require("path");
 const fs      = require("fs");
 const { run, all, get, auth, audit, upload, UPLOAD_DIR } = require("../db");
+const { requireRole } = require("../middleware/roles");
 
 const router = express.Router();
 
@@ -90,7 +91,7 @@ router.put("/documents/:id", auth, async (req, res) => {
 });
 
 // ── Delete ───────────────────────────────────────────────────
-router.delete("/documents/:id", auth, async (req, res) => {
+router.delete("/documents/:id", auth, requireRole("director", "hr"), async (req, res) => {
   const doc = await get("SELECT * FROM documents WHERE id=?", [req.params.id]);
   if (!doc) return res.status(404).json({ error: "Олдсонгүй" });
 

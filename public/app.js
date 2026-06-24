@@ -43,9 +43,9 @@ window.addEventListener("resize", syncMobileClass);
 window.addEventListener("orientationchange", syncMobileClass);
 
 const roleMenus = {
-  director:       ["eng_hub","habea_hub","dashboard","personal_plan","my_job_description","assets","attendance","work","citizen_reports","hr","letters","plans","reports","report_schedule","reports_unified","audit","dev_requests","ai_test",
+  director:       ["eng_hub","habea_hub","dashboard","personal_plan","my_job_description","assets","attendance","work","citizen_reports","hr","letters","plans","reports","report_schedule","reports_unified","audit","dev_requests","ai_test","code_export",
                    ...FINANCE_MENUS, ...WAREHOUSE_MENUS, ...LIGHTING_MENUS, ...CAMERA_MENUS, "settings"],
-  chief_engineer: ["eng_hub","habea_hub","dashboard","personal_plan","my_job_description","assets","attendance","work","citizen_reports","letters","docs","plans","reports","reports_unified","dev_requests","settings",
+  chief_engineer: ["eng_hub","habea_hub","dashboard","personal_plan","my_job_description","assets","attendance","work","citizen_reports","letters","docs","plans","reports","reports_unified","dev_requests","code_export","settings",
                    ...WAREHOUSE_MENUS, ...LIGHTING_MENUS, ...CAMERA_MENUS],
   engineer:       ["dashboard","personal_plan","my_job_description","attendance","work","field","citizen_reports","letters","docs","reports", ...LIGHTING_MENUS],
   storekeeper:    ["dashboard","personal_plan","my_job_description","assets","attendance","reports",
@@ -69,7 +69,7 @@ const menuNames = {
   attendance:    "⏱ Ирц / цагийн бүртгэл",
   work:          "📅 Ажлын явц (Gantt)",
   field:         "📱 Талбайн ажил",
-  citizen_reports: "📣 Иргэдийн мэдээлэл",
+  citizen_reports: "📣 Иргэдийн санал хүсэлт",
   materials:     "📦 Агуулах / Материал",
   expenses:      "💰 Зардал",
   admin_hub:     "🏛 Захиргаа / HR / Архив",
@@ -84,6 +84,7 @@ const menuNames = {
   audit:            "🛡 Audit log",
   dev_requests:    "🛠 ERP хөгжүүлэлт",
   ai_test:         "🤖 AI Тест",
+  code_export:     "📦 Архитектур татах",
   settings:        "⚙️ Тохиргоо",
   // Нягтлан
   finance:       "💼 Санхүү",
@@ -128,7 +129,7 @@ const menuGroups = [
   { label: "ҮЙЛДЛИЙН УДИРДЛАГА", items: ["attendance","work","field"] },
   { label: "БАЙГУУЛЛАГА",         items: ["hr","letters","citizen_reports","eng_hub","habea_hub","safety","plans", ...LIGHTING_MENUS, ...CAMERA_MENUS, "finance", ...WAREHOUSE_MENUS, "payroll"] },
   { label: "ТАЙЛАН & ХЯНАЛТ",    items: ["reports","report_schedule","reports_unified","audit"] },
-  { label: "ERP ХӨГЖҮҮЛЭЛТ",   items: ["dev_requests","ai_test"] },
+  { label: "ERP ХӨГЖҮҮЛЭЛТ",   items: ["dev_requests","ai_test","code_export"] },
   { label: "ТОХИРГОО",    items: ["settings"] },
 ];
 
@@ -704,8 +705,46 @@ async function show(m) {
   if (typeof fn === "function") return fn();
 }
 
+async function code_export() {
+  const main = document.getElementById("main") || document.querySelector(".main");
+  if (main) main.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:center;min-height:60vh">
+      <div style="background:#fff;border-radius:12px;padding:40px 48px;box-shadow:0 2px 16px #0001;text-align:center;max-width:440px">
+        <div style="font-size:2.5rem;margin-bottom:12px">📦</div>
+        <h2 style="margin:0 0 8px;font-size:1.25rem">ERP Архитектур татах</h2>
+        <p style="color:#666;margin:0 0 24px;font-size:.95rem;line-height:1.5">
+          ChatGPT Project-д upload хийх <code>.md</code> файл.<br>
+          ERP-ийн бүтэн бүтэц, database, endpoint, логикийг агуулна.
+        </p>
+        <button id="codeExportBtn" onclick="window._doCodeExport()" style="background:#1a56db;color:#fff;border:none;padding:13px 32px;border-radius:8px;font-size:1rem;cursor:pointer;width:100%">
+          ⬇ Татах
+        </button>
+        <div id="codeExportMsg" style="margin-top:14px;font-size:.9rem;color:#555"></div>
+      </div>
+    </div>`;
+}
+
+window._doCodeExport = async function() {
+  const btn = document.getElementById("codeExportBtn");
+  const msg = document.getElementById("codeExportMsg");
+  const token = localStorage.getItem("token");
+  if (!token) { msg.innerHTML = '<span style="color:#c0392b">ERP-д нэвтрээгүй байна.</span>'; return; }
+  btn.disabled = true; btn.textContent = "Бэлдэж байна..."; msg.textContent = "";
+  try {
+    const r = await fetch("/api/ai/code-export", { headers: { Authorization: "Bearer " + token } });
+    if (!r.ok) { const e = await r.json(); msg.innerHTML = `<span style="color:#c0392b">Алдаа: ${e.error}</span>`; btn.disabled = false; btn.textContent = "⬇ Татах"; return; }
+    const blob = await r.blob();
+    const cd = r.headers.get("Content-Disposition") || "";
+    const fn = cd.match(/filename="([^"]+)"/)?.[1] || "erp-architecture.md";
+    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: fn });
+    a.click(); URL.revokeObjectURL(a.href);
+    msg.innerHTML = `✅ <b>${fn}</b> татагдлаа! ChatGPT Project-д upload хийнэ үү.`;
+    btn.disabled = false; btn.textContent = "⬇ Дахин татах";
+  } catch(e) { msg.innerHTML = `<span style="color:#c0392b">${e.message}</span>`; btn.disabled = false; btn.textContent = "⬇ Татах"; }
+};
+
 Object.assign(window, {
-  login, logout, renderLogin, show, toggleSideGroup,
+  login, logout, renderLogin, show, toggleSideGroup, code_export,
   chooseMyAvatar, uploadMyAvatar,
   showForgotPassword, showLoginView, forgotPassword, resetPassword,
   loadNotifications, toggleNotifPanel, notifRead, notifReadAll,

@@ -1642,4 +1642,479 @@ router.get("/ai/audit/ai-summary", ...AI_GUARD, async (req, res) => {
   });
 });
 
+// ── GET /api/ai/code-export — full codebase architecture for ChatGPT Project ──
+router.get("/ai/code-export", auth, aiRateLimit, async (req, res) => {
+  if (!["director", "chief_engineer", "ai_readonly"].includes(req.user?.role))
+    return res.status(403).json({ error: "Эрх хүрэлцэхгүй" });
+
+  const fs   = require("fs");
+  const path = require("path");
+  const ROOT = path.join(__dirname, "..");
+
+  function readSafe(p) { try { return fs.readFileSync(p, "utf8"); } catch { return null; } }
+
+  // ── 1. File tree — аюулгүй хасах жагсаалт ──────────────────────────────────
+  const TREE_IGNORE_DIRS = new Set([
+    "node_modules", ".git", "uploads", "data", "logs", "backups",
+    ".nyc_output", "coverage", "dist", "build",
+  ]);
+  function isIgnoredFile(name) {
+    if (name.startsWith(".")) return true;
+    if (/\.(log|out\.log|err\.log)$/.test(name)) return true;
+    if (/^mcp-/.test(name)) return true;
+    if (name === "package-lock.json") return true;
+    return false;
+  }
+  function fileTree(dir, prefix = "", depth = 0) {
+    if (depth > 3) return "";
+    let items; try { items = fs.readdirSync(dir); } catch { return ""; }
+    items = items.filter(i => {
+      let st; try { st = fs.statSync(path.join(dir, i)); } catch { return false; }
+      if (st.isDirectory()) return !TREE_IGNORE_DIRS.has(i) && !i.startsWith(".");
+      return !isIgnoredFile(i);
+    });
+    return items.map((item, idx) => {
+      const full = path.join(dir, item);
+      let isDir = false; try { isDir = fs.statSync(full).isDirectory(); } catch {}
+      const last = idx === items.length - 1;
+      return `${prefix}${last ? "└── " : "├── "}${item}${isDir ? "/" : ""}\n`
+           + (isDir ? fileTree(full, prefix + (last ? "    " : "│   "), depth + 1) : "");
+    }).join("");
+  }
+
+  // ── 2. DB Schema — SQLite PRAGMA (parse-free, бодит схем) ───────────────────
+  async function getDbSchema() {
+    const tables = await all(
+      `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name`
+    );
+    const out = [];
+    for (const { name } of tables) {
+      const cols = await all(`PRAGMA table_info("${name}")`);
+      const fks  = await all(`PRAGMA foreign_key_list("${name}")`);
+      const idxs = await all(`PRAGMA index_list("${name}")`);
+      let s = `### ${name} (${cols.length} багана)\n`;
+      s += `| # | Багана | Төрөл | NotNull | Default | PK |\n|---|---|---|---|---|---|\n`;
+      for (const c of cols) {
+        s += `| ${c.cid} | \`${c.name}\` | ${c.type || "TEXT"} | ${c.notnull ? "✓" : ""} | ${c.dflt_value ?? ""} | ${c.pk ? "✓" : ""} |\n`;
+      }
+      if (fks.length) {
+        s += `\n**FK:** ${fks.map(f => `\`${f.from}\` → \`${f.table}.${f.to}\``).join("  |  ")}\n`;
+      }
+      if (idxs.length) {
+        s += `**Index:** ${idxs.map(i => `\`${i.name}\`${i.unique ? " (unique)" : ""}`).join("  |  ")}\n`;
+      }
+      out.push(s);
+    }
+    return out;
+  }
+
+  // ── 3. Migration system status ───────────────────────────────────────────────
+  async function getMigrationStatus() {
+    const migrateFile  = path.join(ROOT, "db", "migrate.js");
+    const migrationsDir = path.join(ROOT, "db", "migrations");
+
+    const runnerExists = fs.existsSync(migrateFile);
+    const folderExists = fs.existsSync(migrationsDir);
+
+    // schema_migrations table existence + applied list
+    let tableExists = false;
+    let applied = [];
+    try {
+      const row = await get(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'"
+      );
+      tableExists = !!row;
+      if (tableExists) {
+        applied = await all(
+          "SELECT version, name, module, applied_at FROM schema_migrations ORDER BY version"
+        );
+      }
+    } catch (_) {}
+
+    // Migration files on disk
+    let migFiles = [];
+    if (folderExists) {
+      migFiles = fs.readdirSync(migrationsDir)
+        .filter(f => /^\d{4}_.*\.js$/.test(f))
+        .sort();
+    }
+
+    const appliedVersions = new Set(applied.map(r => r.version));
+    const pending = migFiles.filter(f => !appliedVersions.has(f.slice(0, 4)));
+    const latestApplied = applied.length ? applied[applied.length - 1] : null;
+
+    // server.js legacy block detection
+    const serverContent = readSafe(path.join(ROOT, "server.js"));
+    const hasLegacyBlock = !!serverContent &&
+      /await run\(`(ALTER TABLE|CREATE TABLE IF NOT EXISTS)\s/m.test(serverContent);
+
+    // Cutover status
+    let cutoverStatus;
+    if (!tableExists || applied.length === 0) {
+      cutoverStatus = "legacy";
+    } else if (hasLegacyBlock) {
+      cutoverStatus = "parallel";
+    } else {
+      cutoverStatus = "cutover";
+    }
+
+    return { runnerExists, folderExists, tableExists, applied, appliedVersions,
+             migFiles, pending, latestApplied, hasLegacyBlock, cutoverStatus };
+  }
+
+  // ── 4. Parse endpoints → structured objects ──────────────────────────────────
+  // Returns [{ method, path, authLabel, comment }] — single source of truth
+  function parseEndpoints(content) {
+    const lines = content.split("\n");
+    return lines.flatMap((line, i) => {
+      const m = line.match(/router\.(get|post|put|patch|delete)\s*\(\s*["'`]([^"'`]+)["'`]\s*,\s*(.*)/i);
+      if (!m) return [];
+      const method = m[1].toUpperCase();
+      const path   = `/api${m[2]}`;
+      const rest   = m[3];
+      const ahead  = lines.slice(i + 1, i + 14).join(" ");
+
+      let authLabel;
+      if (/\bAI_GUARD\b/.test(rest) || /\brequireAiRole\b/.test(rest)) {
+        authLabel = "role:ai_readonly|director";
+      } else if (/requireIotSecret\b/.test(rest)) {
+        authLabel = "iot-secret";
+      } else if (/\bauth\b(?!\w)/.test(rest)) {
+        const hasRequireRole = /requireRole\s*\(/.test(rest);
+        const hasRequirePerm = /requirePermission\s*\(/.test(rest);
+        if (hasRequireRole || hasRequirePerm) {
+          const rm = rest.match(/(?:requireRole|requirePermission)\s*\(\s*["']([^"']+)["']/);
+          authLabel = rm ? `role:${rm[1]}` : "role required";
+        } else if (/req\.user\??\.role/.test(ahead) && /\.includes\s*\(/.test(ahead)) {
+          const ra = ahead.match(/\[(?:"[^"]+"\s*,?\s*)+\]/);
+          authLabel = ra
+            ? `role:${ra[0].replace(/["[\] ]/g, "").replace(/,/g, "|")}`
+            : "role required";
+        } else {
+          authLabel = "auth";
+        }
+      } else if (/requirePermission\s*\(|requireRole\s*\(/.test(rest)) {
+        authLabel = "role required (no auth?)";
+      } else if (/^[._]*async\s*\(|^_?req\b|^\(_?req|^upload\.|^publicRateLimit\b|^requireIotSecret\b/.test(rest.trim())) {
+        // auth-гүй known middleware-ууд: upload.*, publicRateLimit, requireIotSecret → public
+        authLabel = "public";
+      } else {
+        authLabel = "unknown";
+      }
+
+      const comment = (lines[i - 1] || "").trim().replace(/^\/\/\s*/, "");
+      return [{ method, path, authLabel, comment }];
+    });
+  }
+
+  function fmtEndpoints(parsed) {
+    return parsed.map(({ method, path, authLabel, comment }) =>
+      `  ${method.padEnd(6)} ${path}  [${authLabel}]${comment ? "  — " + comment : ""}`
+    );
+  }
+
+  // ── 4. Risk analysis — uses already-computed authLabel ───────────────────────
+  // Зориудаар public байх endpoint-ууд → note (warning биш)
+  // null = GET/read-only, string = write endpoint-ийн хамгаалалтын тайлбар
+  const INTENTIONALLY_PUBLIC = new Map([
+    ["/api/public-portal/summary",        null],
+    ["/api/public-portal/posts",          null],
+    ["/api/public-portal/alerts",         null],
+    ["/api/public-portal/completed",      null],
+    ["/api/public-surveys/:token",        null],
+    ["/api/public-portal/reports",        "Input validation ✓, upload 10MB limit ✓, rate limit ✓ (5 req/10min per IP)"],
+    ["/api/public-survey-responses",      "Input validation ✓, rate limit ✓ (5 req/10min per IP)"],
+  ]);
+  const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+  function analyzeRisks(allEndpoints, serverContent) {
+    const risks = [];
+
+    for (const { filename, method, path, authLabel } of allEndpoints) {
+      // Rule 1: role guard байгаа → ямар ч method-д warning гаргахгүй
+      if (authLabel.startsWith("role:") || authLabel === "role required") continue;
+
+      // Rule 2: iot-secret → warning гаргахгүй
+      if (authLabel === "iot-secret") continue;
+
+      // Rule 6: /api/ai/* дээр unknown эсвэл public → red
+      if (path.startsWith("/api/ai/") && (authLabel === "unknown" || authLabel === "public")) {
+        risks.push(`🔴 **${method} ${path}** [\`${filename}\`] — /api/ai/* endpoint auth/role guard байхгүй`);
+        continue;
+      }
+
+      // Rule 5: unknown → red
+      if (authLabel === "unknown") {
+        risks.push(`🔴 **${method} ${path}** [\`${filename}\`] — auth status тодорхойгүй (unknown)`);
+        continue;
+      }
+
+      // Rule 3: зориудаар public → warning биш, write бол note харуулна
+      if (authLabel === "public" && INTENTIONALLY_PUBLIC.has(path)) {
+        const note = INTENTIONALLY_PUBLIC.get(path);
+        if (WRITE_METHODS.has(method) && note) {
+          risks.push(`ℹ️  **PUBLIC ${method} ${path}** [\`${filename}\`] — зориудаар public (иргэд нэвтрэхгүйгээр илгээх). ${note}.`);
+        }
+        continue;
+      }
+
+      // public + write method → red
+      if (authLabel === "public" && WRITE_METHODS.has(method)) {
+        risks.push(`🔴 **PUBLIC ${method} ${path}** [\`${filename}\`] — auth guard байхгүй`);
+        continue;
+      }
+
+      // Rule 4: auth + DELETE (role guard байхгүй) → yellow
+      if (authLabel === "auth" && method === "DELETE") {
+        risks.push(`🟡 **DELETE ${path}** [\`${filename}\`] — зөвхөн auth, role guard байхгүй`);
+      }
+    }
+
+    // Байнгын мэдээллийн тэмдэглэлүүд
+    risks.push(`ℹ️  **ai_readonly** — зөвхөн \`/api/ai/*\` endpoint-ууд. Бусад route 403.`);
+
+    const serverLines = (serverContent || "").split("\n");
+    const alterCount = serverLines.filter(l => /ALTER TABLE\s+\w+/i.test(l)).length;
+    if (alterCount > 0) {
+      const unguarded = serverLines
+        .map((l, i) => ({ l, i }))
+        .filter(({ l }) => /ALTER TABLE/i.test(l))
+        .filter(({ i }) => !/try\s*\{/.test(serverLines.slice(Math.max(0, i - 2), i + 2).join(" ")));
+      risks.push(`ℹ️  **server.js** дотор ${alterCount} \`ALTER TABLE\` migration${unguarded.length ? `, ${unguarded.length} нь try-catch хамгаалалтгүй` : " (бүгд try-catch-тай ✓)"}`);
+      unguarded.forEach(({ l, i }) =>
+        risks.push(`  🔴 мөр ${i + 1}: \`${l.trim()}\``)
+      );
+    }
+
+    return risks;
+  }
+
+  // ── Generate markdown ────────────────────────────────────────────────────────
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0, 10);
+  const timeStr = now.toTimeString().slice(0, 5).replace(":", "");
+  const md = [];
+
+  md.push(`# Чойбалсан хөгжил ERP — Архитектурын тайлан`);
+  md.push(`> **Export:** ${now.toLocaleString("mn-MN")} | **Зориулалт:** Чойбалсан хөгжил ERP зөвлөх (read-only)\n`);
+
+  // Tech stack
+  md.push(`## Технологийн стек\n`);
+  md.push(`| Давхарга | Технологи |`);
+  md.push(`|---|---|`);
+  md.push(`| Backend | Node.js 18+, Express.js, \`better-sqlite3\` (async wrapper: \`run/all/get\` in db.js) |`);
+  md.push(`| Database | SQLite — \`data/app.db\` |`);
+  md.push(`| Auth | JWT (localStorage), \`req.user = {id, full_name, role, position}\` |`);
+  md.push(`| File upload | multer → \`/uploads/\` |`);
+  md.push(`| AI | OpenAI GPT-4.1 — \`services/assistant/openai.js\` |`);
+  md.push(`| Frontend | Vanilla JS SPA, ES modules, \`state\` from \`public/modules/common.js\` |`);
+  md.push(`| IoT | LoRa gateway, gэрэлтүүлэгийн хуваарийн REST API |`);
+  md.push(`\n**Roles:** \`director\` \`chief_engineer\` \`engineer\` \`hr\` \`accountant\` \`safety\` \`electric\` \`camera_engineer\` \`worker\` \`ai_readonly\``);
+
+  // File tree
+  md.push(`\n## Файлын бүтэц\n\`\`\`\n${fileTree(ROOT)}\`\`\``);
+
+  // DB Schema via PRAGMA
+  md.push(`\n## Database Schema (SQLite PRAGMA)`);
+  try {
+    const schemaSections = await getDbSchema();
+    md.push(`_Нийт ${schemaSections.length} хүснэгт — бодит PRAGMA table_info-аас_\n`);
+    md.push(schemaSections.join("\n"));
+  } catch (e) {
+    md.push(`_Schema унших үед алдаа: ${e.message}_`);
+  }
+
+  // API Endpoints
+  md.push(`\n## API Endpoint-ууд`);
+  md.push(`_Auth status: \`public\` | \`auth\` | \`role:...\` | \`iot-secret\` | \`unknown\`_\n`);
+  const routeDir = path.join(ROOT, "routes");
+  const routeFileNames = fs.readdirSync(routeDir).filter(f => f.endsWith(".js")).sort();
+  const allParsed = [];  // { filename, method, path, authLabel, comment } — риск шинжилгээнд хуваалцана
+  for (const rf of routeFileNames) {
+    const content = readSafe(path.join(routeDir, rf));
+    if (!content) continue;
+    const parsed = parseEndpoints(content);
+    parsed.forEach(ep => allParsed.push({ filename: rf, ...ep }));
+    if (parsed.length) {
+      md.push(`\n### routes/${rf} (${parsed.length} endpoint)`);
+      md.push(fmtEndpoints(parsed).join("\n"));
+    }
+  }
+
+  // Risk Warnings — endpoint list-тэй ижил authLabel ашиглана (давхар parse хийхгүй)
+  md.push(`\n## ⚠️ Risk Warnings`);
+  const serverContent = readSafe(path.join(ROOT, "server.js"));
+  const risks = analyzeRisks(allParsed, serverContent);
+  const realRisks = risks.filter(r => r.startsWith("🔴") || r.startsWith("🟡"));
+  if (realRisks.length === 0) {
+    md.push(`✅ Илэрхий эрсдэл олдсонгүй.`);
+  }
+  risks.forEach(r => md.push(r));
+
+  // Migration System
+  md.push(`\n## Migration System`);
+  try {
+    const ms = await getMigrationStatus();
+
+    const cutoverLabel = {
+      legacy:   "🔶 `legacy` — server.js migration block ажиллаж байна, baseline хийгдээгүй",
+      parallel: "🟡 `parallel` — baseline хийгдсэн, server.js block хэвээр байна",
+      cutover:  "✅ `cutover` — server.js block устгагдсан, migrate.js runner ашигладаг",
+    }[ms.cutoverStatus] || ms.cutoverStatus;
+
+    md.push(`| Зүйл | Байдал |`);
+    md.push(`|---|---|`);
+    md.push(`| \`db/migrate.js\` exists           | ${ms.runnerExists ? "✅ yes" : "❌ no"} |`);
+    md.push(`| \`db/migrations/\` folder exists   | ${ms.folderExists ? "✅ yes" : "❌ no"} |`);
+    md.push(`| \`schema_migrations\` table exists | ${ms.tableExists  ? "✅ yes" : "❌ no"} |`);
+    md.push(`| server.js legacy block present    | ${ms.hasLegacyBlock ? "✅ yes" : "✅ removed"} |`);
+    md.push(`| baseline migrations applied       | ${ms.applied.length} / 16 |`);
+    md.push(`| latest applied version            | ${ms.latestApplied ? `\`${ms.latestApplied.version}\` — ${ms.latestApplied.name}` : "—"} |`);
+    md.push(`| pending migration files (0017+)   | ${ms.pending.length} |`);
+    md.push(`| cutover status                    | ${cutoverLabel} |`);
+
+    // Migration files on disk
+    if (ms.migFiles.length) {
+      md.push(`\n### Migration files (db/migrations/)`);
+      for (const f of ms.migFiles) {
+        const ver = f.slice(0, 4);
+        const done = ms.appliedVersions.has(ver);
+        md.push(`- ${done ? "✅ applied" : "⏳ pending"} \`${f}\``);
+      }
+    } else {
+      md.push(`\n_db/migrations/ хоосон — 0017+ migration бичигдээгүй байна_`);
+    }
+
+    // Applied list from schema_migrations
+    if (ms.applied.length) {
+      md.push(`\n### schema_migrations (applied)`);
+      md.push(`| version | module | name | applied_at |`);
+      md.push(`|---|---|---|---|`);
+      for (const r of ms.applied) {
+        md.push(`| \`${r.version}\` | ${r.module} | ${r.name} | ${r.applied_at} |`);
+      }
+    }
+  } catch (e) {
+    md.push(`_Migration status унших үед алдаа: ${e.message}_`);
+  }
+
+  // Key service files
+  md.push(`\n## Гол сервисүүдийн агуулга`);
+  const SERVICE_FILES = [
+    ["db.js",                             "Database helper — run/all/get, auth middleware, upload"],
+    ["services/assistant/openai.js",      "OpenAI GPT-4.1 integration, system prompt builder"],
+    ["services/assistant/formatters.js",  "Role-based greetings, response formatting"],
+    ["services/assistant/intent.js",      "Асуултын intent тодорхойлох"],
+    ["services/assistant/fetchers.js",    "ERP дата татах функцүүд (AI-д зориулсан)"],
+    ["services/assistant/knowledge.js",   "Static knowledge base (ХАБЭА, норм, стандарт)"],
+  ];
+  for (const [fp, desc] of SERVICE_FILES) {
+    const content = readSafe(path.join(ROOT, fp));
+    if (!content) continue;
+    const trimmed = content.length > 4000
+      ? content.slice(0, 4000) + `\n// ... truncated (${content.length} chars total)`
+      : content;
+    md.push(`\n### ${fp}\n_${desc}_\n\`\`\`javascript\n${trimmed}\n\`\`\``);
+  }
+
+  // Frontend modules
+  md.push(`\n## Frontend Modules (\`public/modules/\`)`);
+  md.push(`_Бүх модуль ES module, \`window.*\` export-оор глобалд гаргана_\n`);
+  const modDir = path.join(ROOT, "public", "modules");
+  const mods = fs.readdirSync(modDir).filter(f => f.endsWith(".js") && !f.includes("_old")).sort();
+  for (const mod of mods) {
+    const content = readSafe(path.join(modDir, mod));
+    if (!content) continue;
+    const firstComment = content.split("\n").find(l => l.trim().startsWith("//"))?.replace(/^\/\/\s*/, "") || "";
+    const exports = [...content.matchAll(/window\.(\w+)\s*=/g)].map(m => m[1]).slice(0, 6);
+    const imports = [...content.matchAll(/import\s+\{([^}]+)\}\s+from/g)].map(m => m[1].replace(/\s+/g, " ").trim()).slice(0, 2);
+    const size = Math.round(content.length / 1024) + "KB";
+    md.push(`- **${mod}** (${size}) — ${firstComment}`);
+    if (exports.length) md.push(`  - exports: \`${exports.join(", ")}\``);
+    if (imports.length) md.push(`  - imports: { ${imports.join(" | ")} }`);
+  }
+
+  // common.js state shape
+  const commonJs = readSafe(path.join(ROOT, "public", "modules", "common.js"));
+  if (commonJs) {
+    const stateMatch = commonJs.match(/export\s+(?:const|let)\s+state\s*=\s*\{([^}]{0,800})\}/s);
+    if (stateMatch) {
+      md.push(`\n### common.js — \`state\` объектын бүтэц\n\`\`\`javascript\nexport const state = {${stateMatch[1]}}\n\`\`\``);
+    }
+  }
+
+  // Architectural rules
+  md.push(`\n## Архитектурын чухал дүрмүүд\n`);
+  md.push(`1. **state** — \`import { state } from "./common.js"\` хэлбэрээр л ашиглана. \`window.state\` гэж байхгүй.`);
+  md.push(`2. **asset_events** = Gantt-ийн ажлын бүртгэл (өмнө нь \`work_logs\` нэртэй байсан).`);
+  md.push(`3. **citizen_report → asset_events** холболт: \`citizen_report_id\` column-оор.`);
+  md.push(`4. **Камер засвар** хэсэг: \`category = "Камер засвар"\` гэж шүүнэ.`);
+  md.push(`5. **Гэрэлтүүлэг засвар** хэсэг: \`category = "Гэрэлтүүлэг засвар"\` + \`sl_sub_category = "other"\` шаарддаг.`);
+  md.push(`6. **auth middleware** — \`db.js\`-ийн \`auth\` function, JWT verify → \`req.user\` тавина.`);
+  md.push(`7. **audit** — \`services/audit.js\` → бүх CUD үйлдлийг \`audit_logs\`-д бичнэ.`);
+  md.push(`8. **Server restart** — backend өөрчлөгдсөн бүрт; frontend нь Ctrl+Shift+R.`);
+  md.push(`9. **ai_readonly** role — зөвхөн \`/api/ai/*\` endpoint-ууд. Бусад route 403.`);
+  md.push(`10. **Status flow** (citizen_reports): \`new → accepted → working → done → rejected\``);
+
+  const markdown = md.join("\n");
+  const filename = `choibalsan-erp-architecture-${dateStr}-${timeStr}.md`;
+  res.setHeader("Content-Type", "text/markdown; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.send(markdown);
+});
+
+// ── GET /api/ai/changelog — recent git commits + file changes ────────────────
+router.get("/ai/changelog", auth, requireAiRole, aiRateLimit, async (req, res) => {
+  const days = Math.min(30, Math.max(1, Number(req.query.days || 7)));
+  try {
+    const { execSync } = require("child_process");
+    const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+    const logRaw = execSync(
+      `git log --since="${since}" --format="%H|%ai|%s" --stat`,
+      { cwd: require("path").join(__dirname, ".."), encoding: "utf8", timeout: 8000 }
+    );
+    // Parse into structured commits
+    const commits = [];
+    let current = null;
+    for (const line of logRaw.split("\n")) {
+      const m = line.match(/^([a-f0-9]{40})\|(.+?)\|(.+)$/);
+      if (m) {
+        if (current) commits.push(current);
+        current = { hash: m[1].slice(0, 8), timestamp: m[2], message: m[3], files: [], summary: "" };
+      } else if (current && line.match(/^\s+\S+.*\|/)) {
+        current.files.push(line.trim());
+      } else if (current && line.match(/\d+ file/)) {
+        current.summary = line.trim();
+      }
+    }
+    if (current) commits.push(current);
+
+    // Also get uncommitted changes
+    const dirtyRaw = execSync(
+      `git diff --stat HEAD`,
+      { cwd: require("path").join(__dirname, ".."), encoding: "utf8", timeout: 5000 }
+    ).trim();
+    const statusRaw = execSync(
+      `git status --short`,
+      { cwd: require("path").join(__dirname, ".."), encoding: "utf8", timeout: 5000 }
+    ).trim();
+
+    await logAiRead(req.user.id, "/ai/changelog", ["git_log"]);
+    res.json({
+      generated_at: new Date().toISOString(),
+      queried_by: { name: req.user.full_name, role: req.user.role },
+      period_days: days,
+      since,
+      committed_changes: commits,
+      uncommitted: {
+        has_changes: dirtyRaw.length > 0,
+        stat: dirtyRaw,
+        files: statusRaw.split("\n").filter(Boolean).map(l => ({ status: l.slice(0,2).trim(), file: l.slice(3) })),
+      },
+    });
+  } catch (e) {
+    res.status(500).json({ error: "git log унших үед алдаа: " + e.message });
+  }
+});
+
 module.exports = router;
