@@ -6,7 +6,7 @@
   <title>Чойбалсан хөгжил ОНӨҮГ</title>
   <meta name="description" content="Чойбалсан хөгжил ОНӨҮГ-ийн иргэдэд нээлттэй албан ёсны вэб сайт." />
   <link rel="icon" href="/logo.jpg" type="image/jpeg" />
-  <link rel="stylesheet" href="/home.css?v=20260624portal" />
+  <link rel="stylesheet" href="/home.css?v=20260624civic" />
 </head>
 <body>
   <header class="site-header">
@@ -83,8 +83,9 @@
         <h1 id="heroTitle">Хотын үйлчилгээний нэгдсэн портал</h1>
         <p id="heroText" class="hero-text">Иргэн та байгууллагын мэдээлэл авч, хотын үйлчилгээтэй холбоотой аюул, гэмтлийг шуурхай мэдээлэх боломжтой.</p>
         <div class="hero-actions">
-          <a href="#hse" data-page="hse" data-title="ХАБЭА / Аюул мэдээлэх">Аюул мэдээлэх</a>
-          <a href="#hse" data-page="hse" data-title="ХАБЭА / Аюул мэдээлэх">Мэдээллийн төлөв шалгах</a>
+          <button type="button" data-dialog-open="hazardDialog" data-dialog-tab="report">Гэмтэл мэдээлэх</button>
+          <button type="button" data-dialog-open="hazardDialog" data-dialog-tab="track">Мэдээллийн төлөв шалгах</button>
+          <a href="#service" data-page="service">Үйлчилгээний мэдээлэл</a>
         </div>
       </div>
       <div class="hero-status" aria-label="Системийн төлөв">
@@ -97,6 +98,31 @@
     </section>
 
     <section id="homeHighlights" class="home-highlights" aria-labelledby="highlightsTitle">
+      <div class="quick-service-panel">
+        <div class="quick-service-heading">
+          <p class="section-kicker">Иргэдийн үйлчилгээ</p>
+          <h2 id="highlightsTitle">Танд юу хэрэгтэй вэ?</h2>
+        </div>
+        <div class="quick-action-grid">
+          <button class="quick-action quick-action-primary" type="button" data-dialog-open="hazardDialog" data-dialog-tab="report">
+            <span class="quick-action-icon" aria-hidden="true">!</span>
+            <span><strong>Гэмтэл мэдээлэх</strong><small>Байршил, зурагтай мэдээлэл илгээх</small></span>
+          </button>
+          <button class="quick-action" type="button" data-dialog-open="hazardDialog" data-dialog-tab="track">
+            <span class="quick-action-icon" aria-hidden="true">#</span>
+            <span><strong>Мэдээллийн төлөв шалгах</strong><small>Илгээсэн мэдээллийн явцыг харах</small></span>
+          </button>
+          <a class="quick-action" href="#service" data-page="service">
+            <span class="quick-action-icon" aria-hidden="true">Ү</span>
+            <span><strong>Үйлчилгээний мэдээлэл</strong><small>Үндсэн чиглэл, үйлчилгээний тойм</small></span>
+          </a>
+          <a class="quick-action" href="#news" data-page="news">
+            <span class="quick-action-icon" aria-hidden="true">М</span>
+            <span><strong>Сүүлийн мэдээ</strong><small>Зар, мэдээлэлтэй танилцах</small></span>
+          </a>
+        </div>
+      </div>
+
       <div class="public-kpi-grid">
         <a class="public-kpi" data-icon="⚡" href="#lighting" data-page="lighting" data-title="Гэрэлтүүлгийн тойм">
           <strong id="homeOverallPct">—</strong>
@@ -120,22 +146,45 @@
         </a>
       </div>
 
-      <div class="home-section-head">
-        <div>
-          <p class="section-kicker">ERP-ээс шинэчлэгдэнэ</p>
-          <h2 id="highlightsTitle">Иргэдэд хэрэгтэй мэдээлэл</h2>
-        </div>
-        <p>Олон нийтэд зориулсан ерөнхий үзүүлэлт, зар мэдээлэл.</p>
-      </div>
+      <div class="home-content-grid">
+        <section class="home-latest civic-panel" aria-labelledby="latestTitle">
+          <div class="home-latest-head">
+            <div>
+              <p class="section-kicker">Мэдээ мэдээлэл</p>
+              <h2 id="latestTitle">Сүүлийн мэдээлэл</h2>
+            </div>
+            <a href="#news" data-page="news">Бүгдийг харах</a>
+          </div>
+          <div id="homeLatestList" class="home-latest-grid" aria-live="polite">
+            <div class="content-empty">Мэдээлэл уншиж байна...</div>
+          </div>
+        </section>
 
-      <div class="home-latest">
-        <div class="home-latest-head">
-          <h2>Сүүлийн мэдээлэл</h2>
-          <a href="#news" data-page="news">Бүгдийг харах</a>
-        </div>
-        <div id="homeLatestList" class="home-latest-grid" aria-live="polite">
-          <div class="content-empty">Мэдээлэл уншиж байна...</div>
-        </div>
+        <aside class="home-info civic-panel" aria-labelledby="infoTitle">
+          <div class="home-latest-head">
+            <div>
+              <p class="section-kicker">Товч мэдээлэл</p>
+              <h2 id="infoTitle">Байгууллага</h2>
+            </div>
+          </div>
+          <div class="compact-info-list">
+            <article>
+              <span>01</span>
+              <div><h3>Бидний тухай</h3><p>Эрхэм зорилго, танилцуулга, бүтэц.</p></div>
+              <a href="#about" data-page="about" data-title="Танилцуулга">Дэлгэрэнгүй</a>
+            </article>
+            <article>
+              <span>02</span>
+              <div><h3>Үйл ажиллагааны үе шат</h3><p>Байгууллагын хөгжлийн үндсэн үе.</p></div>
+              <a href="#stages" data-page="stages">Дэлгэрэнгүй</a>
+            </article>
+            <article>
+              <span>03</span>
+              <div><h3>Үндсэн чиглэлүүд</h3><p>Гэрэлтүүлэг, хяналт, хотын үйлчилгээ.</p></div>
+              <a href="#service" data-page="service">Дэлгэрэнгүй</a>
+            </article>
+          </div>
+        </aside>
       </div>
     </section>
 
@@ -146,84 +195,70 @@
       <div id="contentBody" class="content-body"></div>
     </section>
 
-    <section class="stats" aria-label="ERP үзүүлэлтүүд" hidden>
-      <article>
-        <b id="statLights">0</b>
-        <span>Гэрэлтүүлгийн бүртгэл</span>
-      </article>
-      <article>
-        <b id="statCameras">0</b>
-        <span>Камерын бүртгэл</span>
-      </article>
-      <article>
-        <b id="statWorks">0</b>
-        <span>Ажлын бүртгэл</span>
-      </article>
-      <article>
-        <b>24/7</b>
-        <span>Хяналт, үйлчилгээ</span>
-      </article>
-    </section>
-
-    <section id="about" class="section intro" hidden>
-      <div>
-        <p class="section-kicker">Бидний тухай</p>
-        <h2 id="aboutTitle">Хотын өдөр тутмын үйлчилгээний мэдээллийг ил тод, хүртээмжтэй болгоно.</h2>
-      </div>
-      <p id="aboutText">Энэхүү public сайт нь байгууллагын ERP системтэй холбогдож, иргэдэд хэрэгтэй мэдээ, ажлын байр, үйлчилгээний мэдээлэл болон үндсэн үзүүлэлтүүдийг нэг дор харуулна.</p>
-    </section>
-
-    <section id="services" class="section" hidden>
-      <div class="section-head">
-        <div>
-          <p class="section-kicker">Үйл ажиллагаа</p>
-          <h2>Үндсэн чиглэлүүд</h2>
-        </div>
-      </div>
-      <div id="serviceGrid" class="service-grid">
-        <article>
-          <span>01</span>
-          <h3>Гэрэлтүүлэг</h3>
-          <p>Гудамж, зам талбайн гэрэлтүүлгийн бүртгэл, засвар үйлчилгээ, хяналт.</p>
-        </article>
-        <article>
-          <span>02</span>
-          <h3>Камерын хяналт</h3>
-          <p>Хотын аюулгүй байдлыг дэмжих камер, тоног төхөөрөмжийн бүртгэл.</p>
-        </article>
-        <article>
-          <span>03</span>
-          <h3>Ухаалаг хот</h3>
-          <p>IoT төхөөрөмж, хяналтын самбар, автоматжуулалтын мэдээлэл.</p>
-        </article>
-        <article>
-          <span>04</span>
-          <h3>Хот тохижилт</h3>
-          <p>Засвар, үйлчилгээ, төлөвлөгөөт ажил болон гүйцэтгэлийн бүртгэл.</p>
-        </article>
-      </div>
-    </section>
-
-    <section id="news" class="section split" hidden>
-      <div>
-        <p class="section-kicker">Мэдээ мэдээлэл</p>
-        <h2>ERP-ээс ирж буй сүүлийн мэдээлэл</h2>
-        <p>Одоогоор тусдаа мэдээний модульгүй тул эхний хувилбар дээр ERP-ийн ажлын бүртгэл, ажлын байр, баримт бичгийн сүүлийн бичлэгүүдийг харуулж байна.</p>
-      </div>
-      <div id="latestList" class="latest-list" aria-live="polite">
-        <div class="loading">Мэдээлэл уншиж байна...</div>
-      </div>
-    </section>
-
-    <section id="jobs" class="section cta" hidden>
-      <div>
-        <p class="section-kicker">Ажлын байр</p>
-        <h2>Нээлттэй ажлын байр</h2>
-        <p><span id="statJobs">0</span> ажлын байр ERP-д бүртгэлтэй байна. Дараагийн шатанд иргэд CV илгээх form-ыг энэ хэсэгт холбоно.</p>
-      </div>
-      <a href="#contact">Холбогдох</a>
-    </section>
   </main>
+
+  <dialog id="hazardDialog" class="service-dialog" aria-labelledby="hazardDialogTitle">
+    <div class="dialog-head">
+      <div>
+        <p class="section-kicker">Иргэдийн үйлчилгээ</p>
+        <h2 id="hazardDialogTitle">Гэмтэл, аюул мэдээлэх</h2>
+      </div>
+      <button class="dialog-close" type="button" data-dialog-close aria-label="Цонх хаах">×</button>
+    </div>
+    <div class="dialog-tabs" role="tablist" aria-label="Мэдээллийн үйлчилгээ">
+      <button type="button" role="tab" data-dialog-tab-button="report" aria-selected="true">Мэдээлэл илгээх</button>
+      <button type="button" role="tab" data-dialog-tab-button="track" aria-selected="false">Мэдээллийн төлөв шалгах</button>
+    </div>
+    <div class="dialog-panel" data-dialog-panel="report">
+      <p class="dialog-intro">Гэрэлтүүлэг, зам талбай, тоног төхөөрөмж болон аюултай нөхцөлийг байршил, зурагтай мэдээлнэ үү.</p>
+      <form id="hazardForm" class="public-form compact-form">
+        <div class="form-grid">
+          <div>
+            <label for="hazardLocation">Байршил <span>*</span></label>
+            <input id="hazardLocation" required placeholder="Жишээ: 3-р баг, төв замын уулзвар">
+          </div>
+          <div>
+            <label for="hazardType">Гэмтлийн төрөл</label>
+            <select id="hazardType">
+              <option value="">Сонгох</option>
+              <option>Гэрэлтүүлэг</option><option>Гэрлэн дохио</option>
+              <option>Ил утас / цахилгаан</option><option>Зам талбай</option>
+              <option>Ажлын байр / ХАБЭА</option><option>Бусад</option>
+            </select>
+          </div>
+        </div>
+        <label for="hazardDescription">Тайлбар <span>*</span></label>
+        <textarea id="hazardDescription" required rows="3" placeholder="Юу болсон, ямар эрсдэл байгааг товч бичнэ үү"></textarea>
+        <div class="form-grid">
+          <div>
+            <label for="hazardImage">Зураг</label>
+            <input id="hazardImage" type="file" accept="image/jpeg,image/png,image/webp">
+            <small class="form-help">JPG, PNG, WebP · 5MB хүртэл</small>
+          </div>
+          <div class="form-grid contact-fields">
+            <div><label for="hazardName">Таны нэр</label><input id="hazardName" placeholder="Заавал биш"></div>
+            <div><label for="hazardPhone">Утас</label><input id="hazardPhone" placeholder="Холбогдох утас"></div>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="submit">Мэдээлэл илгээх</button>
+          <small>Илгээсний дараа танд шалгах код өгнө.</small>
+        </div>
+        <div id="hazardResult" class="form-result" hidden></div>
+      </form>
+    </div>
+    <div class="dialog-panel" data-dialog-panel="track" hidden>
+      <article class="tracking-card">
+        <h3>Мэдээллийн төлөв шалгах</h3>
+        <p>Мэдээлэл илгээхэд авсан кодоо оруулна уу.</p>
+        <form id="trackingForm" class="tracking-form">
+          <input id="trackingCode" required placeholder="CHD-2026-XXXXXXXX" autocomplete="off">
+          <button type="submit">Шалгах</button>
+        </form>
+        <div id="trackingResult" class="tracking-result" hidden></div>
+      </article>
+    </div>
+  </dialog>
 
   <footer id="contact" class="site-footer">
     <div>

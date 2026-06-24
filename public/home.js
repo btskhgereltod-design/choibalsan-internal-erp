@@ -128,6 +128,7 @@
 
   const pageMeta = {
     about: ["Бидний тухай", "Байгууллагын танилцуулга"],
+    stages: ["Үйл ажиллагааны үе шат", "Байгууллагын хөгжлийн тойм"],
     job: ["Хүний нөөц", "Сонгон шалгаруулалт, ажлын байр"],
     news: ["Мэдээ мэдээлэл", "Сүүлийн мэдээ, зар мэдээлэл"],
     sustainability: ["Тогтвортой хөгжил", "Нийгмийн хариуцлага, байгаль орчин, ХАБЭА"],
@@ -189,49 +190,37 @@
       </div>
       <article class="content-card">
         <h2>Аюул, эрсдэл мэдээлэх</h2>
-        <p>Иргэн та гэрэлтүүлэг, зам талбай, тоног төхөөрөмж, хөдөлмөрийн аюулгүй байдалтай холбоотой эрсдэлтэй нөхцөл анзаарвал доорх маягтаар мэдээлнэ үү.</p>
-      </article>
-      <form id="hazardForm" class="public-form">
-        <label>Байршил <span>*</span></label>
-        <input id="hazardLocation" required placeholder="Жишээ: 3-р баг, төв замын уулзвар">
-        <label>Аюулын төрөл</label>
-        <select id="hazardType">
-          <option value="">Сонгох</option>
-          <option>Гэрэлтүүлэг</option>
-          <option>Гэрлэн дохио</option>
-          <option>Ил утас / цахилгаан</option>
-          <option>Зам талбай</option>
-          <option>Ажлын байр / ХАБЭА</option>
-          <option>Бусад</option>
-        </select>
-        <label>Тайлбар <span>*</span></label>
-        <textarea id="hazardDescription" required rows="5" placeholder="Юу болсон, ямар эрсдэл байна гэдгийг товч бичнэ үү"></textarea>
-        <label>Зураг</label>
-        <input id="hazardImage" type="file" accept="image/jpeg,image/png,image/webp">
-        <small class="form-help">JPG, PNG эсвэл WebP зураг, 5MB хүртэл.</small>
-        <div class="form-grid">
-          <div>
-            <label>Таны нэр</label>
-            <input id="hazardName" placeholder="Заавал биш">
-          </div>
-          <div>
-            <label>Утас</label>
-            <input id="hazardPhone" placeholder="Холбогдох утас">
-          </div>
+        <p>Иргэн та гэрэлтүүлэг, зам талбай, тоног төхөөрөмж, хөдөлмөрийн аюулгүй байдалтай холбоотой эрсдэлтэй нөхцөл анзаарвал мэдээлнэ үү.</p>
+        <div class="detail-actions">
+          <button type="button" data-dialog-open="hazardDialog" data-dialog-tab="report">Гэмтэл мэдээлэх</button>
+          <button type="button" data-dialog-open="hazardDialog" data-dialog-tab="track">Мэдээллийн төлөв шалгах</button>
         </div>
-        <button type="submit">Мэдээлэл илгээх</button>
-        <div id="hazardResult" class="form-result" hidden></div>
-      </form>
-      <article class="content-card tracking-card">
-        <h2>Мэдээллийн төлөв шалгах</h2>
-        <p>Илгээсний дараа авсан tracking кодоо оруулна уу.</p>
-        <form id="trackingForm" class="tracking-form">
-          <input id="trackingCode" required placeholder="CHD-2026-XXXXXXXX" autocomplete="off">
-          <button type="submit">Шалгах</button>
-        </form>
-        <div id="trackingResult" class="tracking-result" hidden></div>
       </article>
     `;
+  }
+
+  function renderFallbackPage(page) {
+    const fallbackPages = {
+      about: `
+        <article class="content-card">
+          <h2>Хотын өдөр тутмын үйлчилгээг ил тод, хүртээмжтэй болгоно</h2>
+          <p>“Чойбалсан хөгжил” ОНӨҮГ нь гудамж, зам талбайн гэрэлтүүлэг, гэрлэн дохио, хяналтын камер болон хотын үйлчилгээний хэвийн ажиллагааг ханган ажилладаг.</p>
+        </article>`,
+      stages: `
+        <div class="detail-card-grid">
+          <article class="content-card"><span class="detail-number">01</span><h2>Бүртгэл ба хяналт</h2><p>Хотын тоног төхөөрөмж, үйлчилгээний мэдээллийг нэгдсэн бүртгэлд төвлөрүүлнэ.</p></article>
+          <article class="content-card"><span class="detail-number">02</span><h2>Төлөвлөлт</h2><p>Гэмтэл, хэрэгцээ, эрсдэлийн мэдээлэлд үндэслэн ажлыг төлөвлөнө.</p></article>
+          <article class="content-card"><span class="detail-number">03</span><h2>Гүйцэтгэл</h2><p>Засвар үйлчилгээ, хяналтын ажлын явц болон үр дүнг бүртгэнэ.</p></article>
+        </div>`,
+      service: `
+        <div class="detail-card-grid">
+          <article class="content-card"><span class="detail-number">01</span><h2>Гэрэлтүүлэг</h2><p>Гудамж, зам талбайн гэрэлтүүлгийн бүртгэл, засвар үйлчилгээ, хяналт.</p></article>
+          <article class="content-card"><span class="detail-number">02</span><h2>Камерын хяналт</h2><p>Хотын аюулгүй байдлыг дэмжих камер, тоног төхөөрөмжийн бүртгэл.</p></article>
+          <article class="content-card"><span class="detail-number">03</span><h2>Ухаалаг хот</h2><p>IoT төхөөрөмж, хяналтын самбар, автоматжуулалтын мэдээлэл.</p></article>
+          <article class="content-card"><span class="detail-number">04</span><h2>Хотын үйлчилгээ</h2><p>Засвар, үйлчилгээ, төлөвлөгөөт ажил болон гүйцэтгэлийн бүртгэл.</p></article>
+        </div>`
+    };
+    return fallbackPages[page] || "";
   }
 
   function renderJobPostings() {
@@ -300,13 +289,9 @@
               <p>${text(row.body || "Дэлгэрэнгүй мэдээлэл удахгүй нэмэгдэнэ.")}</p>
             </article>
           `).join("")
-        : `<div class="content-empty">Энэ хэсэгт одоогоор мэдээлэл бүртгэгдээгүй байна. ERP-ийн “Вэб сайт” цэснээс мэдээлэл нэмнэ.</div>`;
+        : renderFallbackPage(page) || `<div class="content-empty">Энэ хэсэгт одоогоор мэдээлэл бүртгэгдээгүй байна. ERP-ийн “Вэб сайт” цэснээс мэдээлэл нэмнэ.</div>`;
     }
     document.getElementById("contentPage")?.removeAttribute("hidden");
-    if (page === "hse") {
-      bindHazardForm();
-      bindTrackingForm();
-    }
     if (updateHistory) history.pushState(null, "", `/#${page}`);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -377,6 +362,55 @@
         result.hidden = false;
       }
     });
+  }
+
+  function setDialogTab(tabName) {
+    const selected = tabName === "track" ? "track" : "report";
+    document.querySelectorAll("[data-dialog-tab-button]").forEach(button => {
+      button.setAttribute("aria-selected", String(button.dataset.dialogTabButton === selected));
+    });
+    document.querySelectorAll("[data-dialog-panel]").forEach(panel => {
+      panel.hidden = panel.dataset.dialogPanel !== selected;
+    });
+  }
+
+  function openServiceDialog(tabName = "report") {
+    const dialog = document.getElementById("hazardDialog");
+    if (!dialog) return;
+    setDialogTab(tabName);
+    if (!dialog.open) dialog.showModal();
+    document.body.classList.add("dialog-open");
+    window.setTimeout(() => {
+      const target = tabName === "track" ? document.getElementById("trackingCode") : document.getElementById("hazardLocation");
+      target?.focus();
+    }, 50);
+  }
+
+  function closeServiceDialog() {
+    const dialog = document.getElementById("hazardDialog");
+    if (dialog?.open) dialog.close();
+  }
+
+  function bindServiceDialog() {
+    const dialog = document.getElementById("hazardDialog");
+    document.addEventListener("click", event => {
+      const opener = event.target.closest("[data-dialog-open]");
+      if (opener) {
+        event.preventDefault();
+        openServiceDialog(opener.dataset.dialogTab || "report");
+        return;
+      }
+      if (event.target.closest("[data-dialog-close]")) closeServiceDialog();
+    });
+    document.querySelectorAll("[data-dialog-tab-button]").forEach(button => {
+      button.addEventListener("click", () => setDialogTab(button.dataset.dialogTabButton));
+    });
+    dialog?.addEventListener("click", event => {
+      if (event.target === dialog) closeServiceDialog();
+    });
+    dialog?.addEventListener("close", () => document.body.classList.remove("dialog-open"));
+    bindHazardForm();
+    bindTrackingForm();
   }
 
   function bindNavigation() {
@@ -461,5 +495,6 @@
 
   window.showHomePage = showHomePage;
   bindNavigation();
+  bindServiceDialog();
   loadHome();
 })();
