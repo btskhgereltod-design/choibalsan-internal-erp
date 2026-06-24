@@ -64,6 +64,7 @@ app.use("/uploads", express.static(UPLOAD_DIR, {
   }
 }));
 app.use(express.static(path.join(__dirname, "public"), {
+  index: false,
   setHeaders: (res, filePath) => {
     if (filePath.endsWith(".html")) {
       // HTML хуучирахгүй байлгах — Cloudflare болон browser кэшлэхгүй
@@ -2534,7 +2535,15 @@ app.use("/api", require("./routes/iot"));
 app.use("/api", require("./routes/hr_extended"));
 app.use("/api", require("./routes/chat"));
 app.use("/api", require("./routes/ai_test"));
+app.use("/api", require("./routes/public_portal"));
 require("./services/mcp/server").installMcpRoutes(app);
+// Public entry must stay separate from ERP login:
+//   / and /portal -> citizen/public information site
+//   /login and /erp -> internal ERP SPA
+// Keep this protected with `npm run test:routes`.
+app.get("/", (_req, res) => res.sendFile(path.join(__dirname, "public", "portal.html")));
+app.get("/portal", (_req, res) => res.sendFile(path.join(__dirname, "public", "portal.html")));
+app.get(["/login", "/erp"], (_req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
 
 // ── Global error handler ──────────────────────────────────────
 app.use((err, req, res, _next) => {

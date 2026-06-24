@@ -17,6 +17,14 @@ export async function habea_hub(tab) {
     }
     return;
   }
+  if (_activeTab === 'alerts') {
+    if (typeof window.settings === 'function') {
+      await window.settings();
+      if (typeof window.settingsTab === 'function') window.settingsTab('alerts');
+      _injectTabBar('alerts');
+    }
+    return;
+  }
   document.getElementById('main').innerHTML =
     `<div style="padding:40px;text-align:center;color:#94a3b8">Уншиж байна...</div>`;
   await _load();
@@ -44,6 +52,7 @@ function _tabBarHtml(active) {
   return `<div style="display:flex;gap:0;padding:0 20px;border-bottom:2px solid #e2e8f0;background:#fff;position:sticky;top:0;z-index:10;box-shadow:0 1px 4px rgba(0,0,0,.06)">
     ${tab('dashboard','🏠 Самбар')}
     ${tab('records','📋 Эрсдэл & PTW')}
+    ${tab('alerts','🦺 Иргэдэд тавих сэрэмжлүүлэг')}
   </div>`;
 }
 

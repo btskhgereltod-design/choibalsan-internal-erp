@@ -1,6 +1,6 @@
 import { state, api, toast, initFloatingScrollbar } from './modules/common.js';
 import './modules/dashboard.js?v=20260526dashboardorder';
-import './modules/assets.js?v=20260621fibergismapfix';
+import './modules/assets.js?v=20260622fiberlengthsummary';
 import './modules/operations.js?v=20260609autoprogress';
 import './modules/warehouse.js';
 import './modules/hr.js?v=20260612attendanceovertime';
@@ -15,6 +15,7 @@ import './modules/streetlights.js?v=20260618noloratab';
 import './modules/lighting_schedule.js?v=20260527engineeredit';
 import './modules/lora_monitor.js?v=20260618redirect';
 import './modules/iot_monitor.js?v=20260622segmentloadcolor';
+import './modules/citizen_reports.js?v=20260622portal';
 import './modules/settings.js?v=20260527loginrights';
 import './modules/eng_hub.js?v=20260529monthfilter';
 import './modules/field.js?v=20260608hseacktarget';
@@ -42,19 +43,19 @@ window.addEventListener("resize", syncMobileClass);
 window.addEventListener("orientationchange", syncMobileClass);
 
 const roleMenus = {
-  director:       ["eng_hub","habea_hub","dashboard","personal_plan","my_job_description","assets","attendance","work","hr","letters","plans","reports","report_schedule","reports_unified","audit","dev_requests","ai_test",
+  director:       ["eng_hub","habea_hub","dashboard","personal_plan","my_job_description","assets","attendance","work","citizen_reports","hr","letters","plans","reports","report_schedule","reports_unified","audit","dev_requests","ai_test",
                    ...FINANCE_MENUS, ...WAREHOUSE_MENUS, ...LIGHTING_MENUS, ...CAMERA_MENUS, "settings"],
-  chief_engineer: ["eng_hub","habea_hub","dashboard","personal_plan","my_job_description","assets","attendance","work","letters","docs","plans","reports","reports_unified","dev_requests",
+  chief_engineer: ["eng_hub","habea_hub","dashboard","personal_plan","my_job_description","assets","attendance","work","citizen_reports","letters","docs","plans","reports","reports_unified","dev_requests","settings",
                    ...WAREHOUSE_MENUS, ...LIGHTING_MENUS, ...CAMERA_MENUS],
-  engineer:       ["dashboard","personal_plan","my_job_description","attendance","work","field","letters","docs","reports", ...LIGHTING_MENUS],
+  engineer:       ["dashboard","personal_plan","my_job_description","attendance","work","field","citizen_reports","letters","docs","reports", ...LIGHTING_MENUS],
   storekeeper:    ["dashboard","personal_plan","my_job_description","assets","attendance","reports",
                    "letters", ...WAREHOUSE_MENUS],
   accountant:     ["dashboard","personal_plan","my_job_description","attendance","reports","report_schedule",
                    "letters","plans", ...FINANCE_MENUS, ...LIGHTING_MENUS],
-  hr:             ["dashboard","personal_plan","my_job_description","attendance","hr","letters","reports","report_schedule","payroll","plans"],
-  safety:         ["habea_hub","dashboard","personal_plan","my_job_description","attendance","hr","letters","reports","plans"],
-  electric:       ["dashboard","personal_plan","my_job_description","attendance","work","field","letters","reports","plans", ...LIGHTING_MENUS],
-  camera_engineer:["dashboard","personal_plan","my_job_description","attendance","work","field","letters","docs","reports","plans", ...CAMERA_MENUS],
+  hr:             ["dashboard","personal_plan","my_job_description","attendance","hr","citizen_reports","letters","reports","report_schedule","payroll","plans"],
+  safety:         ["habea_hub","dashboard","personal_plan","my_job_description","attendance","hr","letters","reports","plans","settings"],
+  electric:       ["dashboard","personal_plan","my_job_description","attendance","work","field","citizen_reports","letters","reports","plans", ...LIGHTING_MENUS],
+  camera_engineer:["dashboard","personal_plan","my_job_description","attendance","work","field","citizen_reports","letters","docs","reports","plans", ...CAMERA_MENUS],
   worker:         ["dashboard","my_job_description","field"]
 };
 
@@ -68,6 +69,7 @@ const menuNames = {
   attendance:    "⏱ Ирц / цагийн бүртгэл",
   work:          "📅 Ажлын явц (Gantt)",
   field:         "📱 Талбайн ажил",
+  citizen_reports: "📣 Иргэдийн мэдээлэл",
   materials:     "📦 Агуулах / Материал",
   expenses:      "💰 Зардал",
   admin_hub:     "🏛 Захиргаа / HR / Архив",
@@ -124,7 +126,7 @@ const menuGroups = [
   { label: "ХЯНАХ САМБАР",        items: ["dashboard","personal_plan","my_job_description"] },
   { label: "ОБЪЕКТИЙН БҮРТГЭЛ",  items: ["assets"] },
   { label: "ҮЙЛДЛИЙН УДИРДЛАГА", items: ["attendance","work","field"] },
-  { label: "БАЙГУУЛЛАГА",         items: ["hr","letters","eng_hub","habea_hub","safety","plans", ...LIGHTING_MENUS, ...CAMERA_MENUS, "finance", ...WAREHOUSE_MENUS, "payroll"] },
+  { label: "БАЙГУУЛЛАГА",         items: ["hr","letters","citizen_reports","eng_hub","habea_hub","safety","plans", ...LIGHTING_MENUS, ...CAMERA_MENUS, "finance", ...WAREHOUSE_MENUS, "payroll"] },
   { label: "ТАЙЛАН & ХЯНАЛТ",    items: ["reports","report_schedule","reports_unified","audit"] },
   { label: "ERP ХӨГЖҮҮЛЭЛТ",   items: ["dev_requests","ai_test"] },
   { label: "ТОХИРГОО",    items: ["settings"] },
@@ -249,7 +251,7 @@ async function login() {
     state.me    = r.user;
     localStorage.setItem("token", state.token);
     localStorage.setItem("me", JSON.stringify(state.me));
-    history.replaceState(null, "", "/");
+    history.replaceState(null, "", "/erp");
     init();
   } catch(e) {
     if (errEl) {
