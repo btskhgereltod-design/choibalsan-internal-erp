@@ -41,10 +41,13 @@ async function jsonFetch(url, opts = {}) {
 async function loadSummary() {
   try {
     const s = await jsonFetch("/api/public-portal/summary");
-    if ($("#statServices")) $("#statServices").textContent = s.services || 4;
-    if ($("#statReports")) $("#statReports").textContent = s.reports || 0;
-    if ($("#statDone")) $("#statDone").textContent = s.done || 0;
-    if ($("#statActive")) $("#statActive").textContent = s.active || 0;
+    if ($("#statServices"))   $("#statServices").textContent   = s.services || 4;
+    if ($("#statReports"))    $("#statReports").textContent    = s.reports || 0;
+    if ($("#statDone"))       $("#statDone").textContent       = s.done || 0;
+    if ($("#statActive"))     $("#statActive").textContent     = s.active || 0;
+    if (s.employees && $("#statEmployees")) $("#statEmployees").textContent = s.employees;
+    if (s.poles     && $("#statPoles"))     $("#statPoles").textContent     = Number(s.poles).toLocaleString();
+    if (s.cameras   && $("#statCameras"))   $("#statCameras").textContent   = s.cameras;
   } catch (_) {}
 }
 

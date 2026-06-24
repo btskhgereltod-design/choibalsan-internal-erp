@@ -315,8 +315,8 @@ async function resetPassword() {
         <div style="font-weight:700;margin-bottom:8px">Нууц үг шинэчлэгдлээ!</div>
         <p style="font-size:13px;color:var(--ink3)">Шинэ нууц үгээрээ нэвтэрч болно.</p>
       </div>`;
-    history.replaceState(null, "", "/");
-    setTimeout(() => renderLogin(), 2500);
+    history.replaceState(null, "", "/login");
+    setTimeout(() => location.replace("/login"), 2500);
   } catch(e) {
     if (errEl) { errEl.textContent = e.message || "Алдаа гарлаа"; errEl.style.display = "block"; }
   }
@@ -331,15 +331,33 @@ function logout() {
   localStorage.clear();
   state.token = "";
   state.me    = null;
-  renderLogin();
+  location.replace("/portal");
 }
 
 async function init() {
-  if (!state.token) return renderLogin();
+  const path = location.pathname;
+
+  if (!state.token) {
+    if (path === "/erp") location.replace("/login");
+    else renderLogin();
+    return;
+  }
+
+  // Already logged in — don't show login page again
+  if (path === "/login") {
+    location.replace("/erp");
+    return;
+  }
+
   try {
     state.users = await api("/api/users");
   } catch {
-    return renderLogin();
+    localStorage.removeItem("token");
+    localStorage.removeItem("me");
+    state.token = "";
+    state.me    = null;
+    location.replace("/login");
+    return;
   }
   renderShell();
   initFloatingScrollbar();

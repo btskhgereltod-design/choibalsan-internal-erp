@@ -128,16 +128,22 @@ function normalizeReport(row) {
 
 router.get("/public-portal/summary", async (_req, res) => {
   await ensureCitizenReportTable();
-  const [reports, done, active] = await Promise.all([
+  const [reports, done, active, empRow, poleRow, camRow] = await Promise.all([
     get("SELECT COUNT(*) count FROM citizen_reports"),
     get("SELECT COUNT(*) count FROM citizen_reports WHERE status='done'"),
     get("SELECT COUNT(*) count FROM citizen_reports WHERE status IN ('new','accepted','working')"),
+    get("SELECT COUNT(*) count FROM users WHERE active=1 AND role<>'ai_readonly'"),
+    get("SELECT COUNT(*) count FROM sl_points").catch(() => ({ count: 0 })),
+    get("SELECT COALESCE(SUM(COALESCE(camera_count,1)),0) count FROM assets WHERE category='Камер'").catch(() => ({ count: 0 })),
   ]);
   res.json({
     services: 4,
     reports: Number(reports?.count || 0),
-    done: Number(done?.count || 0),
-    active: Number(active?.count || 0),
+    done:    Number(done?.count    || 0),
+    active:  Number(active?.count  || 0),
+    employees: Number(empRow?.count  || 0),
+    poles:     Number(poleRow?.count || 0),
+    cameras:   Number(camRow?.count  || 0),
   });
 });
 
