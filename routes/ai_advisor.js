@@ -1743,10 +1743,15 @@ router.get("/ai/code-export", auth, aiRateLimit, async (req, res) => {
     const pending = migFiles.filter(f => !appliedVersions.has(f.slice(0, 4)));
     const latestApplied = applied.length ? applied[applied.length - 1] : null;
 
-    // server.js legacy block detection
+    // server.js legacy block detection — scoped to initDb() body only
     const serverContent = readSafe(path.join(ROOT, "server.js"));
-    const hasLegacyBlock = !!serverContent &&
-      /await run\(`(ALTER TABLE|CREATE TABLE IF NOT EXISTS)\s/m.test(serverContent);
+    let initDbBody = "";
+    if (serverContent) {
+      const m = serverContent.match(/async function initDb\(\)\s*\{([\s\S]*?)\n\}/);
+      initDbBody = m ? m[1] : "";
+    }
+    const hasLegacyBlock =
+      /await\s+run\s*\(\s*`(?:ALTER\s+TABLE|CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS)/m.test(initDbBody);
 
     // Cutover status
     let cutoverStatus;
