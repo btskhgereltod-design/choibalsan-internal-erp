@@ -40,7 +40,7 @@ fs.mkdirSync(path.join(__dirname, "data"), { recursive: true });
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 // db.js opens the SQLite connection — require after directories exist
-const { run, all, get, auth } = require("./db");
+const { run, all, get, auth, upload } = require("./db");
 const { saveLightingDailySnapshot } = require("./services/lighting_snapshots");
 const { saveCameraDailySnapshot } = require("./services/camera_snapshots");
 const { startCronJobs } = require("./services/cron");
@@ -64,6 +64,7 @@ app.use("/uploads", express.static(UPLOAD_DIR, {
   }
 }));
 app.use(express.static(path.join(__dirname, "public"), {
+  index: false,
   setHeaders: (res, filePath) => {
     if (filePath.endsWith(".html")) {
       // HTML хуучирахгүй байлгах — Cloudflare болон browser кэшлэхгүй
@@ -1387,6 +1388,47 @@ async function initDb() {
     FOREIGN KEY(posting_id) REFERENCES job_postings(id)
   )`);
 
+  await run(`CREATE TABLE IF NOT EXISTS public_contents (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    section      TEXT NOT NULL DEFAULT 'news',
+    content_key  TEXT DEFAULT '',
+    title        TEXT NOT NULL,
+    body         TEXT DEFAULT '',
+    image_url    TEXT DEFAULT '',
+    link_url     TEXT DEFAULT '',
+    sort_order   INTEGER DEFAULT 99,
+    published    INTEGER DEFAULT 1,
+    created_by   INTEGER,
+    updated_by   INTEGER,
+    created_at   TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at   TEXT DEFAULT CURRENT_TIMESTAMP
+  )`);
+  await run(`CREATE INDEX IF NOT EXISTS idx_public_contents_section
+             ON public_contents(section, published, sort_order, id)`).catch(() => {});
+
+  await run(`CREATE TABLE IF NOT EXISTS public_hazard_reports (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    reporter_name   TEXT DEFAULT '',
+    reporter_phone  TEXT DEFAULT '',
+    location        TEXT NOT NULL,
+    hazard_type     TEXT DEFAULT '',
+    description     TEXT NOT NULL,
+    status          TEXT DEFAULT 'Шинэ',
+    source          TEXT DEFAULT 'public_site',
+    tracking_code   TEXT DEFAULT '',
+    image_url       TEXT DEFAULT '',
+    created_at      TEXT DEFAULT CURRENT_TIMESTAMP
+  )`);
+  await run(`ALTER TABLE public_hazard_reports ADD COLUMN tracking_code TEXT DEFAULT ''`).catch(() => {});
+  await run(`ALTER TABLE public_hazard_reports ADD COLUMN image_url TEXT DEFAULT ''`).catch(() => {});
+  await run(`UPDATE public_hazard_reports
+             SET tracking_code='CHD-OLD-' || printf('%06d', id)
+             WHERE tracking_code IS NULL OR tracking_code=''`).catch(() => {});
+  await run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_public_hazard_tracking
+             ON public_hazard_reports(tracking_code)`).catch(() => {});
+  await run(`CREATE INDEX IF NOT EXISTS idx_public_hazard_reports_status
+             ON public_hazard_reports(status, created_at DESC)`).catch(() => {});
+
   // ── Training ──────────────────────────────────────────────
   await run(`CREATE TABLE IF NOT EXISTS trainings (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2337,7 +2379,7 @@ app.post("/api/forgot-password", async (req, res) => {
   await run("DELETE FROM password_reset_tokens WHERE user_id=?", [user.id]);
   await run("INSERT INTO password_reset_tokens(user_id,token,expires_at) VALUES(?,?,?)",
     [user.id, token, expires]);
-  const resetLink = `${APP_URL}/?reset_token=${token}`;
+  const resetLink = `${APP_URL}/erp?reset_token=${token}`;
   let sent = false;
   if (mailer) {
     try {
@@ -2380,6 +2422,211 @@ app.post("/api/reset-password", async (req, res) => {
 
 app.get("/api/public-base-url", (_req, res) => {
   res.json({ baseUrl: lanBaseUrl() });
+});
+
+app.get("/api/public/home", async (_req, res) => {
+  const safeCount = async (sql, params = []) => {
+    try {
+      const row = await get(sql, params);
+      return Number(row?.count || 0);
+    } catch (_e) {
+      return 0;
+    }
+  };
+
+  const safeRows = async (sql, params = []) => {
+    try {
+      return await all(sql, params);
+    } catch (_e) {
+      return [];
+    }
+  };
+
+  const stats = {
+    employees: await safeCount(`SELECT COUNT(*) count FROM users WHERE active=1`),
+    lights: await safeCount(
+      `SELECT COUNT(*) count FROM assets
+       WHERE category LIKE '%гэрэл%' OR category LIKE '%Гэрэл%' OR sub_category LIKE '%гэрэл%' OR sub_category LIKE '%Гэрэл%'`
+    ),
+    cameras: await safeCount(
+      `SELECT COALESCE(SUM(CASE WHEN camera_count IS NULL OR camera_count < 1 THEN 1 ELSE camera_count END), 0) count
+       FROM assets
+       WHERE category LIKE '%камер%' OR category LIKE '%Камер%' OR sub_category LIKE '%камер%' OR sub_category LIKE '%Камер%'`
+    ),
+    works: await safeCount(`SELECT COUNT(*) count FROM asset_events`),
+    jobs: await safeCount(
+      `SELECT COUNT(*) count FROM job_postings
+       WHERE COALESCE(status,'Нээлттэй') NOT IN ('Хаасан','Цуцлагдсан')
+         AND (deadline IS NULL OR deadline='' OR deadline>=date('now','localtime'))`
+    ),
+    documents: await safeCount(`SELECT COUNT(*) count FROM documents`)
+  };
+  stats.citizen_reports = await safeCount(`SELECT COUNT(*) count FROM public_hazard_reports`);
+  const lighting = {
+    poles: await safeCount(
+      `SELECT COALESCE(SUM(lamp_count), 0) count FROM sl_points
+       WHERE status='active' OR status='Идэвхтэй'`
+    ),
+    road_heads: await safeCount(
+      `SELECT COALESCE(SUM(CASE WHEN total_heads > 0 THEN total_heads ELSE lamp_count END), 0) count
+       FROM sl_points
+       WHERE status='active' OR status='Идэвхтэй'`
+    ),
+    ger_heads: await safeCount(
+      `SELECT COALESCE(SUM(total_count), 0) count
+       FROM sl_ger_inventory
+       WHERE category='Гэр хороолол' OR category='Гэр хорооллын гэрэл'`
+    ),
+    tower_heads: await safeCount(
+      `SELECT COALESCE(SUM(total_count), 0) count
+       FROM sl_ger_inventory
+       WHERE category='Цамхаг' OR category='Цамхагийн гэрэл'`
+    ),
+    broken_heads: await safeCount(
+      `SELECT COALESCE(SUM(broken_count), 0) count
+       FROM sl_faults
+       WHERE status!='Дууссан'`
+    ),
+    road_broken: await safeCount(
+      `SELECT COALESCE(SUM(broken_count), 0) count FROM sl_faults
+       WHERE status!='Дууссан' AND category='Авто замын гэрэл'`
+    ),
+    ger_broken: await safeCount(
+      `SELECT COALESCE(SUM(broken_count), 0) count FROM sl_faults
+       WHERE status!='Дууссан' AND category='Гэр хорооллын гэрэл'`
+    ),
+    tower_broken: await safeCount(
+      `SELECT COALESCE(SUM(broken_count), 0) count FROM sl_faults
+       WHERE status!='Дууссан' AND category='Цамхагийн гэрэл'`
+    ),
+    traffic_total: await safeCount(
+      `SELECT COUNT(*) count FROM assets WHERE category='Гэрлэн дохио'`
+    ),
+    traffic_working: await safeCount(
+      `SELECT COUNT(*) count FROM assets WHERE category='Гэрлэн дохио' AND status='Асаалтай'`
+    )
+  };
+  lighting.total_heads = lighting.road_heads + lighting.ger_heads + lighting.tower_heads;
+  lighting.working_heads = Math.max(0, lighting.total_heads - lighting.broken_heads);
+  const availabilityPct = (total, broken) => total > 0
+    ? Math.round((Math.max(0, total - broken) / total) * 1000) / 10
+    : null;
+  lighting.availability_pct = availabilityPct(lighting.total_heads, lighting.broken_heads);
+  lighting.road_availability_pct = availabilityPct(lighting.road_heads, lighting.road_broken);
+  lighting.ger_availability_pct = availabilityPct(lighting.ger_heads, lighting.ger_broken);
+  lighting.tower_availability_pct = availabilityPct(lighting.tower_heads, lighting.tower_broken);
+  lighting.traffic_availability_pct = availabilityPct(
+    lighting.traffic_total,
+    Math.max(0, lighting.traffic_total - lighting.traffic_working)
+  );
+  const hse = {
+    open_public_reports: await safeCount(
+      `SELECT COUNT(*) count FROM public_hazard_reports WHERE status!='Хаасан'`
+    ),
+    this_month_reports: await safeCount(
+      `SELECT COUNT(*) count FROM public_hazard_reports
+       WHERE substr(created_at,1,7)=strftime('%Y-%m','now','localtime')`
+    ),
+    internal_open_risks: await safeCount(
+      `SELECT COUNT(*) count FROM safety_reports WHERE COALESCE(workflow_status,'Шинэ')!='Хаасан'`
+    )
+  };
+
+  const contents = await safeRows(
+    `SELECT id, section, content_key, title, body, image_url, link_url, sort_order, created_at, updated_at
+     FROM public_contents
+     WHERE published=1
+     ORDER BY section, sort_order, id DESC`
+  );
+  const organization = Object.fromEntries((await safeRows(
+    `SELECT key, value FROM org_settings
+     WHERE key IN ('org_name','address','phone','email')`
+  )).map(row => [row.key, row.value || ""]));
+
+  const jobs = await safeRows(
+    `SELECT id, title, department category, description, deadline date, created_at, 'job' type
+     FROM job_postings
+     WHERE COALESCE(status,'Нээлттэй') NOT IN ('Хаасан','Цуцлагдсан')
+       AND (deadline IS NULL OR deadline='' OR deadline>=date('now','localtime'))
+     ORDER BY COALESCE(deadline, created_at) DESC, id DESC
+     LIMIT 3`
+  );
+  const contentNews = contents
+    .filter(row => row.section === "news")
+    .slice(0, 6)
+    .map(row => ({
+      id: row.id,
+      title: row.title,
+      category: "Мэдээ",
+      description: row.body,
+      date: row.updated_at || row.created_at,
+      created_at: row.created_at,
+      type: "news"
+    }));
+
+  const latest = [...contentNews, ...jobs]
+    .sort((a, b) => String(b.date || b.created_at || "").localeCompare(String(a.date || a.created_at || "")))
+    .slice(0, 6);
+
+  res.json({ organization, stats, lighting, hse, contents, jobs, latest });
+});
+
+function publicTrackingCode() {
+  const year = new Date().getFullYear();
+  return `CHD-${year}-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
+}
+
+app.post("/api/public/hazard-reports", upload.single("image"), async (req, res) => {
+  const b = req.body || {};
+  const location = String(b.location || "").trim();
+  const description = String(b.description || "").trim();
+  const removeRejectedFile = () => {
+    if (req.file?.path) fs.unlink(req.file.path, () => {});
+  };
+  if (req.file && !String(req.file.mimetype || "").startsWith("image/")) {
+    removeRejectedFile();
+    return res.status(400).json({ error: "Зөвхөн зураг файл хавсаргана уу" });
+  }
+  if (req.file && Number(req.file.size || 0) > 5 * 1024 * 1024) {
+    removeRejectedFile();
+    return res.status(400).json({ error: "Зургийн хэмжээ 5MB-аас бага байна" });
+  }
+  if (!location) {
+    removeRejectedFile();
+    return res.status(400).json({ error: "Байршил оруулна уу" });
+  }
+  if (!description) {
+    removeRejectedFile();
+    return res.status(400).json({ error: "Аюулын тайлбар оруулна уу" });
+  }
+  const trackingCode = publicTrackingCode();
+  const imageUrl = req.file ? `/uploads/${req.file.filename}` : "";
+  const result = await run(
+    `INSERT INTO public_hazard_reports
+      (reporter_name, reporter_phone, location, hazard_type, description, tracking_code, image_url)
+     VALUES (?,?,?,?,?,?,?)`,
+    [
+      String(b.reporter_name || "").trim().slice(0, 120),
+      String(b.reporter_phone || "").trim().slice(0, 40),
+      location.slice(0, 240),
+      String(b.hazard_type || "").trim().slice(0, 120),
+      description.slice(0, 2000),
+      trackingCode,
+      imageUrl
+    ]
+  );
+  res.json({ ok: true, id: result.id, tracking_code: trackingCode });
+});
+
+app.get("/api/public/hazard-reports/:trackingCode", async (req, res) => {
+  const trackingCode = String(req.params.trackingCode || "").trim().toUpperCase();
+  const row = await get(
+    `SELECT tracking_code, hazard_type, location, status, created_at
+     FROM public_hazard_reports WHERE tracking_code=?`,
+    [trackingCode]
+  );
+  if (!row) return res.status(404).json({ error: "Мэдээлэл олдсонгүй" });
+  res.json(row);
 });
 
 // ── Notifications ─────────────────────────────────────────────
@@ -2427,17 +2674,24 @@ app.use("/api", require("./routes/iot"));
 app.use("/api", require("./routes/hr_extended"));
 app.use("/api", require("./routes/chat"));
 app.use("/api", require("./routes/ai_test"));
+app.use("/api", require("./routes/website"));
 require("./services/mcp/server").installMcpRoutes(app);
 
 // ── Global error handler ──────────────────────────────────────
+app.get("/", (_req, res) => res.sendFile(path.join(__dirname, "public", "home.html")));
+app.get(["/erp", "/erp/*"], (_req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
+
 app.use((err, req, res, _next) => {
   console.error(`[server error] ${req.method} ${req.path}:`, err.message);
   if (res.headersSent) return;
+  if (err?.name === "MulterError" || String(err?.message || "").includes("файлын төрөл")) {
+    return res.status(400).json({ error: err.message || "Файл хүлээн авахад алдаа гарлаа" });
+  }
   res.status(500).json({ error: "Серверийн алдаа гарлаа" });
 });
 
 // ── SPA fallback (must be last) ───────────────────────────────
-app.get("*", (_, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
+app.get("*", (_, res) => res.sendFile(path.join(__dirname, "public", "home.html")));
 
 function localDateKey(d = new Date()) {
   const y = d.getFullYear();
