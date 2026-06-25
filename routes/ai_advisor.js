@@ -2048,6 +2048,34 @@ router.get("/ai/code-export", auth, aiRateLimit, async (req, res) => {
     }
   }
 
+  // IoT street-light domain rules for external AI advisors
+  md.push(`\n## IoT гэрэлтүүлгийн ажлын талбарын логик\n`);
+  md.push(`Энэ хэсэг нь \`IoT Гэрэлтүүлгийн хяналт\` ажлын талбарыг гаднын ChatGPT/Claude/Codex зөвлөхүүд буруу ойлгохоос хамгаалах үндсэн дүрэм юм.`);
+  md.push(`\n### Operator-facing нэр томьёо`);
+  md.push(`- **Node** = LoRaWAN-аар өгөгдөл илгээдэг ADW300/310 төхөөрөмжийн ERP дээрх бүртгэл.`);
+  md.push(`- **ADW оноох** = шит/тэжээлийн цэг дээр физикээр суусан ADW300/310 node-г ERP дээр тухайн цэгт оноох ажиллагаа. Энэ нь online/offline сүлжээний холболт биш.`);
+  md.push(`- **Сонсогдсон node** = ChirpStack-аас ERP backend-д сүүлийн 10 минутанд uplink ирсэн node.`);
+  md.push(`- **Шит тэжээлтэй** = ADW хэмжилтээр шит/оролтын талд хүчдэл байгаа. Энэ нь гудамжны гэрэл ассан гэсэн үг биш.`);
+  md.push(`- **Гудамж ассан / асаагүй** = тухайн шитнээс гарч буй гудамжны гэрэлтүүлгийн гаралтын хэрэглээ power/current үүссэн эсэхээр тооцно.`);
+  md.push(`- **Шонгийн өнгө** = холбогдсон segment ассан бол шонгууд шар, асаагүй бол саарал. Тэжээлийн цэг/ADW оноолтгүй segment автоматаар саарал байна.`);
+  md.push(`- **Нэг гудамж олон шиттэй байж болно** = жишээ нь нэг гудамж 1-44, 45-76 гэх мэт өөр өөр segment/тэжээлийн цэгтэй байж болох тул бүх гудамжийг нэг төлөвөөр будаж болохгүй.`);
+
+  md.push(`\n### AI-д зориулсан техникийн дүрэм`);
+  md.push(`- Frontend үндсэн файл: \`public/modules/iot_monitor.js\`.`);
+  md.push(`- Backend IoT API: \`routes/iot.js\`; ChirpStack uplink endpoint: \`POST /api/iot/chirpstack/uplink\`, хамгаалалт: \`X-IOT-SECRET\`.`);
+  md.push(`- Device list: \`GET /api/iot/devices\`; хамгийн сүүлийн дохио нь \`iot_meter_readings.received_at\` дээр суурилна.`);
+  md.push(`- \`isDeviceOnline(row)\` нь \`last_seen\` сүүлийн 10 минутанд байгаа эсэхийг шалгаж "Сонсогдсон node" тооцдог.`);
+  md.push(`- \`hasLinePower(row)\` нь \`voltage\` эсвэл \`Ua\` > 1 үед "Шит тэжээлтэй" гэж үзнэ. Үүнийг \`relayState\`-тэй нийлүүлж болохгүй.`);
+  md.push(`- \`relayState(row)\` нь \`power\`, \`totalP\`, \`current\`, \`Ia\` зэрэг хэрэглээний утгаар "Гудамж ассан/асаагүй" төлөв гаргана.`);
+  md.push(`- Segment холбоос: \`sl_feeder_cable.feed_point_id + cable_segment_id\`; ADW оноолт: \`sl_feed_point_device.feed_point_id + dev_eui\`.`);
+  md.push(`- Шонгийн segment төлөвийг \`poleSegmentStatus()\` тооцно. \`segment.pole_start..pole_end\` доторх шон тухайн segment-ийн node/relay төлөвөөр шар/саарал болно.`);
+  md.push(`- \`iotSegmentVisualStatus()\` дээр тэжээлийн цэг эсвэл ADW оноолтгүй segment default \`off\` буюу саарал байна.`);
+  md.push(`- Ажлын pipeline: трасс, шон байрлуулах → cable segment таслах → тэжээлийн цэг үүсгэх → segment-тэй холбох → ADW node оноох → ChirpStack uplink ERP-д ирэх → map/KPI шинэчлэгдэх.`);
+  md.push(`- Do not break: \`hasLinePower()\` = шитэнд хүчдэл байгаа; \`relayState()\` = гудамжны гэрэл ассан эсэх. Энэ хоёр өөр утгатай.`);
+  md.push(`- Official diagnostics: \`GET /api/iot/diagnostics\` нь node fault ангилал, шит→feed point→feeder cable→segment→pole range холбоосын шалгалт, work order candidate-уудыг буцаана.`);
+  md.push(`- Draft workflow: \`POST /api/iot/diagnostics/draft-work-orders\` нь active fault candidate дээр \`asset_events\` draft ажил үүсгэнэ. Duplicate хамгаалалт нь \`material_note\` доторх \`IOT_FAULT_KEY:...\` marker-аар хийгдэнэ.`);
+  md.push(`- Fault category эхний хувилбарууд: \`node_signal_lost\`, \`decoder_or_payload_missing\`, \`panel_no_line_power\`, \`street_light_off\`, \`street_state_unknown\`, \`ok\`.`);
+
   // Architectural rules
   md.push(`\n## Архитектурын чухал дүрмүүд\n`);
   md.push(`1. **state** — \`import { state } from "./common.js"\` хэлбэрээр л ашиглана. \`window.state\` гэж байхгүй.`);
