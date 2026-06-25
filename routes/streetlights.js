@@ -1352,17 +1352,56 @@ router.get("/sl-faults", auth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+function todayIsoDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function normalizeOptionalDate(value) {
+  const text = String(value || "").trim();
+  if (!text) return todayIsoDate();
+  const date = new Date(text);
+  if (Number.isNaN(date.getTime())) return null;
+  return text.slice(0, 10);
+}
+
+function positiveInt(value) {
+  const n = Number(value);
+  return Number.isInteger(n) ? n : NaN;
+}
+
+function validateFaultPayload(body, { allowZeroBroken = false } = {}) {
+  const b = body || {};
+  const category = String(b.category || "").trim();
+  const locationName = String(b.location_name || "").trim();
+  const reportDate = normalizeOptionalDate(b.report_date);
+  const totalHeads = positiveInt(b.total_heads);
+  const brokenCount = positiveInt(b.broken_count);
+
+  if (!category) return { error: "Ангилал шаардлагатай" };
+  if (!locationName) return { error: "Байршил шаардлагатай" };
+  if (!reportDate) return { error: "Огноо буруу байна" };
+  if (!Number.isInteger(totalHeads) || totalHeads < 1) return { error: "Нийт толгой 1-ээс бага байж болохгүй" };
+  if (!Number.isInteger(brokenCount) || brokenCount < (allowZeroBroken ? 0 : 1)) {
+    return { error: allowZeroBroken ? "Гэмтсэн тоо 0-ээс бага байж болохгүй" : "Гэмтсэн тоо 1-ээс бага байж болохгүй" };
+  }
+  if (brokenCount > totalHeads) return { error: "Гэмтсэн тоо нийт толгойноос их байж болохгүй" };
+
+  return { category, locationName, reportDate, totalHeads, brokenCount };
+}
+
 router.post("/sl-faults", auth, async (req, res) => {
   try {
     const b = req.body;
+    const valid = validateFaultPayload(b);
+    if (valid.error) return res.status(400).json({ error: valid.error });
     const r = await run(
       `INSERT INTO sl_faults(category,location_id,location_name,location_type,total_heads,broken_count,report_date,notes,reported_by)
        VALUES(?,?,?,?,?,?,?,?,?)`,
-      [b.category, b.location_id||null, b.location_name, b.location_type||null,
-       b.total_heads||0, b.broken_count||0, b.report_date||null, b.notes||null, req.user.id]
+      [valid.category, b.location_id||null, valid.locationName, b.location_type||null,
+       valid.totalHeads, valid.brokenCount, valid.reportDate, b.notes||null, req.user.id]
     );
-    await audit(req.user.id, "CREATE", "sl_faults", r.id, `${b.category}: ${b.location_name}`);
-    await saveLightingDailySnapshot(b.report_date || null, "fault_create").catch(() => {});
+    await audit(req.user.id, "CREATE", "sl_faults", r.id, `${valid.category}: ${valid.locationName}`);
+    await saveLightingDailySnapshot(valid.reportDate, "fault_create").catch(() => {});
     res.json({ id: r.id });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
@@ -1370,13 +1409,20 @@ router.post("/sl-faults", auth, async (req, res) => {
 router.put("/sl-faults/:id", auth, async (req, res) => {
   try {
     const b = req.body;
+    const fault = await get("SELECT * FROM sl_faults WHERE id=?", [req.params.id]);
+    if (!fault) return res.status(404).json({ error: "Гэмтэл олдсонгүй" });
+    const valid = validateFaultPayload(b, { allowZeroBroken: true });
+    if (valid.error) return res.status(400).json({ error: valid.error });
+    if (Number(fault.fixed_count || 0) > 0 && valid.brokenCount !== Number(fault.broken_count || 0)) {
+      return res.status(400).json({ error: "Засвар бүртгэгдсэн тул гэмтсэн тоог шууд өөрчлөх боломжгүй" });
+    }
     await run(
       `UPDATE sl_faults SET category=?,location_id=?,location_name=?,total_heads=?,
        broken_count=?,notes=?,report_date=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`,
-      [b.category, b.location_id||null, b.location_name, b.total_heads||0,
-       b.broken_count||0, b.notes||null, b.report_date||null, req.params.id]
+      [valid.category, b.location_id||null, valid.locationName, valid.totalHeads,
+       valid.brokenCount, b.notes||null, valid.reportDate, req.params.id]
     );
-    await saveLightingDailySnapshot(b.report_date || null, "fault_update").catch(() => {});
+    await saveLightingDailySnapshot(valid.reportDate, "fault_update").catch(() => {});
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
@@ -1408,10 +1454,20 @@ router.post("/sl-fault-repairs", auth, async (req, res) => {
   try {
     const b = req.body;
     const faultId  = b.fault_id;
-    const headsFix = parseInt(b.heads_fixed) || 0;
+    const headsFix = positiveInt(b.heads_fixed);
+    if (!Number.isInteger(headsFix) || headsFix < 1) {
+      return res.status(400).json({ error: "Зассан толгой 1-ээс бага байж болохгүй" });
+    }
 
     const fault = await get("SELECT * FROM sl_faults WHERE id=?", [faultId]);
     if (!fault) return res.status(404).json({ error: "Гэмтэл олдсонгүй" });
+
+    const currentBroken = Number(fault.broken_count || 0);
+    const currentFixed = Number(fault.fixed_count || 0);
+    const originalBroken = currentBroken + currentFixed;
+    if (headsFix > currentBroken) {
+      return res.status(400).json({ error: "Зассан толгой үлдсэн гэмтсэн тооноос их байж болохгүй" });
+    }
 
     // Insert repair record
     const r = await run(
@@ -1421,8 +1477,11 @@ router.post("/sl-fault-repairs", auth, async (req, res) => {
     );
 
     // Update fault: decrease broken, increase fixed
-    const newBroken  = Math.max(0, fault.broken_count - headsFix);
-    const newFixed   = fault.fixed_count + headsFix;
+    const newBroken  = Math.max(0, currentBroken - headsFix);
+    const newFixed   = currentFixed + headsFix;
+    if (newFixed > originalBroken) {
+      return res.status(400).json({ error: "Зассан нийт тоо анхны гэмтсэн тооноос давж болохгүй" });
+    }
     const newStatus  = newBroken === 0 ? "Дууссан"
                      : newFixed  > 0   ? "Засварт"
                      :                   "Нээлттэй";
@@ -1482,7 +1541,7 @@ router.get("/sl-analytics/export", auth, async (req, res) => {
     const end   = `${Number(year)+1}-01-01`;
     const cats  = LIGHTING_CATEGORIES;
 
-    const [totals, reported, repaired, openNow, locations, snapshots] = await Promise.all([
+    const [totals, reported, repaired, reportedToDate, repairedToDate, openNow, locations, snapshots] = await Promise.all([
       lightingCategoryTotals(),
       all(`SELECT category, substr(report_date,1,7) ym,
                   SUM(broken_count + fixed_count) reported_heads, COUNT(*) fault_count
@@ -1492,6 +1551,16 @@ router.get("/sl-analytics/export", auth, async (req, res) => {
            FROM sl_fault_repairs r JOIN sl_faults f ON f.id=r.fault_id
            WHERE r.repair_date>=? AND r.repair_date<?
            GROUP BY f.category, substr(r.repair_date,1,7)`, [start, end]),
+      all(`SELECT category, substr(report_date,1,7) ym,
+                  SUM(broken_count + fixed_count) reported_heads
+           FROM sl_faults
+           WHERE report_date<?
+           GROUP BY category, substr(report_date,1,7)`, [end]),
+      all(`SELECT f.category, substr(r.repair_date,1,7) ym,
+                  SUM(r.heads_fixed) repaired_heads
+           FROM sl_fault_repairs r JOIN sl_faults f ON f.id=r.fault_id
+           WHERE r.repair_date<?
+           GROUP BY f.category, substr(r.repair_date,1,7)`, [end]),
       all(`SELECT category, SUM(broken_count) open_heads
            FROM sl_faults WHERE status!='Дууссан' GROUP BY category`),
       all(`SELECT f.category, f.location_name,
@@ -1531,7 +1600,13 @@ router.get("/sl-analytics/export", auth, async (req, res) => {
         const r = repMap[`${cat}|${ym}`] || {};
         const f = fixMap[`${cat}|${ym}`] || {};
         const snap = snapshotByMonth[ym]?.[cat] || null;
-        const catOpen = snap ? Number(snap.broken_count||0) : 0;
+        const cumulativeReported = reportedToDate
+          .filter(x => x.category === cat && x.ym <= ym)
+          .reduce((s, x) => s + Number(x.reported_heads || 0), 0);
+        const cumulativeRepaired = repairedToDate
+          .filter(x => x.category === cat && x.ym <= ym)
+          .reduce((s, x) => s + Number(x.repaired_heads || 0), 0);
+        const catOpen = snap ? Number(snap.broken_count||0) : Math.max(0, cumulativeReported - cumulativeRepaired);
         const catCap  = snap ? Number(snap.total_count||0)  : (totals[cat]||0);
         rep  += Number(r.reported_heads||0);
         fix  += Number(f.repaired_heads||0);
