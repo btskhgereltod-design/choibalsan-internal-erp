@@ -1378,6 +1378,7 @@ function validateFaultPayload(body, { allowZeroBroken = false } = {}) {
   const brokenCount = positiveInt(b.broken_count);
 
   if (!category) return { error: "Ангилал шаардлагатай" };
+  if (!LIGHTING_CATEGORIES.includes(category)) return { error: "Ангилал буруу байна" };
   if (!locationName) return { error: "Байршил шаардлагатай" };
   if (!reportDate) return { error: "Огноо буруу байна" };
   if (!Number.isInteger(totalHeads) || totalHeads < 1) return { error: "Нийт толгой 1-ээс бага байж болохгүй" };
@@ -1585,12 +1586,17 @@ router.get("/sl-analytics/export", auth, async (req, res) => {
     repaired.forEach(r => { fixMap[`${r.category}|${r.ym}`] = r; });
     const openMap = {};
     openNow.forEach(r => { openMap[r.category] = r; });
+    const ASSET_TRACKED = new Set(["Гэрлэн дохио"]);
     const snapshotByMonth = {};
+    const latestSnapByCategory = {};
     snapshots.forEach(s => {
       const ym = String(s.snapshot_date || "").slice(0, 7);
       if (!snapshotByMonth[ym]) snapshotByMonth[ym] = {};
       const prev = snapshotByMonth[ym][s.category];
       if (!prev || String(s.snapshot_date) > String(prev.snapshot_date)) snapshotByMonth[ym][s.category] = s;
+      if (!latestSnapByCategory[s.category] || String(s.snapshot_date) > String(latestSnapByCategory[s.category].snapshot_date)) {
+        latestSnapByCategory[s.category] = s;
+      }
     });
 
     const months = Array.from({ length: 12 }, (_, i) => {
@@ -1599,7 +1605,7 @@ router.get("/sl-analytics/export", auth, async (req, res) => {
       cats.forEach(cat => {
         const r = repMap[`${cat}|${ym}`] || {};
         const f = fixMap[`${cat}|${ym}`] || {};
-        const snap = snapshotByMonth[ym]?.[cat] || null;
+        const snap = snapshotByMonth[ym]?.[cat] || (ASSET_TRACKED.has(cat) ? (latestSnapByCategory[cat] || null) : null);
         const cumulativeReported = reportedToDate
           .filter(x => x.category === cat && x.ym <= ym)
           .reduce((s, x) => s + Number(x.reported_heads || 0), 0);
