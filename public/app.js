@@ -21,6 +21,7 @@ import './modules/eng_hub.js?v=20260529monthfilter';
 import './modules/field.js?v=20260608hseacktarget';
 import './modules/habea_hub.js';
 import './modules/my_job_description.js?v=20260610';
+import './modules/website.js?v=20260623';
 import { initErpAssistant } from './modules/assistant.js?v=20260612chatreactions';
 import { dev_requests } from './modules/dev_requests.js';
 
@@ -43,6 +44,9 @@ window.addEventListener("resize", syncMobileClass);
 window.addEventListener("orientationchange", syncMobileClass);
 
 const roleMenus = {
+  director:       ["eng_hub","habea_hub","dashboard","personal_plan","my_job_description","website","assets","attendance","work","hr","letters","plans","reports","report_schedule","reports_unified","audit","dev_requests","ai_test",
+                   ...FINANCE_MENUS, ...WAREHOUSE_MENUS, ...LIGHTING_MENUS, ...CAMERA_MENUS, "settings"],
+  chief_engineer: ["eng_hub","habea_hub","dashboard","personal_plan","my_job_description","website","assets","attendance","work","letters","docs","plans","reports","reports_unified","dev_requests",
   director:       ["eng_hub","habea_hub","dashboard","personal_plan","my_job_description","assets","attendance","work","citizen_reports","hr","letters","plans","reports","report_schedule","reports_unified","audit","dev_requests","ai_test","code_export",
                    ...FINANCE_MENUS, ...WAREHOUSE_MENUS, ...LIGHTING_MENUS, ...CAMERA_MENUS, "settings"],
   chief_engineer: ["eng_hub","habea_hub","dashboard","personal_plan","my_job_description","assets","attendance","work","citizen_reports","letters","docs","plans","reports","reports_unified","dev_requests","code_export","settings",
@@ -52,6 +56,10 @@ const roleMenus = {
                    "letters", ...WAREHOUSE_MENUS],
   accountant:     ["dashboard","personal_plan","my_job_description","attendance","reports","report_schedule",
                    "letters","plans", ...FINANCE_MENUS, ...LIGHTING_MENUS],
+  hr:             ["dashboard","personal_plan","my_job_description","website","attendance","hr","letters","reports","report_schedule","payroll","plans"],
+  safety:         ["habea_hub","dashboard","personal_plan","my_job_description","attendance","hr","letters","reports","plans"],
+  electric:       ["dashboard","personal_plan","my_job_description","attendance","work","field","letters","reports","plans", ...LIGHTING_MENUS],
+  camera_engineer:["dashboard","personal_plan","my_job_description","attendance","work","field","letters","docs","reports","plans", ...CAMERA_MENUS],
   hr:             ["dashboard","personal_plan","my_job_description","attendance","hr","citizen_reports","letters","reports","report_schedule","payroll","plans"],
   safety:         ["habea_hub","dashboard","personal_plan","my_job_description","attendance","hr","letters","reports","plans","settings"],
   electric:       ["dashboard","personal_plan","my_job_description","attendance","work","field","citizen_reports","letters","reports","plans", ...LIGHTING_MENUS],
@@ -65,6 +73,7 @@ const menuNames = {
   dashboard:     "📊 Нэгдсэн дэлгэц",
   personal_plan: "✓ Миний төлөвлөгөө",
   my_job_description: "📄 Миний ажлын байрны тодорхойлолт",
+  website:       "🌐 Вэб сайт",
   assets:        "🏗 Объектийн бүртгэл",
   attendance:    "⏱ Ирц / цагийн бүртгэл",
   work:          "📅 Ажлын явц (Gantt)",
@@ -127,6 +136,7 @@ const menuGroups = [
   { label: "ХЯНАХ САМБАР",        items: ["dashboard","personal_plan","my_job_description"] },
   { label: "ОБЪЕКТИЙН БҮРТГЭЛ",  items: ["assets"] },
   { label: "ҮЙЛДЛИЙН УДИРДЛАГА", items: ["attendance","work","field"] },
+  { label: "БАЙГУУЛЛАГА",         items: ["website","hr","letters","eng_hub","habea_hub","safety","plans", ...LIGHTING_MENUS, ...CAMERA_MENUS, "finance", ...WAREHOUSE_MENUS, "payroll"] },
   { label: "БАЙГУУЛЛАГА",         items: ["hr","letters","citizen_reports","eng_hub","habea_hub","safety","plans", ...LIGHTING_MENUS, ...CAMERA_MENUS, "finance", ...WAREHOUSE_MENUS, "payroll"] },
   { label: "ТАЙЛАН & ХЯНАЛТ",    items: ["reports","report_schedule","reports_unified","audit"] },
   { label: "ERP ХӨГЖҮҮЛЭЛТ",   items: ["dev_requests","ai_test","code_export"] },
@@ -316,6 +326,8 @@ async function resetPassword() {
         <div style="font-weight:700;margin-bottom:8px">Нууц үг шинэчлэгдлээ!</div>
         <p style="font-size:13px;color:var(--ink3)">Шинэ нууц үгээрээ нэвтэрч болно.</p>
       </div>`;
+    history.replaceState(null, "", "/erp");
+    setTimeout(() => renderLogin(), 2500);
     history.replaceState(null, "", "/login");
     setTimeout(() => location.replace("/login"), 2500);
   } catch(e) {

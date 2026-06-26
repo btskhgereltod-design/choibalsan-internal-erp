@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="mn">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Чойбалсан хөгжил ОНӨҮГ</title>
+  <meta name="description" content="Чойбалсан хөгжил ОНӨҮГ-ийн иргэдэд нээлттэй албан ёсны вэб сайт." />
+  <link rel="icon" href="/logo.jpg" type="image/jpeg" />
+  <link rel="stylesheet" href="/home.css?v=20260624civic" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="brand">
+      <img src="/logo.jpg" alt="Чойбалсан хөгжил ОНӨҮГ лого" />
+      <div>
+        <strong>ЧОЙБАЛСАН ХӨГЖИЛ ОНӨҮГ</strong>
+        <span>Албан ёсны вэб сайт</span>
+      </div>
+    </div>
+    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="mainNav" aria-label="Цэс нээх">
+      <span></span><span></span><span></span>
+    </button>
+    <nav id="mainNav" class="main-nav" aria-label="Үндсэн цэс">
+      <a class="nav-link" href="/" data-page="home">Нүүр</a>
+
+      <div class="nav-item has-dropdown">
+        <button class="nav-link dropdown-toggle" type="button" aria-expanded="false">
+          Бидний тухай <span class="nav-caret" aria-hidden="true"></span>
+        </button>
+        <div class="dropdown-menu">
+          <a href="#about" data-page="about" data-title="Алсын хараа, эрхэм зорилго, үнэт зүйлс">Алсын хараа, эрхэм зорилго, үнэт зүйлс</a>
+          <a href="#about" data-page="about" data-title="Танилцуулга">Танилцуулга</a>
+          <a href="#about" data-page="about" data-title="Бүтэц зохион байгуулалт">Бүтэц зохион байгуулалт</a>
+          <a href="#contact" data-page="contact">Холбоо барих</a>
+        </div>
+      </div>
+
+      <div class="nav-item has-dropdown">
+        <button class="nav-link dropdown-toggle" type="button" aria-expanded="false">
+          Хүний нөөц <span class="nav-caret" aria-hidden="true"></span>
+        </button>
+        <div class="dropdown-menu">
+          <a href="#jobs" data-page="job" data-title="Сонгон шалгаруулалтын зарчим">Сонгон шалгаруулалтын зарчим</a>
+          <a href="#jobs" data-page="job" data-title="Нээлттэй ажлын байр">Нээлттэй ажлын байр</a>
+          <a href="#jobs" data-page="job" data-title="Ёс зүйн дүрэм">Ёс зүйн дүрэм</a>
+        </div>
+      </div>
+
+      <a class="nav-link" href="#news" data-page="news">Мэдээ мэдээлэл</a>
+
+      <div class="nav-item has-dropdown">
+        <button class="nav-link dropdown-toggle" type="button" aria-expanded="false">
+          Үйл ажиллагаа <span class="nav-caret" aria-hidden="true"></span>
+        </button>
+        <div class="dropdown-menu">
+          <a href="#lighting" data-page="lighting" data-title="Гэрэлтүүлгийн тойм">Гэрэлтүүлгийн тойм</a>
+          <a href="#hse" data-page="hse" data-title="ХАБЭА / Аюул мэдээлэх">ХАБЭА / Аюул мэдээлэх</a>
+        </div>
+      </div>
+
+      <div class="nav-item has-dropdown">
+        <button class="nav-link dropdown-toggle" type="button" aria-expanded="false">
+          Ил тод <span class="nav-caret" aria-hidden="true"></span>
+        </button>
+        <div class="dropdown-menu dropdown-menu-right">
+          <a href="#transparency" data-page="transparency" data-title="Жилийн үйл ажиллагааны тайлан">Жилийн үйл ажиллагааны тайлан</a>
+          <a href="#transparency" data-page="transparency" data-title="Тендерийн урилга">Тендерийн урилга</a>
+          <a href="#transparency" data-page="transparency" data-title="Худалдан авалтын төлөвлөгөө">Худалдан авалтын төлөвлөгөө</a>
+          <a href="#transparency" data-page="transparency" data-title="Санхүүгийн тайлан">Санхүүгийн тайлан</a>
+          <a href="#transparency" data-page="transparency" data-title="Шилэн данс">Шилэн данс</a>
+        </div>
+      </div>
+    </nav>
+    <a class="erp-link" href="/erp">Ажилтны нэвтрэх</a>
+  </header>
+
+  <main id="home">
+    <section id="heroBlock" class="hero" aria-label="Нүүр хэсэг">
+      <img class="hero-img" src="/team1.png" alt="Чойбалсан хотын шөнийн гэрэлтүүлэг" />
+      <div class="hero-shade"></div>
+      <div class="hero-content">
+        <p id="heroKicker" class="eyebrow">Албан ёсны вэб сайт · мэдээллийн урсгал</p>
+        <h1 id="heroTitle">Хотын үйлчилгээний нэгдсэн портал</h1>
+        <p id="heroText" class="hero-text">Иргэн та байгууллагын мэдээлэл авч, хотын үйлчилгээтэй холбоотой аюул, гэмтлийг шуурхай мэдээлэх боломжтой.</p>
+        <div class="hero-actions">
+          <button type="button" data-dialog-open="hazardDialog" data-dialog-tab="report">Гэмтэл мэдээлэх</button>
+          <button type="button" data-dialog-open="hazardDialog" data-dialog-tab="track">Мэдээллийн төлөв шалгах</button>
+          <a href="#service" data-page="service">Үйлчилгээний мэдээлэл</a>
+        </div>
+      </div>
+      <div class="hero-status" aria-label="Системийн төлөв">
+        <span class="status-dot"></span>
+        <div>
+          <strong>Систем онлайн</strong>
+          <p>Иргэдийн мэдээллийг 24/7 хүлээн авна</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="homeHighlights" class="home-highlights" aria-labelledby="highlightsTitle">
+      <div class="quick-service-panel">
+        <div class="quick-service-heading">
+          <p class="section-kicker">Иргэдийн үйлчилгээ</p>
+          <h2 id="highlightsTitle">Танд юу хэрэгтэй вэ?</h2>
+        </div>
+        <div class="quick-action-grid">
+          <button class="quick-action quick-action-primary" type="button" data-dialog-open="hazardDialog" data-dialog-tab="report">
+            <span class="quick-action-icon" aria-hidden="true">!</span>
+            <span><strong>Гэмтэл мэдээлэх</strong><small>Байршил, зурагтай мэдээлэл илгээх</small></span>
+          </button>
+          <button class="quick-action" type="button" data-dialog-open="hazardDialog" data-dialog-tab="track">
+            <span class="quick-action-icon" aria-hidden="true">#</span>
+            <span><strong>Мэдээллийн төлөв шалгах</strong><small>Илгээсэн мэдээллийн явцыг харах</small></span>
+          </button>
+          <a class="quick-action" href="#service" data-page="service">
+            <span class="quick-action-icon" aria-hidden="true">Ү</span>
+            <span><strong>Үйлчилгээний мэдээлэл</strong><small>Үндсэн чиглэл, үйлчилгээний тойм</small></span>
+          </a>
+          <a class="quick-action" href="#news" data-page="news">
+            <span class="quick-action-icon" aria-hidden="true">М</span>
+            <span><strong>Сүүлийн мэдээ</strong><small>Зар, мэдээлэлтэй танилцах</small></span>
+          </a>
+        </div>
+      </div>
+
+      <div class="public-kpi-grid">
+        <a class="public-kpi" data-icon="⚡" href="#lighting" data-page="lighting" data-title="Гэрэлтүүлгийн тойм">
+          <strong id="homeOverallPct">—</strong>
+          <span>нийт гэрэлтүүлгийн асалт</span>
+        </a>
+        <a class="public-kpi" data-icon="🛣️" href="#lighting" data-page="lighting" data-title="Гэрэлтүүлгийн тойм">
+          <strong id="homeRoadPct">—</strong>
+          <span>авто замын гэрэл</span>
+        </a>
+        <a class="public-kpi" data-icon="🏘️" href="#lighting" data-page="lighting" data-title="Гэрэлтүүлгийн тойм">
+          <strong id="homeGerPct">—</strong>
+          <span>гэр хорооллын гэрэл</span>
+        </a>
+        <a class="public-kpi" data-icon="🗼" href="#lighting" data-page="lighting" data-title="Гэрэлтүүлгийн тойм">
+          <strong id="homeTowerPct">—</strong>
+          <span>цамхагийн гэрэл</span>
+        </a>
+        <a class="public-kpi public-kpi-action" data-icon="🚦" href="#lighting" data-page="lighting" data-title="Гэрэлтүүлгийн тойм">
+          <strong id="homeTrafficPct">—</strong>
+          <span>гэрлэн дохионы ажиллагаа</span>
+        </a>
+      </div>
+
+      <div class="home-content-grid">
+        <section class="home-latest civic-panel" aria-labelledby="latestTitle">
+          <div class="home-latest-head">
+            <div>
+              <p class="section-kicker">Мэдээ мэдээлэл</p>
+              <h2 id="latestTitle">Сүүлийн мэдээлэл</h2>
+            </div>
+            <a href="#news" data-page="news">Бүгдийг харах</a>
+          </div>
+          <div id="homeLatestList" class="home-latest-grid" aria-live="polite">
+            <div class="content-empty">Мэдээлэл уншиж байна...</div>
+          </div>
+        </section>
+
+        <aside class="home-info civic-panel" aria-labelledby="infoTitle">
+          <div class="home-latest-head">
+            <div>
+              <p class="section-kicker">Товч мэдээлэл</p>
+              <h2 id="infoTitle">Байгууллага</h2>
+            </div>
+          </div>
+          <div class="compact-info-list">
+            <article>
+              <span>01</span>
+              <div><h3>Бидний тухай</h3><p>Эрхэм зорилго, танилцуулга, бүтэц.</p></div>
+              <a href="#about" data-page="about" data-title="Танилцуулга">Дэлгэрэнгүй</a>
+            </article>
+            <article>
+              <span>02</span>
+              <div><h3>Үйл ажиллагааны үе шат</h3><p>Байгууллагын хөгжлийн үндсэн үе.</p></div>
+              <a href="#stages" data-page="stages">Дэлгэрэнгүй</a>
+            </article>
+            <article>
+              <span>03</span>
+              <div><h3>Үндсэн чиглэлүүд</h3><p>Гэрэлтүүлэг, хяналт, хотын үйлчилгээ.</p></div>
+              <a href="#service" data-page="service">Дэлгэрэнгүй</a>
+            </article>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section id="contentPage" class="content-page" hidden>
+      <button class="back-btn" type="button" onclick="showHomePage()">← Буцах</button>
+      <p id="contentKicker" class="section-kicker">Мэдээлэл</p>
+      <h1 id="contentTitle">Гарчиг</h1>
+      <div id="contentBody" class="content-body"></div>
+    </section>
+
+  </main>
+
+  <dialog id="hazardDialog" class="service-dialog" aria-labelledby="hazardDialogTitle">
+    <div class="dialog-head">
+      <div>
+        <p class="section-kicker">Иргэдийн үйлчилгээ</p>
+        <h2 id="hazardDialogTitle">Гэмтэл, аюул мэдээлэх</h2>
+      </div>
+      <button class="dialog-close" type="button" data-dialog-close aria-label="Цонх хаах">×</button>
+    </div>
+    <div class="dialog-tabs" role="tablist" aria-label="Мэдээллийн үйлчилгээ">
+      <button type="button" role="tab" data-dialog-tab-button="report" aria-selected="true">Мэдээлэл илгээх</button>
+      <button type="button" role="tab" data-dialog-tab-button="track" aria-selected="false">Мэдээллийн төлөв шалгах</button>
+    </div>
+    <div class="dialog-panel" data-dialog-panel="report">
+      <p class="dialog-intro">Гэрэлтүүлэг, зам талбай, тоног төхөөрөмж болон аюултай нөхцөлийг байршил, зурагтай мэдээлнэ үү.</p>
+      <form id="hazardForm" class="public-form compact-form">
+        <div class="form-grid">
+          <div>
+            <label for="hazardLocation">Байршил <span>*</span></label>
+            <input id="hazardLocation" required placeholder="Жишээ: 3-р баг, төв замын уулзвар">
+          </div>
+          <div>
+            <label for="hazardType">Гэмтлийн төрөл</label>
+            <select id="hazardType">
+              <option value="">Сонгох</option>
+              <option>Гэрэлтүүлэг</option><option>Гэрлэн дохио</option>
+              <option>Ил утас / цахилгаан</option><option>Зам талбай</option>
+              <option>Ажлын байр / ХАБЭА</option><option>Бусад</option>
+            </select>
+          </div>
+        </div>
+        <label for="hazardDescription">Тайлбар <span>*</span></label>
+        <textarea id="hazardDescription" required rows="3" placeholder="Юу болсон, ямар эрсдэл байгааг товч бичнэ үү"></textarea>
+        <div class="form-grid">
+          <div>
+            <label for="hazardImage">Зураг</label>
+            <input id="hazardImage" type="file" accept="image/jpeg,image/png,image/webp">
+            <small class="form-help">JPG, PNG, WebP · 5MB хүртэл</small>
+          </div>
+          <div class="form-grid contact-fields">
+            <div><label for="hazardName">Таны нэр</label><input id="hazardName" placeholder="Заавал биш"></div>
+            <div><label for="hazardPhone">Утас</label><input id="hazardPhone" placeholder="Холбогдох утас"></div>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="submit">Мэдээлэл илгээх</button>
+          <small>Илгээсний дараа танд шалгах код өгнө.</small>
+        </div>
+        <div id="hazardResult" class="form-result" hidden></div>
+      </form>
+    </div>
+    <div class="dialog-panel" data-dialog-panel="track" hidden>
+      <article class="tracking-card">
+        <h3>Мэдээллийн төлөв шалгах</h3>
+        <p>Мэдээлэл илгээхэд авсан кодоо оруулна уу.</p>
+        <form id="trackingForm" class="tracking-form">
+          <input id="trackingCode" required placeholder="CHD-2026-XXXXXXXX" autocomplete="off">
+          <button type="submit">Шалгах</button>
+        </form>
+        <div id="trackingResult" class="tracking-result" hidden></div>
+      </article>
+    </div>
+  </dialog>
+
+  <footer id="contact" class="site-footer">
+    <div>
+      <strong id="footerOrgName">Чойбалсан хөгжил ОНӨҮГ</strong>
+      <p id="footerAddress">Дорнод аймаг, Чойбалсан хот</p>
+    </div>
+    <div class="footer-links">
+      <a href="#about" data-page="about" data-title="Танилцуулга">Бидний тухай</a>
+      <a href="#news" data-page="news">Мэдээ</a>
+      <a href="#hse" data-page="hse">Аюул мэдээлэх</a>
+    </div>
+    <div class="footer-contact">
+      <span id="footerPhone"></span>
+      <span id="footerEmail"></span>
+    </div>
+  </footer>
+
+  <script src="/home.js?v=20260624portal" defer></script>
+</body>
+</html>
