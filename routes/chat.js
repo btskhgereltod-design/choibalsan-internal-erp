@@ -51,7 +51,7 @@ router.get("/chat/users", auth, async (req, res) => {
              CASE WHEN ls.last_seen > datetime('now','localtime','-5 minutes') THEN 1 ELSE 0 END AS is_online
       FROM users u
       LEFT JOIN user_last_seen ls ON ls.user_id = u.id
-      WHERE u.active = 1 AND u.id != ?
+      WHERE u.active = 1 AND u.id != ? AND u.role != 'ai_readonly'
       ORDER BY is_online DESC, u.full_name
     `, [req.user.id]);
     res.json(users);

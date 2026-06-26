@@ -288,6 +288,97 @@ router.get("/fiber-routes", auth, async (req, res) => {
   res.json(rows.map(r => ({ ...r, geojson: JSON.parse(r.geojson || "{}") })));
 });
 
+router.get("/fiber-points", auth, async (req, res) => {
+  await run(`CREATE TABLE IF NOT EXISTS fiber_points (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    route_id INTEGER,
+    route_b_id INTEGER,
+    point_type TEXT DEFAULT 'Муфт',
+    name TEXT NOT NULL,
+    lat REAL NOT NULL,
+    lng REAL NOT NULL,
+    splice_json TEXT DEFAULT '[]',
+    note TEXT DEFAULT '',
+    created_by INTEGER,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+  )`).catch(() => {});
+  await run(`ALTER TABLE fiber_points ADD COLUMN route_b_id INTEGER`).catch(() => {});
+  await run(`ALTER TABLE fiber_points ADD COLUMN splice_json TEXT DEFAULT '[]'`).catch(() => {});
+  const rows = await all(`SELECT p.*, r.name route_name, rb.name route_b_name, u.full_name created_name
+                          FROM fiber_points p
+                          LEFT JOIN fiber_routes r ON r.id=p.route_id
+                          LEFT JOIN fiber_routes rb ON rb.id=p.route_b_id
+                          LEFT JOIN users u ON u.id=p.created_by
+                          ORDER BY p.updated_at DESC, p.id DESC`);
+  res.json(rows.map(r => ({ ...r, splice: JSON.parse(r.splice_json || "[]") })));
+});
+
+router.post("/fiber-points", auth, requirePermission("assets_write"), async (req, res) => {
+  try {
+    await run(`CREATE TABLE IF NOT EXISTS fiber_points (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      route_id INTEGER,
+      route_b_id INTEGER,
+      point_type TEXT DEFAULT 'Муфт',
+      name TEXT NOT NULL,
+      lat REAL NOT NULL,
+      lng REAL NOT NULL,
+      splice_json TEXT DEFAULT '[]',
+      note TEXT DEFAULT '',
+      created_by INTEGER,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`).catch(() => {});
+    await run(`ALTER TABLE fiber_points ADD COLUMN route_b_id INTEGER`).catch(() => {});
+    await run(`ALTER TABLE fiber_points ADD COLUMN splice_json TEXT DEFAULT '[]'`).catch(() => {});
+    const b = req.body || {};
+    const name = String(b.name || "").trim();
+    const lat = Number(b.lat);
+    const lng = Number(b.lng);
+    if (!name) return res.status(400).json({ error: "Цэгийн нэр шаардлагатай" });
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return res.status(400).json({ error: "GPS координат буруу байна" });
+    const routeId = b.route_id ? Number(b.route_id) : null;
+    const routeBId = b.route_b_id ? Number(b.route_b_id) : null;
+    const r = await run(
+      `INSERT INTO fiber_points(route_id,route_b_id,point_type,name,lat,lng,note,splice_json,created_by)
+       VALUES(?,?,?,?,?,?,?,?,?)`,
+      [routeId || null, routeBId || null, b.point_type || "Муфт", name, lat, lng, b.note || "", JSON.stringify(b.splice || []), req.user.id]
+    );
+    await audit(req.user.id, "CREATE", "fiber_points", r.id, name);
+    res.json({ id: r.id });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.patch("/fiber-points/:id/splice", auth, requirePermission("assets_write"), async (req, res) => {
+  try {
+    await run(`ALTER TABLE fiber_points ADD COLUMN route_b_id INTEGER`).catch(() => {});
+    await run(`ALTER TABLE fiber_points ADD COLUMN splice_json TEXT DEFAULT '[]'`).catch(() => {});
+    const b = req.body || {};
+    const routeId = b.route_id ? Number(b.route_id) : null;
+    const routeBId = b.route_b_id ? Number(b.route_b_id) : null;
+    const splice = Array.isArray(b.splice) ? b.splice.map(row => ({
+      a_core: Math.max(1, Number(row.a_core || 1)),
+      a_color: String(row.a_color || ""),
+      b_core: Math.max(1, Number(row.b_core || 1)),
+      b_color: String(row.b_color || ""),
+      note: String(row.note || "")
+    })) : [];
+    await run(
+      `UPDATE fiber_points SET route_id=?, route_b_id=?, splice_json=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+      [routeId || null, routeBId || null, JSON.stringify(splice), req.params.id]
+    );
+    await audit(req.user.id, "UPDATE", "fiber_points", req.params.id, "fiber splice updated");
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete("/fiber-points/:id", auth, requirePermission("assets_write"), async (req, res) => {
+  await run("DELETE FROM fiber_points WHERE id=?", [req.params.id]);
+  await audit(req.user.id, "DELETE", "fiber_points", req.params.id, "fiber point deleted");
+  res.json({ ok: true });
+});
+
 router.post("/fiber-routes", auth, requirePermission("assets_write"), async (req, res) => {
   try {
     await run(`ALTER TABLE fiber_routes ADD COLUMN core_count INTEGER DEFAULT 0`).catch(() => {});
@@ -563,7 +654,7 @@ router.post("/assets/:id/files", auth, requirePermission("assets_write"), upload
   res.json({ id: r.id, file_path: relative });
 });
 
-router.delete("/asset-files/:id", auth, async (req, res) => {
+router.delete("/asset-files/:id", auth, requirePermission("assets_write"), async (req, res) => {
   const f = await get("SELECT * FROM asset_files WHERE id=?", [req.params.id]);
   if (f) {
     fs.unlink(path.join(UPLOAD_DIR, path.basename(f.file_path)), () => {});
@@ -603,7 +694,7 @@ router.put("/asset-flags/:id/resolve", auth, async (req, res) => {
   res.json({ ok: true });
 });
 
-router.delete("/asset-flags/:id", auth, async (req, res) => {
+router.delete("/asset-flags/:id", auth, requirePermission("assets_write"), async (req, res) => {
   await run("DELETE FROM asset_flags WHERE id=?", [req.params.id]);
   res.json({ ok: true });
 });

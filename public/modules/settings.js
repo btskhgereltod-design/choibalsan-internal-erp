@@ -50,12 +50,14 @@ function regDigits(value) {
 
 async function settings() {
   const isDirector = state.me.role === "director";
+  const canManagePublicAlerts = ["director", "chief_engineer", "safety"].includes(state.me.role);
   _stab = _stab || "org";
 
   const TABS = [
     { key: "org",   icon: "🏢", label: "Байгууллага" },
     { key: "roles", icon: "🔐", label: "Нэвтрэх эрх" },
   ];
+  if (canManagePublicAlerts) TABS.push({ key: "alerts", icon: "🦺", label: "Public сэрэмжлүүлэг" });
   if (!TABS.some(t => t.key === _stab)) _stab = "org";
 
   main.innerHTML = `
@@ -88,11 +90,11 @@ async function settings() {
       b.style.color        = t.key === tab ? "#fff"    : "#667085";
       b.style.borderBottom = t.key === tab ? "2px solid #2563eb" : "2px solid transparent";
     });
-    const fns = { org: stabOrg, roles: stabRoles };
+    const fns = { org: stabOrg, roles: stabRoles, alerts: stabPublicAlerts };
     if (fns[tab]) fns[tab]();
   };
 
-  const fns = { org: stabOrg, roles: stabRoles };
+  const fns = { org: stabOrg, roles: stabRoles, alerts: stabPublicAlerts };
   if (fns[_stab]) fns[_stab]();
 }
 
@@ -151,6 +153,83 @@ async function stabOrg() {
 }
 
 // ── Tab 2: Хэрэглэгчийн эрх ──────────────────────────────────
+
+async function stabPublicAlerts() {
+  const canManage = ["director", "chief_engineer", "safety"].includes(state.me.role);
+  let rows = [];
+  try { rows = await api("/api/public-alerts"); } catch(e) {}
+  const levelName = { info: "Мэдээлэл", warning: "Анхааруулга", danger: "Яаралтай" };
+  const levelColor = { info: "#2563eb", warning: "#d97706", danger: "#dc2626" };
+  document.getElementById("stab_content").innerHTML = `
+    <div class="panel" style="padding:22px">
+      <div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start;margin-bottom:16px">
+        <div>
+          <div style="font-size:14px;font-weight:800;color:#1e293b">🦺 Public сэрэмжлүүлэг</div>
+          <div style="font-size:12px;color:#667085;margin-top:4px">Иргэдийн нүүр хуудасны баруун доод буланд байнга харагдах ХАБЭА/анхааруулга.</div>
+        </div>
+        <a class="btn secondary sm" href="/portal" target="_blank">Нүүр харах</a>
+      </div>
+      ${canManage ? `
+      <div style="display:grid;grid-template-columns:1fr 160px 180px;gap:10px;margin-bottom:10px">
+        <input class="input" id="pa_title" placeholder="Гарчиг">
+        <select class="input" id="pa_level"><option value="warning">Анхааруулга</option><option value="danger">Яаралтай</option><option value="info">Мэдээлэл</option></select>
+        <input class="input" id="pa_location" placeholder="Байршил">
+      </div>
+      <textarea class="input" id="pa_body" style="min-height:76px;resize:vertical;margin-bottom:10px" placeholder="Иргэдэд харагдах сэрэмжлүүлгийн текст..."></textarea>
+      <div style="display:grid;grid-template-columns:1fr 1fr 220px auto;gap:10px;align-items:center;margin-bottom:18px">
+        <input class="input" id="pa_starts" type="datetime-local">
+        <input class="input" id="pa_ends" type="datetime-local">
+        <input class="input" id="pa_image" type="file" accept="image/jpeg,image/png,image/webp,image/gif">
+        <button class="btn" onclick="savePublicAlert()">Нэмэх</button>
+      </div>` : ""}
+      <div style="display:grid;gap:10px">
+        ${rows.length ? rows.map(r => `
+          <article style="border:1px solid #e2e6ed;border-left:5px solid ${levelColor[r.level] || "#d97706"};border-radius:10px;padding:12px;background:${r.active ? "#fff" : "#f8fafc"}">
+            <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
+              <div style="display:flex;gap:10px;align-items:flex-start">
+                ${r.image_url ? `<img src="${escapeHtml(r.image_url)}" style="width:74px;height:54px;object-fit:cover;border-radius:8px;border:1px solid #e2e8f0">` : ""}
+                <div><div style="font-weight:900;color:#0f172a">${escapeHtml(r.title || "")}</div><div style="font-size:12px;color:#667085;margin-top:3px">${levelName[r.level] || r.level} ${r.location ? " · " + escapeHtml(r.location) : ""}</div></div>
+              </div>
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#475569;font-weight:700"><input type="checkbox" ${Number(r.active) ? "checked" : ""} onchange="togglePublicAlert(${r.id}, this.checked)">Идэвхтэй</label>
+            </div>
+            <div style="font-size:13px;color:#344054;line-height:1.45;margin-top:8px">${escapeHtml(r.body || "")}</div>
+          </article>`).join("") : `<div style="padding:18px;border:1px dashed #cbd5e1;border-radius:10px;color:#64748b;text-align:center">Одоогоор сэрэмжлүүлэг алга. Public нүүр default ХАБЭА санамж харуулна.</div>`}
+      </div>
+    </div>`;
+  window.savePublicAlert = async () => {
+    const title = document.getElementById("pa_title")?.value.trim();
+    const body = document.getElementById("pa_body")?.value.trim();
+    if (!title || !body) { toast("Гарчиг болон текст оруулна уу"); return; }
+    try {
+      const fd = new FormData();
+      fd.set("title", title);
+      fd.set("body", body);
+      fd.set("level", document.getElementById("pa_level")?.value || "warning");
+      fd.set("location", document.getElementById("pa_location")?.value || "");
+      fd.set("starts_at", document.getElementById("pa_starts")?.value || "");
+      fd.set("ends_at", document.getElementById("pa_ends")?.value || "");
+      fd.set("active", "1");
+      const img = document.getElementById("pa_image")?.files?.[0];
+      if (img) fd.set("image", img);
+      const res = await fetch("/api/public-alerts", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + state.token },
+        body: fd,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Алдаа гарлаа");
+      toast("Public сэрэмжлүүлэг нэмэгдлээ ✓");
+      stabPublicAlerts();
+    } catch(e) { toast("Алдаа: " + e.message); }
+  };
+  window.togglePublicAlert = async (id, active) => {
+    try {
+      await api(`/api/public-alerts/${id}`, { method: "PATCH", body: JSON.stringify({ active: active ? 1 : 0 }) });
+      toast(active ? "Идэвхжлээ" : "Унтраалаа");
+      stabPublicAlerts();
+    } catch(e) { toast("Алдаа: " + e.message); }
+  };
+}
 
 const PERM_MODULES = [
   { key: "dashboard",    label: "Дашборд / Нүүр хуудас",        icon: "🏠" },
@@ -983,4 +1062,4 @@ function stabDisplay() {
   };
 }
 
-Object.assign(window, { settings, settingsTab: () => {}, stabOrg, stabRoles, stabWorkCats, stabAssetCats, stabDisplay });
+Object.assign(window, { settings, settingsTab: () => {}, stabOrg, stabRoles, stabPublicAlerts, stabWorkCats, stabAssetCats, stabDisplay });

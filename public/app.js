@@ -1,6 +1,6 @@
 import { state, api, toast, initFloatingScrollbar } from './modules/common.js';
 import './modules/dashboard.js?v=20260526dashboardorder';
-import './modules/assets.js?v=20260619cameragpslist';
+import './modules/assets.js?v=20260622fiberlengthsummary';
 import './modules/operations.js?v=20260609autoprogress';
 import './modules/warehouse.js';
 import './modules/hr.js?v=20260612attendanceovertime';
@@ -14,7 +14,8 @@ import './modules/admin_hub.js';
 import './modules/streetlights.js?v=20260618noloratab';
 import './modules/lighting_schedule.js?v=20260527engineeredit';
 import './modules/lora_monitor.js?v=20260618redirect';
-import './modules/iot_monitor.js?v=20260618iotchart';
+import './modules/iot_monitor.js?v=20260622segmentloadcolor';
+import './modules/citizen_reports.js?v=20260622portal';
 import './modules/settings.js?v=20260527loginrights';
 import './modules/eng_hub.js?v=20260529monthfilter';
 import './modules/field.js?v=20260608hseacktarget';
@@ -46,8 +47,11 @@ const roleMenus = {
   director:       ["eng_hub","habea_hub","dashboard","personal_plan","my_job_description","website","assets","attendance","work","hr","letters","plans","reports","report_schedule","reports_unified","audit","dev_requests","ai_test",
                    ...FINANCE_MENUS, ...WAREHOUSE_MENUS, ...LIGHTING_MENUS, ...CAMERA_MENUS, "settings"],
   chief_engineer: ["eng_hub","habea_hub","dashboard","personal_plan","my_job_description","website","assets","attendance","work","letters","docs","plans","reports","reports_unified","dev_requests",
+  director:       ["eng_hub","habea_hub","dashboard","personal_plan","my_job_description","assets","attendance","work","citizen_reports","hr","letters","plans","reports","report_schedule","reports_unified","audit","dev_requests","ai_test","code_export",
+                   ...FINANCE_MENUS, ...WAREHOUSE_MENUS, ...LIGHTING_MENUS, ...CAMERA_MENUS, "settings"],
+  chief_engineer: ["eng_hub","habea_hub","dashboard","personal_plan","my_job_description","assets","attendance","work","citizen_reports","letters","docs","plans","reports","reports_unified","dev_requests","code_export","settings",
                    ...WAREHOUSE_MENUS, ...LIGHTING_MENUS, ...CAMERA_MENUS],
-  engineer:       ["dashboard","personal_plan","my_job_description","attendance","work","field","letters","docs","reports", ...LIGHTING_MENUS],
+  engineer:       ["dashboard","personal_plan","my_job_description","attendance","work","field","citizen_reports","letters","docs","reports", ...LIGHTING_MENUS],
   storekeeper:    ["dashboard","personal_plan","my_job_description","assets","attendance","reports",
                    "letters", ...WAREHOUSE_MENUS],
   accountant:     ["dashboard","personal_plan","my_job_description","attendance","reports","report_schedule",
@@ -56,6 +60,10 @@ const roleMenus = {
   safety:         ["habea_hub","dashboard","personal_plan","my_job_description","attendance","hr","letters","reports","plans"],
   electric:       ["dashboard","personal_plan","my_job_description","attendance","work","field","letters","reports","plans", ...LIGHTING_MENUS],
   camera_engineer:["dashboard","personal_plan","my_job_description","attendance","work","field","letters","docs","reports","plans", ...CAMERA_MENUS],
+  hr:             ["dashboard","personal_plan","my_job_description","attendance","hr","citizen_reports","letters","reports","report_schedule","payroll","plans"],
+  safety:         ["habea_hub","dashboard","personal_plan","my_job_description","attendance","hr","letters","reports","plans","settings"],
+  electric:       ["dashboard","personal_plan","my_job_description","attendance","work","field","citizen_reports","letters","reports","plans", ...LIGHTING_MENUS],
+  camera_engineer:["dashboard","personal_plan","my_job_description","attendance","work","field","citizen_reports","letters","docs","reports","plans", ...CAMERA_MENUS],
   worker:         ["dashboard","my_job_description","field"]
 };
 
@@ -70,6 +78,7 @@ const menuNames = {
   attendance:    "⏱ Ирц / цагийн бүртгэл",
   work:          "📅 Ажлын явц (Gantt)",
   field:         "📱 Талбайн ажил",
+  citizen_reports: "📣 Иргэдийн санал хүсэлт",
   materials:     "📦 Агуулах / Материал",
   expenses:      "💰 Зардал",
   admin_hub:     "🏛 Захиргаа / HR / Архив",
@@ -84,6 +93,7 @@ const menuNames = {
   audit:            "🛡 Audit log",
   dev_requests:    "🛠 ERP хөгжүүлэлт",
   ai_test:         "🤖 AI Тест",
+  code_export:     "📦 Архитектур татах",
   settings:        "⚙️ Тохиргоо",
   // Нягтлан
   finance:       "💼 Санхүү",
@@ -127,8 +137,9 @@ const menuGroups = [
   { label: "ОБЪЕКТИЙН БҮРТГЭЛ",  items: ["assets"] },
   { label: "ҮЙЛДЛИЙН УДИРДЛАГА", items: ["attendance","work","field"] },
   { label: "БАЙГУУЛЛАГА",         items: ["website","hr","letters","eng_hub","habea_hub","safety","plans", ...LIGHTING_MENUS, ...CAMERA_MENUS, "finance", ...WAREHOUSE_MENUS, "payroll"] },
+  { label: "БАЙГУУЛЛАГА",         items: ["hr","letters","citizen_reports","eng_hub","habea_hub","safety","plans", ...LIGHTING_MENUS, ...CAMERA_MENUS, "finance", ...WAREHOUSE_MENUS, "payroll"] },
   { label: "ТАЙЛАН & ХЯНАЛТ",    items: ["reports","report_schedule","reports_unified","audit"] },
-  { label: "ERP ХӨГЖҮҮЛЭЛТ",   items: ["dev_requests","ai_test"] },
+  { label: "ERP ХӨГЖҮҮЛЭЛТ",   items: ["dev_requests","ai_test","code_export"] },
   { label: "ТОХИРГОО",    items: ["settings"] },
 ];
 
@@ -317,6 +328,8 @@ async function resetPassword() {
       </div>`;
     history.replaceState(null, "", "/erp");
     setTimeout(() => renderLogin(), 2500);
+    history.replaceState(null, "", "/login");
+    setTimeout(() => location.replace("/login"), 2500);
   } catch(e) {
     if (errEl) { errEl.textContent = e.message || "Алдаа гарлаа"; errEl.style.display = "block"; }
   }
@@ -331,15 +344,33 @@ function logout() {
   localStorage.clear();
   state.token = "";
   state.me    = null;
-  renderLogin();
+  location.replace("/portal");
 }
 
 async function init() {
-  if (!state.token) return renderLogin();
+  const path = location.pathname;
+
+  if (!state.token) {
+    if (path === "/erp") location.replace("/login");
+    else renderLogin();
+    return;
+  }
+
+  // Already logged in — don't show login page again
+  if (path === "/login") {
+    location.replace("/erp");
+    return;
+  }
+
   try {
     state.users = await api("/api/users");
   } catch {
-    return renderLogin();
+    localStorage.removeItem("token");
+    localStorage.removeItem("me");
+    state.token = "";
+    state.me    = null;
+    location.replace("/login");
+    return;
   }
   renderShell();
   initFloatingScrollbar();
@@ -678,6 +709,7 @@ function updateActiveMenu(m) {
 }
 
 async function show(m) {
+  if (m !== "camera_assets") window.closeFiberWorkspace?.();
   state.current = m;
   updateActiveMenu(m);
   if (state.clockTimer) { clearInterval(state.clockTimer); state.clockTimer = null; }
@@ -685,8 +717,46 @@ async function show(m) {
   if (typeof fn === "function") return fn();
 }
 
+async function code_export() {
+  const main = document.getElementById("main") || document.querySelector(".main");
+  if (main) main.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:center;min-height:60vh">
+      <div style="background:#fff;border-radius:12px;padding:40px 48px;box-shadow:0 2px 16px #0001;text-align:center;max-width:440px">
+        <div style="font-size:2.5rem;margin-bottom:12px">📦</div>
+        <h2 style="margin:0 0 8px;font-size:1.25rem">ERP Архитектур татах</h2>
+        <p style="color:#666;margin:0 0 24px;font-size:.95rem;line-height:1.5">
+          ChatGPT Project-д upload хийх <code>.md</code> файл.<br>
+          ERP-ийн бүтэн бүтэц, database, endpoint, логикийг агуулна.
+        </p>
+        <button id="codeExportBtn" onclick="window._doCodeExport()" style="background:#1a56db;color:#fff;border:none;padding:13px 32px;border-radius:8px;font-size:1rem;cursor:pointer;width:100%">
+          ⬇ Татах
+        </button>
+        <div id="codeExportMsg" style="margin-top:14px;font-size:.9rem;color:#555"></div>
+      </div>
+    </div>`;
+}
+
+window._doCodeExport = async function() {
+  const btn = document.getElementById("codeExportBtn");
+  const msg = document.getElementById("codeExportMsg");
+  const token = localStorage.getItem("token");
+  if (!token) { msg.innerHTML = '<span style="color:#c0392b">ERP-д нэвтрээгүй байна.</span>'; return; }
+  btn.disabled = true; btn.textContent = "Бэлдэж байна..."; msg.textContent = "";
+  try {
+    const r = await fetch("/api/ai/code-export", { headers: { Authorization: "Bearer " + token } });
+    if (!r.ok) { const e = await r.json(); msg.innerHTML = `<span style="color:#c0392b">Алдаа: ${e.error}</span>`; btn.disabled = false; btn.textContent = "⬇ Татах"; return; }
+    const blob = await r.blob();
+    const cd = r.headers.get("Content-Disposition") || "";
+    const fn = cd.match(/filename="([^"]+)"/)?.[1] || "erp-architecture.md";
+    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: fn });
+    a.click(); URL.revokeObjectURL(a.href);
+    msg.innerHTML = `✅ <b>${fn}</b> татагдлаа! ChatGPT Project-д upload хийнэ үү.`;
+    btn.disabled = false; btn.textContent = "⬇ Дахин татах";
+  } catch(e) { msg.innerHTML = `<span style="color:#c0392b">${e.message}</span>`; btn.disabled = false; btn.textContent = "⬇ Татах"; }
+};
+
 Object.assign(window, {
-  login, logout, renderLogin, show, toggleSideGroup,
+  login, logout, renderLogin, show, toggleSideGroup, code_export,
   chooseMyAvatar, uploadMyAvatar,
   showForgotPassword, showLoginView, forgotPassword, resetPassword,
   loadNotifications, toggleNotifPanel, notifRead, notifReadAll,

@@ -239,13 +239,13 @@ router.put("/work-logs/:id", auth, requirePermission("operations_write"), async 
   if (refError) return res.status(400).json({ error: refError });
   const assetIds = parseWorkAssetIds(b);
   const resolvedAssetId = await resolveAssetId(b);
-  const computedProgress = await syncWorkProgress(req.params.id);
+  const manualProgress = normalizeProgress(Number(b.progress ?? 0));
   await run(`UPDATE asset_events SET title=?,category=?,department=?,location=?,description=?,
     status=?,progress=?,assigned_to=?,work_date=?,start_date=?,end_date=?,cost_amount=?,
     material_note=?,asset_id=?,asset_ids=?,ger_inventory_id=?,sl_point_id=?,sl_sub_category=?,
     updated_at=CURRENT_TIMESTAMP WHERE id=?`,
     [b.title, b.category, b.department || "", b.location || "", b.description || "",
-     b.status || WORK_ORDER_STATUS.IN_PROGRESS, computedProgress, b.assigned_to || null,
+     b.status || WORK_ORDER_STATUS.IN_PROGRESS, manualProgress, b.assigned_to || null,
      b.work_date, b.start_date || null, b.end_date || null,
      b.cost_amount || 0, b.material_note || "", resolvedAssetId, JSON.stringify(assetIds),
      b.ger_inventory_id || null, b.sl_point_id || null, b.sl_sub_category || null,
@@ -793,7 +793,7 @@ router.put("/plans/:id", auth, async (req, res) => {
   res.json({ ok: true });
 });
 
-router.delete("/plans/:id", auth, async (req, res) => {
+router.delete("/plans/:id", auth, requirePermission("operations_write"), async (req, res) => {
   const rec = await get("SELECT * FROM plans WHERE id=?", [req.params.id]);
   if (!rec) return res.status(404).json({ error: "Олдсонгүй" });
   await run("DELETE FROM plan_items WHERE plan_id=?", [req.params.id]);
@@ -827,7 +827,7 @@ router.post("/plans/:id/items", auth, async (req, res) => {
   res.json({ id: r.id });
 });
 
-router.delete("/plan-items/:id", auth, async (req, res) => {
+router.delete("/plan-items/:id", auth, requirePermission("operations_write"), async (req, res) => {
   const rec = await get("SELECT * FROM plan_items WHERE id=?", [req.params.id]);
   if (!rec) return res.status(404).json({ error: "Олдсонгүй" });
   await run("DELETE FROM plan_items WHERE id=?", [req.params.id]);
@@ -859,7 +859,7 @@ router.post("/plans/:id/files", auth, upload.single("file"), async (req, res) =>
   res.json({ id: r.id, file_path: relative, file_name: req.file.originalname || req.file.filename });
 });
 
-router.delete("/plan-files/:id", auth, async (req, res) => {
+router.delete("/plan-files/:id", auth, requirePermission("operations_write"), async (req, res) => {
   const rec = await get("SELECT * FROM plan_files WHERE id=?", [req.params.id]);
   if (!rec) return res.status(404).json({ error: "Олдсонгүй" });
   await run("DELETE FROM plan_files WHERE id=?", [req.params.id]);

@@ -102,7 +102,7 @@ async function runTests(baseUrl, token) {
                           : `⚠ ${orphaned[0].c} гүйцэтгэл эзэн ажилгүй`);
 
     // Users with no department
-    const noDept = await all("SELECT COUNT(*) as c FROM users WHERE (department IS NULL OR department='') AND active=1");
+    const noDept = await all("SELECT COUNT(*) as c FROM users WHERE (department IS NULL OR department='') AND active=1 AND role<>'ai_readonly'");
     rec("🗄 DB integrity", "Тасаггүй ажилтан", noDept[0].c === 0,
       noDept[0].c === 0 ? "✓ Бүх ажилтан тасагтай"
                         : `⚠ ${noDept[0].c} ажилтан тасаггүй байна`);
@@ -253,7 +253,7 @@ router.post("/ai-test/run", auth, requireRole("director"), async (req, res) => {
 
     // DB stats for context
     const [userCount, workCount, assetCount, chatCount, execCount] = await Promise.all([
-      get("SELECT COUNT(*) as c FROM users WHERE active=1"),
+      get("SELECT COUNT(*) as c FROM users WHERE active=1 AND role<>'ai_readonly'"),
       get("SELECT COUNT(*) as c FROM asset_events"),
       get("SELECT COUNT(*) as c FROM assets"),
       get("SELECT COUNT(*) as c FROM chat_messages"),

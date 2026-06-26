@@ -62,11 +62,15 @@ function extractMeta(text) {
     }
   }
 
-  // last comma-formatted number > 1,000,000 in the invoice text (e.g. 28,653,630.63)
+  // Take the last number > 1,000,000 that appears BEFORE "Эцсийн үлдэгдэл" / "Нийт орлого".
+  // pdf2json joins all text in one page as a single space-separated string (no \n within a page),
+  // so keyword-line splits are unreliable. Cutting at the accounting-summary boundary is robust.
   let total_amount = 0;
-  for (const m of [...text.matchAll(/\b(\d{1,3}(?:,\d{3})+\.\d{2})\b/g)]) {
+  const cutMatch = text.search(/Эцсийн\s+үлдэгдэл|Нийт\s+орлого/i);
+  const searchText = cutMatch > 0 ? text.slice(0, cutMatch) : text;
+  for (const m of [...searchText.matchAll(/\b(\d{1,3}(?:,\d{3})+\.\d{2})\b/g)]) {
     const v = pNum(m[1]);
-    if (v > 1000000) total_amount = v;
+    if (v > 1_000_000) total_amount = v;
   }
 
   return { invoice_no, billing_year, billing_month, total_amount };

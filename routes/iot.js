@@ -4,6 +4,21 @@ const { requirePermission } = require("../middleware/roles");
 
 const router = express.Router();
 
+// ChirpStack HTTP integration дотор X-IOT-SECRET header тохируулна
+function requireIotSecret(req, res, next) {
+  const secret = process.env.IOT_WEBHOOK_SECRET;
+  if (!secret) {
+    console.warn("[IoT] IOT_WEBHOOK_SECRET not configured — webhook endpoint unprotected");
+    return next();
+  }
+  const provided = req.headers["x-iot-secret"];
+  if (!provided || provided !== secret) {
+    console.warn(`[IoT] Invalid X-IOT-SECRET from ${req.ip}`);
+    return res.status(401).json({ ok: false, error: "Invalid IoT webhook secret" });
+  }
+  next();
+}
+
 function normalizeDevEui(value) {
   return String(value || "").trim().toUpperCase();
 }
@@ -86,6 +101,361 @@ function iotReportRange(period = "night") {
 
 function isReadingOn(row) {
   return Number(row?.power || 0) > 0.01 || Number(row?.current || 0) > 0.02 || String(row?.do_state || "").trim() === "0";
+}
+
+function iotLatestNumber(row, keys) {
+  for (const key of keys) {
+    const value = row?.[key];
+    if (value === null || value === undefined || value === "") continue;
+    const n = Number(value);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
+function iotHasLinePower(row) {
+  const voltage = iotLatestNumber(row, ["Ua", "voltage", "V"]);
+  return voltage !== null && voltage > 1;
+}
+
+function iotHasActiveLoad(row) {
+  const power = iotLatestNumber(row, ["totalP", "power"]);
+  const current = iotLatestNumber(row, ["Ia", "current", "A"]);
+  if (power !== null && power > 0.01) return true;
+  if (current !== null && current > 0.02) return true;
+  if (power !== null || current !== null) return false;
+  return null;
+}
+
+function iotRelayState(row) {
+  const loadOn = iotHasActiveLoad(row);
+  if (loadOn === true) return "on";
+  if (loadOn === false) return "off";
+  const doState = String(row?.DO_State ?? row?.do_state ?? "").trim();
+  if (doState === "0") return "on";
+  if (doState === "1") return "off";
+  return "unknown";
+}
+
+function iotNodeHeard(row, minutes = 10) {
+  if (!row?.last_seen) return false;
+  const t = new Date(row.last_seen).getTime();
+  return Number.isFinite(t) && Date.now() - t <= minutes * 60 * 1000;
+}
+
+function iotFaultKey(parts) {
+  return parts.map(v => String(v ?? "").trim().replace(/\s+/g, "_")).join(":");
+}
+
+function iotTodayLocal() {
+  const local = new Date(Date.now() + 8 * 60 * 60 * 1000);
+  return local.toISOString().slice(0, 10);
+}
+
+function operatorEvent(type, at, message, extra = {}) {
+  return { type, at, message, ...extra };
+}
+
+function operatorEventSeverity(type) {
+  if (["power_lost", "light_off_expected", "signal_gap"].includes(type)) return "warning";
+  if (["auto_on_failed", "command_failed"].includes(type)) return "critical";
+  if (["power_restored", "light_restored", "auto_on_sent", "auto_off_sent"].includes(type)) return "ok";
+  return "info";
+}
+
+function classifyIotDeviceFault(row) {
+  const heard = iotNodeHeard(row);
+  const linePower = iotHasLinePower(row);
+  const relay = iotRelayState(row);
+  const hasMeasurement =
+    iotLatestNumber(row, ["Ua", "voltage", "V", "Ia", "current", "A", "totalP", "power"]) !== null ||
+    row?.DO_State !== null && row?.DO_State !== undefined;
+  if (!heard) {
+    return {
+      code: "node_signal_lost",
+      severity: "critical",
+      label: "Node дохио тасарсан",
+      operator_message: "Сүүлийн 10 минутанд ChirpStack uplink ERP-д ирээгүй. Төхөөрөмж, антен, gateway, ChirpStack HTTP integration шалгана.",
+      active: true,
+    };
+  }
+  if (!hasMeasurement) {
+    return {
+      code: "decoder_or_payload_missing",
+      severity: "warning",
+      label: "Хэмжилтийн decode дутуу",
+      operator_message: "Node сонсогдож байгаа ч хүчдэл/гүйдэл/чадлын утга тайлагдаагүй байна. Decoder payload mapping шалгана.",
+      active: true,
+    };
+  }
+  if (!linePower) {
+    return {
+      code: "panel_no_line_power",
+      severity: "warning",
+      label: "Шит тэжээлгүй",
+      operator_message: "ADW хэмжилтээр шит/оролтын талд хүчдэл харагдахгүй байна.",
+      active: true,
+    };
+  }
+  if (relay === "off") {
+    return {
+      code: "street_light_off",
+      severity: "fault",
+      label: "Гудамж асаагүй",
+      operator_message: "Шит тэжээлтэй боловч гаралтын талд power/current хэрэглээ үүсээгүй байна. Гудамжны гэрэлтүүлгийн хэлхээг шалгана.",
+      active: true,
+    };
+  }
+  if (relay === "unknown") {
+    return {
+      code: "street_state_unknown",
+      severity: "info",
+      label: "Гудамжны төлөв баталгаажаагүй",
+      operator_message: "Шит тэжээлтэй боловч гаралтын хэрэглээг батлах өгөгдөл хангалтгүй байна.",
+      active: false,
+    };
+  }
+  return {
+    code: "ok",
+    severity: "ok",
+    label: "Хэвийн",
+    operator_message: "Node сонсогдсон, шит тэжээлтэй, гудамжны гэрэлтүүлэг хэрэглээ авч байна.",
+    active: false,
+  };
+}
+
+async function buildIotDiagnostics() {
+  const [devices, feedPoints, deviceLinks, feederCables, routes, poles] = await Promise.all([
+    all(`${latestDeviceSelect()} ORDER BY datetime(l.received_at) DESC, l.device_name COLLATE NOCASE`),
+    all("SELECT * FROM sl_feed_point ORDER BY id"),
+    all("SELECT * FROM sl_feed_point_device ORDER BY feed_point_id, id"),
+    all(`SELECT fc.*, fp.name feed_point_name, r.name segment_name, r.parent_route_id, r.pole_start, r.pole_end
+           FROM sl_feeder_cable fc
+           LEFT JOIN sl_feed_point fp ON fp.id=fc.feed_point_id
+           LEFT JOIN sl_network_routes r ON r.id=fc.cable_segment_id
+          ORDER BY fc.feed_point_id, fc.id`),
+    all("SELECT id,name,parent_route_id,route_type,pole_start,pole_end,segment_status FROM sl_network_routes ORDER BY id"),
+    all("SELECT id,route_id,pole_no,display_code,name,pole_type,status FROM sl_network_poles ORDER BY route_id,pole_no,id"),
+  ]);
+
+  const deviceByEui = new Map(devices.map(row => [normalizeDevEui(row.devEui || row.dev_eui), row]));
+  const linksByFeedPoint = new Map();
+  for (const link of deviceLinks) {
+    const arr = linksByFeedPoint.get(Number(link.feed_point_id)) || [];
+    arr.push(link);
+    linksByFeedPoint.set(Number(link.feed_point_id), arr);
+  }
+  const feedersByFeedPoint = new Map();
+  const feedersBySegment = new Map();
+  for (const fc of feederCables) {
+    const fpArr = feedersByFeedPoint.get(Number(fc.feed_point_id)) || [];
+    fpArr.push(fc);
+    feedersByFeedPoint.set(Number(fc.feed_point_id), fpArr);
+    const segArr = feedersBySegment.get(Number(fc.cable_segment_id)) || [];
+    segArr.push(fc);
+    feedersBySegment.set(Number(fc.cable_segment_id), segArr);
+  }
+
+  const deviceDiagnostics = devices.map(row => {
+    const devEui = normalizeDevEui(row.devEui || row.dev_eui);
+    const link = deviceLinks.find(l => normalizeDevEui(l.dev_eui) === devEui && String(l.role || "controller") === "controller") || null;
+    const feedPoint = link ? feedPoints.find(fp => Number(fp.id) === Number(link.feed_point_id)) || null : null;
+    const segments = feedPoint ? (feedersByFeedPoint.get(Number(feedPoint.id)) || []) : [];
+    const fault = classifyIotDeviceFault(row);
+    return {
+      devEui,
+      deviceName: row.deviceName || row.device_name || devEui,
+      deviceModel: row.deviceModel || row.device_model || null,
+      last_seen: row.last_seen || null,
+      heard: iotNodeHeard(row),
+      line_power: iotHasLinePower(row),
+      relay_state: iotRelayState(row),
+      fault,
+      feed_point: feedPoint ? { id: feedPoint.id, name: feedPoint.name, type: feedPoint.type } : null,
+      segments: segments.map(s => ({
+        id: s.cable_segment_id,
+        name: s.segment_name,
+        pole_start: s.pole_start,
+        pole_end: s.pole_end,
+      })),
+    };
+  });
+
+  const topologyIssues = [];
+  for (const fp of feedPoints) {
+    const links = linksByFeedPoint.get(Number(fp.id)) || [];
+    const controllerLinks = links.filter(l => String(l.role || "controller") === "controller");
+    const feeders = feedersByFeedPoint.get(Number(fp.id)) || [];
+    if (!controllerLinks.length) {
+      topologyIssues.push({
+        code: "feed_point_no_node",
+        severity: "warning",
+        feed_point_id: fp.id,
+        feed_point_name: fp.name,
+        message: "Тэжээлийн цэг дээр ADW node оноогдоогүй байна.",
+      });
+    }
+    if (controllerLinks.length > 1) {
+      topologyIssues.push({
+        code: "feed_point_multiple_controllers",
+        severity: "warning",
+        feed_point_id: fp.id,
+        feed_point_name: fp.name,
+        message: "Нэг тэжээлийн цэг дээр controller role-той нэгээс олон node оноогдсон байна.",
+      });
+    }
+    if (!feeders.length) {
+      topologyIssues.push({
+        code: "feed_point_no_feeder_cable",
+        severity: "info",
+        feed_point_id: fp.id,
+        feed_point_name: fp.name,
+        message: "Тэжээлийн цэг cable segment-тэй холбогдоогүй байна.",
+      });
+    }
+    for (const link of links) {
+      if (!deviceByEui.has(normalizeDevEui(link.dev_eui))) {
+        topologyIssues.push({
+          code: "assigned_node_no_uplink_history",
+          severity: "warning",
+          feed_point_id: fp.id,
+          feed_point_name: fp.name,
+          devEui: normalizeDevEui(link.dev_eui),
+          message: "ERP дээр оноосон node-д хэмжилтийн түүх хараахан байхгүй байна.",
+        });
+      }
+    }
+  }
+
+  const cableSegments = routes.filter(r => r.route_type === "cable");
+  for (const segment of cableSegments) {
+    const start = Number(segment.pole_start || 0);
+    const end = Number(segment.pole_end || 0);
+    const linkedFeeders = feedersBySegment.get(Number(segment.id)) || [];
+    const rangePoles = poles.filter(p =>
+      Number(p.route_id) === Number(segment.parent_route_id) &&
+      Number(p.pole_no || 0) >= start &&
+      Number(p.pole_no || 0) <= end &&
+      String(p.pole_type || "pole") !== "feed"
+    );
+    if (!linkedFeeders.length) {
+      topologyIssues.push({
+        code: "segment_no_feed_point",
+        severity: "info",
+        segment_id: segment.id,
+        segment_name: segment.name,
+        pole_start: segment.pole_start,
+        pole_end: segment.pole_end,
+        message: "Cable segment тэжээлийн цэгтэй холбогдоогүй тул шонгууд автоматаар саарал харагдана.",
+      });
+    }
+    if (!start || !end || start > end) {
+      topologyIssues.push({
+        code: "segment_invalid_pole_range",
+        severity: "warning",
+        segment_id: segment.id,
+        segment_name: segment.name,
+        message: "Cable segment-ийн pole_start/pole_end range буруу байна.",
+      });
+    } else if (!rangePoles.length) {
+      topologyIssues.push({
+        code: "segment_no_poles_in_range",
+        severity: "warning",
+        segment_id: segment.id,
+        segment_name: segment.name,
+        pole_start: segment.pole_start,
+        pole_end: segment.pole_end,
+        message: "Segment-ийн range дотор бүртгэлтэй шон олдсонгүй.",
+      });
+    }
+  }
+
+  const candidates = deviceDiagnostics
+    .filter(d => d.fault.active && ["node_signal_lost", "decoder_or_payload_missing", "panel_no_line_power", "street_light_off"].includes(d.fault.code))
+    .map(d => {
+      const location = d.feed_point?.name || d.segments[0]?.name || d.deviceName;
+      const key = iotFaultKey(["iot", d.fault.code, d.devEui, d.feed_point?.id || "no_fp"]);
+      return {
+        key,
+        devEui: d.devEui,
+        title: `[IoT] ${d.fault.label} - ${location}`,
+        category: "Гэрэлтүүлэг засвар",
+        sl_sub_category: "other",
+        department: "Ерөнхий инженерийн алба",
+        location,
+        description: `${d.fault.operator_message}\nNode: ${d.deviceName} (${d.devEui})\nШит тэжээлтэй: ${d.line_power ? "тийм" : "үгүй"}\nГудамжны төлөв: ${d.relay_state}\nСүүлд сонсогдсон: ${d.last_seen || "-"}`,
+        severity: d.fault.severity,
+      };
+    });
+
+  return {
+    generated_at: new Date().toISOString(),
+    online_window_minutes: 10,
+    devices: deviceDiagnostics,
+    topology: {
+      feed_points: feedPoints.length,
+      feeder_cables: feederCables.length,
+      cable_segments: cableSegments.length,
+      poles: poles.filter(p => String(p.pole_type || "pole") !== "feed").length,
+      issues: topologyIssues,
+    },
+    summary: {
+      total_nodes: deviceDiagnostics.length,
+      heard_nodes: deviceDiagnostics.filter(d => d.heard).length,
+      line_power_on: deviceDiagnostics.filter(d => d.line_power).length,
+      street_on: deviceDiagnostics.filter(d => d.relay_state === "on").length,
+      active_faults: deviceDiagnostics.filter(d => d.fault.active).length,
+      topology_issues: topologyIssues.length,
+    },
+    work_order_candidates: candidates,
+  };
+}
+
+async function createIotDraftWorkOrders({ userId }) {
+  const diag = await buildIotDiagnostics();
+  const created = [];
+  const skipped = [];
+  const today = iotTodayLocal();
+  for (const item of diag.work_order_candidates) {
+    const marker = `IOT_FAULT_KEY:${item.key}`;
+    const existing = await get(
+      `SELECT id,title,status FROM asset_events
+        WHERE category='Гэрэлтүүлэг засвар'
+          AND COALESCE(sl_sub_category,'')='other'
+          AND status NOT IN ('Дууссан','Цуцлагдсан','Цуцалсан','Хаагдсан')
+          AND material_note LIKE ?
+        ORDER BY id DESC LIMIT 1`,
+      [`%${marker}%`]
+    );
+    if (existing) {
+      skipped.push({ key: item.key, existing_id: existing.id, title: existing.title, reason: "duplicate_open_work_order" });
+      continue;
+    }
+    const r = await run(
+      `INSERT INTO asset_events(title,category,department,location,description,status,progress,
+        assigned_to,created_by,work_date,start_date,end_date,cost_amount,material_note,sl_sub_category)
+       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [
+        item.title,
+        item.category,
+        item.department,
+        item.location,
+        item.description,
+        "Хүлээгдэж байгаа",
+        0,
+        null,
+        userId,
+        today,
+        today,
+        today,
+        0,
+        `${marker}\nsource=iot_diagnostics\nseverity=${item.severity}`,
+        item.sl_sub_category,
+      ]
+    );
+    created.push({ key: item.key, id: r.id, title: item.title });
+  }
+  return { generated_at: diag.generated_at, created, skipped, candidates: diag.work_order_candidates.length };
 }
 
 function round(value, digits = 2) {
@@ -324,7 +694,7 @@ function latestDeviceSelect(whereClause = "") {
   `;
 }
 
-router.post("/iot/chirpstack/uplink", async (req, res) => {
+router.post("/iot/chirpstack/uplink", requireIotSecret, async (req, res) => {
   const body = req.body || {};
   const obj = decodedObject(body);
   const deviceInfo = body.deviceInfo || {};
@@ -480,7 +850,7 @@ async function recordCommandEvent({ body, eventType, status, responseColumn }) {
   return { ok: true, devEui, status };
 }
 
-router.post("/iot/chirpstack/txack", async (req, res) => {
+router.post("/iot/chirpstack/txack", requireIotSecret, async (req, res) => {
   const result = await recordCommandEvent({
     body: req.body || {},
     eventType: "chirpstack_txack",
@@ -490,7 +860,7 @@ router.post("/iot/chirpstack/txack", async (req, res) => {
   res.status(result.ok ? 200 : 400).json(result);
 });
 
-router.post("/iot/chirpstack/ack", async (req, res) => {
+router.post("/iot/chirpstack/ack", requireIotSecret, async (req, res) => {
   const result = await recordCommandEvent({
     body: req.body || {},
     eventType: "chirpstack_ack",
@@ -517,6 +887,22 @@ router.get("/iot/devices", auth, async (_req, res) => {
     ORDER BY datetime(l.received_at) DESC, l.device_name COLLATE NOCASE
   `);
   res.json(rows);
+});
+
+router.get("/iot/diagnostics", auth, async (_req, res) => {
+  try {
+    res.json(await buildIotDiagnostics());
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post("/iot/diagnostics/draft-work-orders", auth, requirePermission("operations_write"), async (req, res) => {
+  try {
+    res.json(await createIotDraftWorkOrders({ userId: req.user.id }));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 router.get("/iot/report", auth, async (req, res) => {
@@ -578,20 +964,47 @@ router.get("/iot/report", auth, async (req, res) => {
     let scheduleOnSamples = 0;
     let scheduleMatchedSamples = 0;
     const transitions = [];
+    const operatorEvents = [];
+    let prevLinePower = null;
     for (const row of rows) {
       const t = new Date(row.received_at).getTime();
       if (prevTime) {
         const gap = (t - prevTime) / 60000;
-        if (gap > 20) offlineGaps += 1;
+        if (gap > 20) {
+          offlineGaps += 1;
+          operatorEvents.push(operatorEvent(
+            "signal_gap",
+            row.received_at,
+            `Node дохио ${round(gap, 0)} минут тасарсан байж магадгүй`,
+            { minutes: round(gap, 1) }
+          ));
+        }
         if (gap > maxGapMinutes) maxGapMinutes = gap;
       }
       const on = isReadingOn(row);
+      const linePower = iotHasLinePower(row);
       const schedule = activeScheduleFor(scheduleLogs, config.category, localDateKeyFromIso(row.received_at));
       const expectedOn = scheduledOnAt(schedule, row.received_at);
       if (expectedOn !== null) {
         scheduleKnownSamples += 1;
         if (expectedOn) scheduleOnSamples += 1;
         if (expectedOn === on) scheduleMatchedSamples += 1;
+      }
+      if (prevLinePower !== null && prevLinePower !== linePower) {
+        operatorEvents.push(operatorEvent(
+          linePower ? "power_restored" : "power_lost",
+          row.received_at,
+          linePower ? "Шитний тэжээл сэргэсэн" : "Шитний тэжээл тасарсан",
+          { voltage: round(row.voltage ?? row.ua, 1) }
+        ));
+      }
+      if (expectedOn === true && prevOn !== null && prevOn !== on) {
+        operatorEvents.push(operatorEvent(
+          on ? "light_restored" : "light_off_expected",
+          row.received_at,
+          on ? "Асах ёстой үед гэрэл дахин ассан" : "Асах ёстой үед гэрэл унтарсан",
+          { power: round(row.power ?? row.total_power, 3), current: round(row.current ?? row.ia, 2) }
+        ));
       }
       if (prevOn !== null && prevOn !== on) {
         transitions.push({
@@ -604,6 +1017,7 @@ router.get("/iot/report", auth, async (req, res) => {
       }
       prevTime = t;
       prevOn = on;
+      prevLinePower = linePower;
     }
     const commandsForDevice = commands
       .filter(c => normalizeDevEui(c.dev_eui) === devEui)
@@ -614,9 +1028,25 @@ router.get("/iot/report", auth, async (req, res) => {
         status: c.status,
         model: c.device_model,
       }));
+    for (const c of commands.filter(c => normalizeDevEui(c.dev_eui) === devEui)) {
+      const role = String(c.requested_by_role || "");
+      if (role === "system" && c.action === "ON") {
+        operatorEvents.push(operatorEvent("auto_on_sent", c.requested_at, "ERP автоматаар ON command дахин илгээсэн", { status: c.status }));
+      } else if (role === "system" && c.action === "OFF") {
+        operatorEvents.push(operatorEvent("auto_off_sent", c.requested_at, "ERP schedule дагуу OFF command илгээсэн", { status: c.status }));
+      } else if (c.action === "ON") {
+        operatorEvents.push(operatorEvent("manual_on_sent", c.requested_at, "Оператор ON command илгээсэн", { status: c.status, role }));
+      } else if (c.action === "OFF") {
+        operatorEvents.push(operatorEvent("manual_off_sent", c.requested_at, "Оператор OFF command илгээсэн", { status: c.status, role }));
+      }
+    }
     const energyDelta = Number(last.energy) - Number(first.energy);
     const avgPowerKw = avgOf("power");
     const latestSchedule = activeScheduleFor(scheduleLogs, config.category, localDateKeyFromIso(last.received_at || new Date().toISOString()));
+    const sortedOperatorEvents = operatorEvents
+      .filter(e => e.at)
+      .map(e => ({ ...e, severity: operatorEventSeverity(e.type) }))
+      .sort((a, b) => String(a.at).localeCompare(String(b.at)));
     return {
       devEui,
       deviceName: last.device_name || first.device_name || devEui,
@@ -649,6 +1079,7 @@ router.get("/iot/report", auth, async (req, res) => {
       lastSeen: last.received_at || null,
       offlineGaps,
       maxGapMinutes: round(maxGapMinutes, 1),
+      operatorEvents: sortedOperatorEvents.slice(-30),
       events: [...commandsForDevice, ...transitions].sort((a, b) => String(a.at).localeCompare(String(b.at))).slice(-20),
     };
   });
@@ -670,6 +1101,22 @@ router.get("/iot/report", auth, async (req, res) => {
     offlineGaps: summaries.reduce((sum, r) => sum + Number(r.offlineGaps || 0), 0),
     commands: commands.length,
   };
+  const operatorEvents = summaries
+    .flatMap(d => (d.operatorEvents || []).map(e => ({
+      ...e,
+      devEui: d.devEui,
+      deviceName: d.deviceName,
+    })))
+    .sort((a, b) => String(a.at).localeCompare(String(b.at)));
+  const operatorSummary = {
+    events: operatorEvents,
+    powerEvents: operatorEvents.filter(e => ["power_lost", "power_restored", "signal_gap"].includes(e.type)).length,
+    autoCommands: operatorEvents.filter(e => ["auto_on_sent", "auto_off_sent"].includes(e.type)).length,
+    lightProblems: operatorEvents.filter(e => e.type === "light_off_expected").length,
+    recovered: operatorEvents.filter(e => e.type === "light_restored").length,
+    critical: operatorEvents.filter(e => e.severity === "critical").length,
+    warnings: operatorEvents.filter(e => e.severity === "warning").length,
+  };
 
   res.json({
     period: range.period,
@@ -678,6 +1125,7 @@ router.get("/iot/report", auth, async (req, res) => {
     from: fromIso,
     to: toIso,
     totals,
+    operatorSummary,
     devices: summaries.sort((a, b) => String(a.deviceName).localeCompare(String(b.deviceName))),
     commands: commands.slice(-50),
   });

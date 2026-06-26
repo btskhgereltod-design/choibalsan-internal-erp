@@ -56,7 +56,7 @@ router.get("/my-salary", auth, async (req, res) => {
 
 router.get("/users", auth, async (_, res) => {
   res.json(await all(
-    "SELECT id,username,full_name,role,position,department,phone,email,register_no,address,avatar_url,active,can_login,permissions FROM users WHERE active=1 ORDER BY id"));
+    "SELECT id,username,full_name,role,position,department,phone,email,register_no,address,avatar_url,active,can_login,permissions FROM users WHERE active=1 AND role<>'ai_readonly' ORDER BY id"));
 });
 
 // Full user list for HR module (salary masked for non-hr/director)
@@ -69,7 +69,7 @@ router.get("/users-full", auth, async (req, res) => {
             emergency_contact,active,can_login,created_at,contract_scan_url,
             haot_exempt,
             ${canSeeSalary ? "salary,skill_allowance_rate,skill_allowance,tenure_years,tenure_allowance_rate,tenure_allowance,meal_allowance" : "NULL AS salary,NULL AS skill_allowance_rate,NULL AS skill_allowance,NULL AS tenure_years,NULL AS tenure_allowance_rate,NULL AS tenure_allowance,NULL AS meal_allowance"}
-     FROM users WHERE active=1 ORDER BY full_name`);
+     FROM users WHERE active=1 AND role<>'ai_readonly' ORDER BY full_name`);
   res.json(rows);
 });
 
@@ -156,7 +156,7 @@ router.post("/hr-history", auth, requirePermission("hr_write"), async (req,res) 
 // HR Stats
 router.get("/hr-stats", auth, async (req,res) => {
   const canSeeSalary = ["director","hr"].includes(req.user.role);
-  const users = await all(`SELECT *,${canSeeSalary?'salary':'0 AS salary'} FROM users WHERE active=1`);
+  const users = await all(`SELECT *,${canSeeSalary?'salary':'0 AS salary'} FROM users WHERE active=1 AND role<>'ai_readonly'`);
   const today = new Date().toISOString().slice(0,10);
   const in60  = new Date(Date.now()+60*864e5).toISOString().slice(0,10);
 

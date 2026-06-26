@@ -584,7 +584,7 @@ router.put("/nyarav/todos/:id", auth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-router.delete("/nyarav/todos/:id", auth, async (req, res) => {
+router.delete("/nyarav/todos/:id", auth, requirePermission("warehouse_write"), async (req, res) => {
   const existing = await getTodoForAccess(req.params.id, req.user);
   if (existing === null) return res.status(404).json({ error: "Ажил олдсонгүй" });
   if (existing === false) return res.status(403).json({ error: "Эрх хүрэхгүй" });

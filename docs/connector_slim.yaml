@@ -1,0 +1,580 @@
+openapi: 3.1.0
+
+info:
+  title: Чойбалсан ERP — AI Connector (Slim)
+  version: "1.0.0"
+  description: |
+    Чойбалсан хөгжил ОНӨААТҮГ-ийн ERP системтэй ChatGPT Project connector.
+    Зөвхөн read-only. DELETE/PUT/PATCH ямар ч endpoint байхгүй.
+
+    ## Хэзээ ямар action дуудах
+
+    | Хэрэглэгчийн асуулт | Action |
+    |---|---|
+    | "ERP өнөөдөр ямар байна?", "Яаралтай зүйл байна уу?", "Захиралд тайлагнах мэдээлэл өг", "Нэгтгэл харуул", "Өнөөдрийн байдал?" | **getExecutiveDailySummary** |
+    | "Гэрэл хэдэд асах вэ?", "Гэрэл хэдэд унтрах вэ?", "Өнөөдрийн гэрэлтүүлгийн хуваарь?", "Гар удирдлага идэвхтэй юу?", "Яаралтай унтраалт байна уу?" | **getLightingScheduleToday** |
+
+servers:
+  - url: https://www.choibalsan-hugjil.com
+    description: Чойбалсан ERP продакшн сервер
+
+security:
+  - bearerAuth: []
+
+components:
+  schemas: {}
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        AI readonly хэрэглэгчийн JWT token. Bearer <token> хэлбэрээр илгээнэ.
+
+paths:
+
+  /api/ai/executive/daily:
+    get:
+      operationId: getExecutiveDailySummary
+      summary: Өнөөдрийн захиралын нэгтгэл
+      description: |
+        Байгууллагын өнөөдрийн бүрэн дүр зургийг нэг дуудалтаар буцаана.
+        Гэрэлтүүлэг, гэмтэл, ажлын даалгавар, IoT, агуулах, ирц, эрсдэл, санал.
+
+        Дуудах үед: "ERP өнөөдөр ямар байна?", "Яаралтай зүйл байна уу?",
+        "Захиралд тайлагнах мэдээлэл өг", "Өнөөдрийн нэгтгэл харуул".
+      tags: [Захирал]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Өнөөдрийн захиралын нэгтгэл
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generated_at:
+                    type: string
+                    format: date-time
+                    description: Хариулт үүссэн цаг (ISO 8601)
+                  date:
+                    type: string
+                    format: date
+                    description: Өнөөдрийн огноо (YYYY-MM-DD)
+                  lighting:
+                    type: object
+                    description: Гэрэлтүүлгийн нэгтгэл
+                    properties:
+                      availability_pct:
+                        type: number
+                        nullable: true
+                        description: Гэрэлтүүлгийн хүртээмжийн хувь (хэвийн ≥95%)
+                      open_faults:
+                        type: integer
+                        description: Нийт нээлттэй гэмтлийн тоо
+                      oldest_open_faults:
+                        type: array
+                        description: Хамгийн удаан нээлттэй гэмтлүүд
+                        items:
+                          type: object
+                          properties:
+                            id:            { type: integer }
+                            location_name: { type: string, description: "Байршлын нэр" }
+                            category:      { type: string }
+                            broken_count:  { type: integer, description: "Эвдэрсэн чийдэнгийн тоо" }
+                            report_date:   { type: string, format: date }
+                            days_open:     { type: integer, description: "Нээлттэй байсан хоногийн тоо" }
+                  work_orders:
+                    type: object
+                    description: Ажлын даалгаврын нэгтгэл
+                    properties:
+                      overdue_count:
+                        type: integer
+                        description: Хугацаа хэтэрсэн ажлын тоо
+                      today_by_status:
+                        type: array
+                        description: Өнөөдөр дуусах ёстой ажлын статус бүрийн тоо
+                        items:
+                          type: object
+                          properties:
+                            status: { type: string }
+                            cnt:    { type: integer }
+                  iot:
+                    type: object
+                    description: IoT төхөөрөмжийн нэгтгэл
+                    properties:
+                      offline_count:
+                        type: integer
+                        description: Холболтгүй (offline) node-ийн тоо
+                      alarm_count:
+                        type: integer
+                        description: Дохиолол идэвхтэй node-ийн тоо
+                  inventory:
+                    type: object
+                    description: Агуулахын нэгтгэл
+                    properties:
+                      total_low_stock_items:
+                        type: integer
+                        description: Хамгийн бага хэмжээнээс доош байгаа барааны тоо
+                      low_stock_warehouse:
+                        type: array
+                        description: Дутагдаж байгаа бараануудын жагсаалт
+                        items:
+                          type: object
+                          properties:
+                            name:        { type: string }
+                            unit:        { type: string }
+                            min_qty:     { type: number }
+                            current_qty: { type: number }
+                  attendance_this_month:
+                    type: object
+                    description: Энэ сарын ирцийн нэгтгэл
+                    properties:
+                      records_count:
+                        type: integer
+                        description: Ирц бүртгэгдсэн нийт тоо
+                      total_absent:
+                        type: number
+                        description: Нийт чөлөөний хоног
+                      total_late:
+                        type: integer
+                        description: Хоцорч ирсэн тохиолдлын тоо
+                  top_risks:
+                    type: array
+                    description: Хамгийн чухал эрсдэлүүд (дээд тал нь 5)
+                    items:
+                      type: object
+                      properties:
+                        level:
+                          type: string
+                          enum: [high, medium, low]
+                          description: Эрсдэлийн түвшин
+                        area:
+                          type: string
+                          description: Эрсдэл илэрсэн чиглэл
+                        msg:
+                          type: string
+                          description: Эрсдэлийн дэлгэрэнгүй тайлбар
+                  recommended_actions:
+                    type: array
+                    description: Захиралд зориулсан дараагийн алхмуудын санал
+                    items:
+                      type: string
+        "401":
+          description: Token байхгүй эсвэл буруу
+        "403":
+          description: AI эрх дутуу
+        "429":
+          description: Хэт олон хүсэлт (60/минут)
+
+  /api/ai/lighting/schedule-today:
+    get:
+      operationId: getLightingScheduleToday
+      summary: Өнөөдрийн гэрэлтүүлгийн асах/унтрах хуваарь
+      description: >
+        Өнөөдрийн гэрэлтүүлгийн хуваарийг категори бүрээр буцаана.
+        Эх сурвалж: emergency_override > manual_today > schedule > no_data.
+        Дуудах үед: "Гэрэл хэдэд асах?", "Унтрах цаг?", "Хуваарь ямар?",
+        "Гар удирдлага?", "Яаралтай унтраалт?".
+      tags: [Гэрэлтүүлэг]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Өнөөдрийн гэрэлтүүлгийн хуваарь
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generated_at:
+                    type: string
+                    format: date-time
+                  date:
+                    type: string
+                    format: date
+                    description: Өнөөдрийн огноо
+                  manual_override_count:
+                    type: integer
+                    description: Өнөөдөр гараар тохируулсан хуваарийн тоо (0 = хэвийн автомат)
+                  priority_order:
+                    type: array
+                    description: Шийдвэрийн эх сурвалжийн давуу эрхийн дараалал
+                    items:
+                      type: string
+                    example: [emergency_override, manual_today, schedule, no_data]
+                  schedules:
+                    type: array
+                    description: Категори бүрийн эцсийн хуваарь
+                    items:
+                      type: object
+                      properties:
+                        category:
+                          type: string
+                          description: "Гэрэлтүүлгийн ангилал (жишээ: Авто замын гэрэл)"
+                        final_on_time:
+                          type: string
+                          nullable: true
+                          description: "Эцсийн асах цаг (HH:MM формат, жишээ: 20:40)"
+                        final_off_time:
+                          type: string
+                          nullable: true
+                          description: "Эцсийн унтрах цаг (HH:MM формат, жишээ: 01:00)"
+                        is_always_off:
+                          type: boolean
+                          description: true = яаралтай бүрэн унтраалт идэвхтэй
+                        decision_source:
+                          type: string
+                          enum: [emergency_override, manual_today, schedule, no_data]
+                          description: |
+                            Эцсийн шийдвэрийн эх сурвалж:
+                            emergency_override = яаралтай унтраалт
+                            manual_today = өнөөдөр гараар тохируулсан
+                            schedule = хэвийн автомат хуваарь
+                            no_data = хуваарь тохируулаагүй
+                        decision_priority:
+                          type: string
+                          description: decision_source-ийн монгол тайлбар
+                        override_detail:
+                          type: object
+                          nullable: true
+                          description: manual_today үед тохируулсан дэлгэрэнгүй
+                          properties:
+                            adjusted_date: { type: string, format: date }
+                            notes:         { type: string, nullable: true }
+                        default_schedule:
+                          type: object
+                          nullable: true
+                          description: Үндсэн хуваарийн мэдээлэл
+                          properties:
+                            valid_from: { type: string, format: date }
+                            on_time:    { type: string }
+                            off_time:   { type: string }
+                  note:
+                    type: array
+                    description: Нэмэлт тайлбар
+                    items:
+                      type: string
+        "401":
+          description: Token байхгүй эсвэл буруу
+        "403":
+          description: AI эрх дутуу
+        "429":
+          description: Хэт олон хүсэлт (60/минут)
+
+  /api/ai/lighting/control-points-status:
+    get:
+      operationId: getControlPointsStatus
+      summary: Control point бүрийн эрүүл мэнд, гэмтэл, IoT байдал
+      description: >
+        Гэрэлтүүлгийн тэжээлийн цэг бүрийн health_status, нээлттэй гэмтэл,
+        IoT холболт, реле байдлыг нэгтгэн буцаана.
+        Дуудах үед: "Аль цэг offline?", "Аль цэг асуудалтай?",
+        "Хэдэн цэг хэвийн байна?", "IoT байхгүй цэг байна уу?"
+      tags: [Гэрэлтүүлэг]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Control point-уудын нэгтгэл
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generated_at:
+                    type: string
+                    format: date-time
+                  total:
+                    type: integer
+                    description: Нийт control point-ийн тоо
+                  summary:
+                    type: object
+                    properties:
+                      healthy:  { type: integer }
+                      warning:  { type: integer }
+                      fault:    { type: integer }
+                      offline:  { type: integer }
+                      no_iot:   { type: integer }
+                  control_points:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:               { type: integer }
+                        name:             { type: string }
+                        health_status:
+                          type: string
+                          enum: [healthy, warning, fault, offline, no_iot]
+                        has_iot_device:   { type: boolean }
+                        fault_status:     { type: string }
+                        connectivity:     { type: string }
+                        open_fault_count: { type: integer }
+                        last_seen:        { type: string, nullable: true }
+        "401":
+          description: Token байхгүй эсвэл буруу
+        "403":
+          description: AI эрх дутуу
+        "429":
+          description: Хэт олон хүсэлт (60/минут)
+
+  /api/ai/iot/detailed:
+    get:
+      operationId: getIotDetailed
+      summary: IoT LoRa node-уудын дэлгэрэнгүй байдал
+      description: >
+        LoRa node бүрийн online/offline, signal чанар, гэмтлийн байдлыг буцаана.
+        Дуудах үед: "IoT node бүгд хэвийн байна уу?",
+        "Offline node хэд байна?", "Signal сул node байна уу?"
+      tags: [IoT]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: IoT node-уудын нэгтгэл
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generated_at:
+                    type: string
+                    format: date-time
+                  counts:
+                    type: object
+                    properties:
+                      total_active_nodes:     { type: integer }
+                      feed_point_controllers: { type: integer }
+                      online:                 { type: integer }
+                      offline_1h:             { type: integer }
+                      offline_6h:             { type: integer }
+                      offline_24h:            { type: integer }
+                      fault_nodes:            { type: integer }
+                      weak_signal_nodes:      { type: integer }
+                  fault_nodes:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        device_name:  { type: string }
+                        last_status:  { type: string }
+                        connectivity: { type: string }
+                  all_devices:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        device_name:  { type: string }
+                        connectivity: { type: string }
+                        rssi:         { type: number, nullable: true }
+        "401":
+          description: Token байхгүй эсвэл буруу
+        "403":
+          description: AI эрх дутуу
+        "429":
+          description: Хэт олон хүсэлт (60/минут)
+
+  /api/ai/work-orders/search:
+    get:
+      operationId: searchWorkOrders
+      summary: Ажлын даалгавар хайх, хоцорсон, эрсдэлийн түвшин
+      description: >
+        Ажлын даалгаврыг шүүж буцаана. Хоцорсон эсэх, эрсдэлийн түвшин,
+        дараагийн шаардлагатай үйлдлийг тодорхойлно.
+        Дуудах үед: "Ямар ажил хоцорч байна?", "Яаралтай ажил байна уу?",
+        "Critical ажил хэд байна?"
+      tags: [Ажлын даалгавар]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: overdue_only
+          in: query
+          schema: { type: boolean }
+          description: true = зөвхөн хугацаа хэтэрсэн ажил
+        - name: due_today
+          in: query
+          schema: { type: boolean }
+          description: true = өнөөдөр дуусах ёстой ажил
+        - name: due_this_week
+          in: query
+          schema: { type: boolean }
+          description: true = энэ долоо хоногт дуусах ажил
+        - name: status
+          in: query
+          schema: { type: string }
+          description: "Статусаар шүүх"
+        - name: limit
+          in: query
+          schema: { type: integer, maximum: 100, default: 20 }
+          description: Буцаах дээд тоо (хамгийн ихдээ 100)
+      responses:
+        "200":
+          description: Ажлын даалгаврын жагсаалт
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generated_at:
+                    type: string
+                    format: date-time
+                  summary:
+                    type: object
+                    properties:
+                      total:    { type: integer }
+                      overdue:  { type: integer }
+                      critical: { type: integer }
+                      high:     { type: integer }
+                  work_orders:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:                   { type: integer }
+                        title:                { type: string }
+                        status:               { type: string }
+                        due_date:             { type: string, nullable: true, format: date }
+                        is_overdue:           { type: boolean }
+                        days_overdue:         { type: integer }
+                        risk_level:
+                          type: string
+                          enum: [low, medium, high, critical]
+                        next_required_action: { type: string }
+                        assigned_unit:        { type: string, nullable: true }
+        "401":
+          description: Token байхгүй эсвэл буруу
+        "403":
+          description: AI эрх дутуу
+        "429":
+          description: Хэт олон хүсэлт (60/минут)
+
+  /api/ai/faults/workflow-status:
+    get:
+      operationId: getFaultWorkflowStatus
+      summary: Гэмтлийн workflow — stuck, засагдсан, хаагдаагүй
+      description: >
+        Гэмтлийн workflow-г шалгана: удаан нээлттэй, засагдсан ч хаагдаагүй,
+        саяхан засагдсан. Дуудах үед: "Гэмтэл яагаад хаагдаагүй байна?",
+        "7 хоногоос дээш нээлттэй гэмтэл хэд байна?"
+      tags: [Гэмтэл]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Гэмтлийн workflow нэгтгэл
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generated_at:
+                    type: string
+                    format: date-time
+                  workflow_definition:
+                    type: object
+                    properties:
+                      steps:
+                        type: array
+                        items: { type: string }
+                        example: [Нээлттэй, Засагдсан, Баталгаажсан, Хаагдсан]
+                  by_status:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        status: { type: string }
+                        cnt:    { type: integer }
+                  stuck_open_over_7days:
+                    type: array
+                    description: 7+ хоног нээлттэй хэвээр байгаа гэмтлүүд
+                    items:
+                      type: object
+                      properties:
+                        id:            { type: integer }
+                        location_name: { type: string }
+                        days_open:     { type: integer }
+                        report_date:   { type: string }
+                  recently_repaired:
+                    type: array
+                    description: Сүүлийн 7 хоногт засагдсан гэмтлүүд
+                    items:
+                      type: object
+                  possibly_missed_close:
+                    type: array
+                    description: Ажил дууссан ч статус шинэчлэгдээгүй гэмтлүүд
+                    items:
+                      type: object
+                  risks:
+                    type: array
+                    items: { type: string }
+        "401":
+          description: Token байхгүй эсвэл буруу
+        "403":
+          description: AI эрх дутуу
+        "429":
+          description: Хэт олон хүсэлт (60/минут)
+
+  /api/ai/audit/ai-summary:
+    get:
+      operationId: getAiAuditSummary
+      summary: AI connector хандалтын аудит нэгтгэл
+      description: >
+        AI connector-ийн хандалтыг нэгтгэн буцаана: endpoint бүрийн
+        дуудалтын тоо, өдөр бүрийн идэвхжил, сүүлийн асуултууд.
+        Дуудах үед: "AI юуг уншсан бэ?", "Connector хэр их ашиглагдсан бэ?"
+      tags: [Аудит]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: days
+          in: query
+          schema: { type: integer, default: 7, maximum: 30 }
+          description: Хэдэн өдрийн түүх харах (хамгийн ихдээ 30)
+      responses:
+        "200":
+          description: AI аудит нэгтгэл
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generated_at:
+                    type: string
+                    format: date-time
+                  period_days:
+                    type: integer
+                  totals:
+                    type: object
+                    properties:
+                      total_ai_reads:     { type: integer }
+                      total_ai_questions: { type: integer }
+                  reads_last_hour:
+                    type: integer
+                  rate_limit_warning:
+                    type: boolean
+                    description: true = rate limit-д ойртож байна
+                  by_endpoint:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        endpoint:   { type: string }
+                        call_count: { type: integer }
+                  by_day:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        day:   { type: string, format: date }
+                        calls: { type: integer }
+                  recent_questions:
+                    type: array
+                    items:
+                      type: object
+        "401":
+          description: Token байхгүй эсвэл буруу
+        "403":
+          description: AI эрх дутуу
+        "429":
+          description: Хэт олон хүсэлт (60/минут)

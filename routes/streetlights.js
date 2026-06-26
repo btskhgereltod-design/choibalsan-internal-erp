@@ -123,6 +123,200 @@ router.put("/sl-points/:id/link-meter", auth, async (req, res) => {
 });
 
 // ── Single sl_point with photos ───────────────────────────────
+function validChoibalsanPoint(lat, lng) {
+  const a = Number(lat);
+  const b = Number(lng);
+  return Number.isFinite(a) && Number.isFinite(b) &&
+    a >= 47 && a <= 49.5 &&
+    b >= 113 && b <= 116.5;
+}
+
+function parseRouteGeometry(value) {
+  const points = Array.isArray(value) ? value : [];
+  return points
+    .map(p => ({ lat: Number(p.lat), lng: Number(p.lng) }))
+    .filter(p => validChoibalsanPoint(p.lat, p.lng));
+}
+
+router.get("/sl-network/routes", auth, async (req, res) => {
+  try {
+    const rows = await all("SELECT * FROM sl_network_routes ORDER BY updated_at DESC, id DESC");
+    res.json(rows.map(r => ({
+      ...r,
+      geometry: JSON.parse(r.geometry_json || "[]"),
+    })));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post("/sl-network/routes", auth, requirePermission("lighting_edit"), async (req, res) => {
+  try {
+    const b = req.body || {};
+    const geometry = parseRouteGeometry(b.geometry);
+    if (geometry.length < 2) return res.status(400).json({ error: "Route needs at least 2 valid points" });
+    const r = await run(
+      `INSERT INTO sl_network_routes(name,meter_no,route_type,status,color,geometry_json,lamp_count,
+       parent_route_id,feed_pole_id,pole_start,pole_end,wire_install_type,wire_phase,wire_profile,notes,created_by)
+       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [
+        String(b.name || "Lighting route").trim(),
+        b.meter_no || null,
+        b.route_type || "feed",
+        b.status || "draft",
+        b.color || "#f59e0b",
+        JSON.stringify(geometry),
+        b.lamp_count != null ? Number(b.lamp_count) : null,
+        b.parent_route_id || null,
+        b.feed_pole_id || null,
+        b.pole_start != null ? Number(b.pole_start) : null,
+        b.pole_end != null ? Number(b.pole_end) : null,
+        b.wire_install_type || null,
+        b.wire_phase || null,
+        b.wire_profile || null,
+        b.notes || null,
+        req.user.id,
+      ]
+    );
+    await audit(req.user.id, "CREATE", "sl_network_routes", r.id, b.name || "");
+    res.json({ id: r.id });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put("/sl-network/routes/:id", auth, requirePermission("lighting_edit"), async (req, res) => {
+  try {
+    const b = req.body || {};
+    await run(
+      `UPDATE sl_network_routes SET
+        name=COALESCE(?,name), meter_no=COALESCE(?,meter_no),
+        status=COALESCE(?,status), color=COALESCE(?,color),
+        lamp_count=COALESCE(?,lamp_count),
+        parent_route_id=COALESCE(?,parent_route_id), feed_pole_id=COALESCE(?,feed_pole_id),
+        pole_start=COALESCE(?,pole_start), pole_end=COALESCE(?,pole_end),
+        wire_install_type=COALESCE(?,wire_install_type), wire_phase=COALESCE(?,wire_phase),
+        wire_profile=COALESCE(?,wire_profile), notes=COALESCE(?,notes),
+        updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+      [b.name??null, b.meter_no??null, b.status??null, b.color??null,
+       b.lamp_count!=null ? Number(b.lamp_count) : null,
+       b.parent_route_id??null, b.feed_pole_id??null,
+       b.pole_start!=null ? Number(b.pole_start) : null,
+       b.pole_end!=null ? Number(b.pole_end) : null,
+       b.wire_install_type??null, b.wire_phase??null, b.wire_profile??null,
+       b.notes??null, req.params.id]
+    );
+    await audit(req.user.id, "UPDATE", "sl_network_routes", req.params.id, b.name || "");
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post("/sl-network/routes/:id/renumber", auth, requirePermission("lighting_edit"), async (req, res) => {
+  try {
+    const route = await get("SELECT * FROM sl_network_routes WHERE id=?", [req.params.id]);
+    if (!route) return res.status(404).json({ error: "Route not found" });
+    const poles = await all("SELECT * FROM sl_network_poles WHERE route_id=? AND pole_type!='feed' ORDER BY id", [req.params.id]);
+    if (poles.length === 0) return res.json({ ok: true, renumbered: 0 });
+    let geo = [];
+    try { geo = JSON.parse(route.geometry_json || "[]"); } catch(_) {}
+    function distAlongRoute(lat, lng) {
+      if (geo.length < 2) return 0;
+      let best = 0, bestDist = Infinity, cum = 0;
+      for (let i = 0; i < geo.length - 1; i++) {
+        const ax = geo[i].lng, ay = geo[i].lat, bx = geo[i+1].lng, by = geo[i+1].lat;
+        const dx = bx-ax, dy = by-ay, lenSq = dx*dx+dy*dy;
+        const t = lenSq > 0 ? Math.max(0, Math.min(1, ((lng-ax)*dx+(lat-ay)*dy)/lenSq)) : 0;
+        const px = ax+t*dx, py = ay+t*dy;
+        const d = Math.hypot(lng-px, lat-py);
+        const segLen = Math.hypot(dx, dy);
+        if (d < bestDist) { bestDist = d; best = cum + t * segLen; }
+        cum += segLen;
+      }
+      return best;
+    }
+    const sorted = poles
+      .map(p => ({ ...p, _dist: distAlongRoute(p.gps_lat, p.gps_lng) }))
+      .sort((a, b) => a._dist - b._dist);
+    const routeName = route.name || "Шон";
+    const codeBase = (await get("SELECT code FROM sl_network_poles WHERE route_id=? AND pole_type!='feed' LIMIT 1", [req.params.id]))?.code || "";
+    const codePrefix = codeBase.replace(/-\d+$/, "") || routeName.substring(0, 6).toUpperCase();
+    for (let i = 0; i < sorted.length; i++) {
+      const num = i + 1;
+      const padded = String(num).padStart(3, "0");
+      await run(
+        "UPDATE sl_network_poles SET name=?, code=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+        [`${routeName} shon ${num}`, `${codePrefix}-${padded}`, sorted[i].id]
+      );
+    }
+    await audit(req.user.id, "UPDATE", "sl_network_routes", req.params.id, `Renumbered ${sorted.length} poles`);
+    res.json({ ok: true, renumbered: sorted.length });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete("/sl-network/routes/:id", auth, requirePermission("lighting_edit"), async (req, res) => {
+  try {
+    await run("DELETE FROM sl_network_poles WHERE route_id=?", [req.params.id]);
+    await run("DELETE FROM sl_network_routes WHERE id=?", [req.params.id]);
+    await audit(req.user.id, "DELETE", "sl_network_routes", req.params.id, "");
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get("/sl-network/poles", auth, async (req, res) => {
+  try {
+    res.json(await all("SELECT * FROM sl_network_poles ORDER BY updated_at DESC, id DESC"));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post("/sl-network/poles", auth, requirePermission("lighting_edit"), async (req, res) => {
+  try {
+    const b = req.body || {};
+    if (!validChoibalsanPoint(b.gps_lat, b.gps_lng)) return res.status(400).json({ error: "Invalid pole GPS point" });
+    const r = await run(
+      `INSERT INTO sl_network_poles(code,name,meter_no,route_id,gps_lat,gps_lng,pole_type,status,notes,created_by)
+       VALUES(?,?,?,?,?,?,?,?,?,?)`,
+      [
+        b.code || null,
+        b.name || null,
+        b.meter_no || null,
+        b.route_id || null,
+        Number(b.gps_lat),
+        Number(b.gps_lng),
+        b.pole_type || "pole",
+        b.status || "active",
+        b.notes || null,
+        req.user.id,
+      ]
+    );
+    await audit(req.user.id, "CREATE", "sl_network_poles", r.id, b.code || b.name || "");
+    res.json({ id: r.id });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put("/sl-network/poles/:id", auth, requirePermission("lighting_edit"), async (req, res) => {
+  try {
+    const b = req.body || {};
+    if (b.gps_lat !== undefined && !validChoibalsanPoint(b.gps_lat, b.gps_lng))
+      return res.status(400).json({ error: "Invalid GPS point" });
+    await run(
+      `UPDATE sl_network_poles SET
+        code=COALESCE(?,code), name=COALESCE(?,name), meter_no=COALESCE(?,meter_no),
+        route_id=COALESCE(?,route_id), gps_lat=COALESCE(?,gps_lat), gps_lng=COALESCE(?,gps_lng),
+        pole_type=COALESCE(?,pole_type), status=COALESCE(?,status), notes=COALESCE(?,notes),
+        updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+      [b.code??null, b.name??null, b.meter_no??null, b.route_id??null,
+       b.gps_lat!=null?Number(b.gps_lat):null, b.gps_lng!=null?Number(b.gps_lng):null,
+       b.pole_type??null, b.status??null, b.notes??null, req.params.id]
+    );
+    await audit(req.user.id, "UPDATE", "sl_network_poles", req.params.id, b.code || b.name || "");
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete("/sl-network/poles/:id", auth, requirePermission("lighting_edit"), async (req, res) => {
+  try {
+    await run("DELETE FROM sl_network_poles WHERE id=?", [req.params.id]);
+    await audit(req.user.id, "DELETE", "sl_network_poles", req.params.id, "");
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get("/sl-points/:id", auth, async (req, res) => {
   try {
     const pt = await get(
@@ -169,7 +363,7 @@ router.post("/sl-points/:id/photos", auth, upload.single("file"), async (req, re
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-router.delete("/sl-point-photos/:photoId", auth, async (req, res) => {
+router.delete("/sl-point-photos/:photoId", auth, requirePermission("lighting_edit"), async (req, res) => {
   try {
     await run("DELETE FROM sl_point_photos WHERE id=?", [req.params.photoId]);
     res.json({ ok: true });
@@ -193,7 +387,7 @@ router.post("/sl-points/:id/docs", auth, upload.single("file"), async (req, res)
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-router.delete("/sl-point-docs/:docId", auth, async (req, res) => {
+router.delete("/sl-point-docs/:docId", auth, requirePermission("lighting_edit"), async (req, res) => {
   try {
     await run("DELETE FROM sl_point_docs WHERE id=?", [req.params.docId]);
     res.json({ ok: true });
@@ -1057,7 +1251,7 @@ router.post("/sl-ger-inventory/:id/photos", auth, upload.single("file"), async (
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-router.delete("/sl-ger-photos/:photoId", auth, async (req, res) => {
+router.delete("/sl-ger-photos/:photoId", auth, requirePermission("sl_ger_write"), async (req, res) => {
   try {
     await run("DELETE FROM sl_ger_photos WHERE id=?", [req.params.photoId]);
     res.json({ ok: true });
@@ -1077,7 +1271,7 @@ router.post("/sl-ger-inventory/:id/docs", auth, upload.single("file"), async (re
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-router.delete("/sl-ger-docs/:docId", auth, async (req, res) => {
+router.delete("/sl-ger-docs/:docId", auth, requirePermission("sl_ger_write"), async (req, res) => {
   try {
     await run("DELETE FROM sl_ger_docs WHERE id=?", [req.params.docId]);
     res.json({ ok: true });
@@ -1158,17 +1352,57 @@ router.get("/sl-faults", auth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+function todayIsoDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function normalizeOptionalDate(value) {
+  const text = String(value || "").trim();
+  if (!text) return todayIsoDate();
+  const date = new Date(text);
+  if (Number.isNaN(date.getTime())) return null;
+  return text.slice(0, 10);
+}
+
+function positiveInt(value) {
+  const n = Number(value);
+  return Number.isInteger(n) ? n : NaN;
+}
+
+function validateFaultPayload(body, { allowZeroBroken = false } = {}) {
+  const b = body || {};
+  const category = String(b.category || "").trim();
+  const locationName = String(b.location_name || "").trim();
+  const reportDate = normalizeOptionalDate(b.report_date);
+  const totalHeads = positiveInt(b.total_heads);
+  const brokenCount = positiveInt(b.broken_count);
+
+  if (!category) return { error: "Ангилал шаардлагатай" };
+  if (!LIGHTING_CATEGORIES.includes(category)) return { error: "Ангилал буруу байна" };
+  if (!locationName) return { error: "Байршил шаардлагатай" };
+  if (!reportDate) return { error: "Огноо буруу байна" };
+  if (!Number.isInteger(totalHeads) || totalHeads < 1) return { error: "Нийт толгой 1-ээс бага байж болохгүй" };
+  if (!Number.isInteger(brokenCount) || brokenCount < (allowZeroBroken ? 0 : 1)) {
+    return { error: allowZeroBroken ? "Гэмтсэн тоо 0-ээс бага байж болохгүй" : "Гэмтсэн тоо 1-ээс бага байж болохгүй" };
+  }
+  if (brokenCount > totalHeads) return { error: "Гэмтсэн тоо нийт толгойноос их байж болохгүй" };
+
+  return { category, locationName, reportDate, totalHeads, brokenCount };
+}
+
 router.post("/sl-faults", auth, async (req, res) => {
   try {
     const b = req.body;
+    const valid = validateFaultPayload(b);
+    if (valid.error) return res.status(400).json({ error: valid.error });
     const r = await run(
       `INSERT INTO sl_faults(category,location_id,location_name,location_type,total_heads,broken_count,report_date,notes,reported_by)
        VALUES(?,?,?,?,?,?,?,?,?)`,
-      [b.category, b.location_id||null, b.location_name, b.location_type||null,
-       b.total_heads||0, b.broken_count||0, b.report_date||null, b.notes||null, req.user.id]
+      [valid.category, b.location_id||null, valid.locationName, b.location_type||null,
+       valid.totalHeads, valid.brokenCount, valid.reportDate, b.notes||null, req.user.id]
     );
-    await audit(req.user.id, "CREATE", "sl_faults", r.id, `${b.category}: ${b.location_name}`);
-    await saveLightingDailySnapshot(b.report_date || null, "fault_create").catch(() => {});
+    await audit(req.user.id, "CREATE", "sl_faults", r.id, `${valid.category}: ${valid.locationName}`);
+    await saveLightingDailySnapshot(valid.reportDate, "fault_create").catch(() => {});
     res.json({ id: r.id });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
@@ -1176,18 +1410,25 @@ router.post("/sl-faults", auth, async (req, res) => {
 router.put("/sl-faults/:id", auth, async (req, res) => {
   try {
     const b = req.body;
+    const fault = await get("SELECT * FROM sl_faults WHERE id=?", [req.params.id]);
+    if (!fault) return res.status(404).json({ error: "Гэмтэл олдсонгүй" });
+    const valid = validateFaultPayload(b, { allowZeroBroken: true });
+    if (valid.error) return res.status(400).json({ error: valid.error });
+    if (Number(fault.fixed_count || 0) > 0 && valid.brokenCount !== Number(fault.broken_count || 0)) {
+      return res.status(400).json({ error: "Засвар бүртгэгдсэн тул гэмтсэн тоог шууд өөрчлөх боломжгүй" });
+    }
     await run(
       `UPDATE sl_faults SET category=?,location_id=?,location_name=?,total_heads=?,
        broken_count=?,notes=?,report_date=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`,
-      [b.category, b.location_id||null, b.location_name, b.total_heads||0,
-       b.broken_count||0, b.notes||null, b.report_date||null, req.params.id]
+      [valid.category, b.location_id||null, valid.locationName, valid.totalHeads,
+       valid.brokenCount, b.notes||null, valid.reportDate, req.params.id]
     );
-    await saveLightingDailySnapshot(b.report_date || null, "fault_update").catch(() => {});
+    await saveLightingDailySnapshot(valid.reportDate, "fault_update").catch(() => {});
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-router.delete("/sl-faults/:id", auth, async (req, res) => {
+router.delete("/sl-faults/:id", auth, requirePermission("sl_technical"), async (req, res) => {
   try {
     await run("DELETE FROM sl_fault_repairs WHERE fault_id=?", [req.params.id]);
     await run("DELETE FROM sl_faults WHERE id=?", [req.params.id]);
@@ -1214,10 +1455,20 @@ router.post("/sl-fault-repairs", auth, async (req, res) => {
   try {
     const b = req.body;
     const faultId  = b.fault_id;
-    const headsFix = parseInt(b.heads_fixed) || 0;
+    const headsFix = positiveInt(b.heads_fixed);
+    if (!Number.isInteger(headsFix) || headsFix < 1) {
+      return res.status(400).json({ error: "Зассан толгой 1-ээс бага байж болохгүй" });
+    }
 
     const fault = await get("SELECT * FROM sl_faults WHERE id=?", [faultId]);
     if (!fault) return res.status(404).json({ error: "Гэмтэл олдсонгүй" });
+
+    const currentBroken = Number(fault.broken_count || 0);
+    const currentFixed = Number(fault.fixed_count || 0);
+    const originalBroken = currentBroken + currentFixed;
+    if (headsFix > currentBroken) {
+      return res.status(400).json({ error: "Зассан толгой үлдсэн гэмтсэн тооноос их байж болохгүй" });
+    }
 
     // Insert repair record
     const r = await run(
@@ -1227,8 +1478,11 @@ router.post("/sl-fault-repairs", auth, async (req, res) => {
     );
 
     // Update fault: decrease broken, increase fixed
-    const newBroken  = Math.max(0, fault.broken_count - headsFix);
-    const newFixed   = fault.fixed_count + headsFix;
+    const newBroken  = Math.max(0, currentBroken - headsFix);
+    const newFixed   = currentFixed + headsFix;
+    if (newFixed > originalBroken) {
+      return res.status(400).json({ error: "Зассан нийт тоо анхны гэмтсэн тооноос давж болохгүй" });
+    }
     const newStatus  = newBroken === 0 ? "Дууссан"
                      : newFixed  > 0   ? "Засварт"
                      :                   "Нээлттэй";
@@ -1288,7 +1542,7 @@ router.get("/sl-analytics/export", auth, async (req, res) => {
     const end   = `${Number(year)+1}-01-01`;
     const cats  = LIGHTING_CATEGORIES;
 
-    const [totals, reported, repaired, openNow, locations, snapshots] = await Promise.all([
+    const [totals, reported, repaired, reportedToDate, repairedToDate, openNow, locations, snapshots] = await Promise.all([
       lightingCategoryTotals(),
       all(`SELECT category, substr(report_date,1,7) ym,
                   SUM(broken_count + fixed_count) reported_heads, COUNT(*) fault_count
@@ -1298,6 +1552,16 @@ router.get("/sl-analytics/export", auth, async (req, res) => {
            FROM sl_fault_repairs r JOIN sl_faults f ON f.id=r.fault_id
            WHERE r.repair_date>=? AND r.repair_date<?
            GROUP BY f.category, substr(r.repair_date,1,7)`, [start, end]),
+      all(`SELECT category, substr(report_date,1,7) ym,
+                  SUM(broken_count + fixed_count) reported_heads
+           FROM sl_faults
+           WHERE report_date<?
+           GROUP BY category, substr(report_date,1,7)`, [end]),
+      all(`SELECT f.category, substr(r.repair_date,1,7) ym,
+                  SUM(r.heads_fixed) repaired_heads
+           FROM sl_fault_repairs r JOIN sl_faults f ON f.id=r.fault_id
+           WHERE r.repair_date<?
+           GROUP BY f.category, substr(r.repair_date,1,7)`, [end]),
       all(`SELECT category, SUM(broken_count) open_heads
            FROM sl_faults WHERE status!='Дууссан' GROUP BY category`),
       all(`SELECT f.category, f.location_name,
@@ -1322,12 +1586,17 @@ router.get("/sl-analytics/export", auth, async (req, res) => {
     repaired.forEach(r => { fixMap[`${r.category}|${r.ym}`] = r; });
     const openMap = {};
     openNow.forEach(r => { openMap[r.category] = r; });
+    const ASSET_TRACKED = new Set(["Гэрлэн дохио"]);
     const snapshotByMonth = {};
+    const latestSnapByCategory = {};
     snapshots.forEach(s => {
       const ym = String(s.snapshot_date || "").slice(0, 7);
       if (!snapshotByMonth[ym]) snapshotByMonth[ym] = {};
       const prev = snapshotByMonth[ym][s.category];
       if (!prev || String(s.snapshot_date) > String(prev.snapshot_date)) snapshotByMonth[ym][s.category] = s;
+      if (!latestSnapByCategory[s.category] || String(s.snapshot_date) > String(latestSnapByCategory[s.category].snapshot_date)) {
+        latestSnapByCategory[s.category] = s;
+      }
     });
 
     const months = Array.from({ length: 12 }, (_, i) => {
@@ -1336,8 +1605,14 @@ router.get("/sl-analytics/export", auth, async (req, res) => {
       cats.forEach(cat => {
         const r = repMap[`${cat}|${ym}`] || {};
         const f = fixMap[`${cat}|${ym}`] || {};
-        const snap = snapshotByMonth[ym]?.[cat] || null;
-        const catOpen = snap ? Number(snap.broken_count||0) : 0;
+        const snap = snapshotByMonth[ym]?.[cat] || (ASSET_TRACKED.has(cat) ? (latestSnapByCategory[cat] || null) : null);
+        const cumulativeReported = reportedToDate
+          .filter(x => x.category === cat && x.ym <= ym)
+          .reduce((s, x) => s + Number(x.reported_heads || 0), 0);
+        const cumulativeRepaired = repairedToDate
+          .filter(x => x.category === cat && x.ym <= ym)
+          .reduce((s, x) => s + Number(x.repaired_heads || 0), 0);
+        const catOpen = snap ? Number(snap.broken_count||0) : Math.max(0, cumulativeReported - cumulativeRepaired);
         const catCap  = snap ? Number(snap.total_count||0)  : (totals[cat]||0);
         rep  += Number(r.reported_heads||0);
         fix  += Number(f.repaired_heads||0);
@@ -1382,6 +1657,290 @@ router.get("/sl-analytics/export", auth, async (req, res) => {
     res.setHeader("Content-Disposition", `attachment; filename=gereltuuleg-sudalgaa-${year}.xlsx`);
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.send(buf);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ══════════════════════════════════════════════════════════════
+// ШИНЭ DATA MODEL: corridor / alignment / feed_point / feeder_cable
+// ══════════════════════════════════════════════════════════════
+
+function computeBearing(geometry) {
+  if (!Array.isArray(geometry) || geometry.length < 2) return null;
+  const first = geometry[0], last = geometry[geometry.length - 1];
+  return ((Math.atan2(last.lng - first.lng, last.lat - first.lat) * 180 / Math.PI) + 360) % 360;
+}
+
+// ── Corridors (замын геометрийн шугам) ────────────────────────
+router.get("/sl-network/corridors", auth, async (req, res) => {
+  try {
+    const rows = await all("SELECT * FROM sl_corridor ORDER BY updated_at DESC, id DESC");
+    res.json(rows.map(r => ({ ...r, geometry: JSON.parse(r.geometry_json || "[]") })));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post("/sl-network/corridors", auth, requirePermission("lighting_edit"), async (req, res) => {
+  try {
+    const b = req.body || {};
+    const geometry = parseRouteGeometry(b.geometry);
+    if (geometry.length < 2) return res.status(400).json({ error: "Corridor needs ≥2 valid points" });
+    const bearing = computeBearing(geometry);
+    const r = await run(
+      `INSERT INTO sl_corridor(name,geometry_json,bearing,notes,created_by) VALUES(?,?,?,?,?)`,
+      [String(b.name || "Коридор").trim(), JSON.stringify(geometry), bearing, b.notes || null, req.user.id]
+    );
+    await audit(req.user.id, "CREATE", "sl_corridor", r.id, b.name || "");
+    res.json({ id: r.id, bearing });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put("/sl-network/corridors/:id", auth, requirePermission("lighting_edit"), async (req, res) => {
+  try {
+    const b = req.body || {};
+    const fields = [], params = [];
+    if (b.name !== undefined)     { fields.push("name=?");     params.push(b.name); }
+    if (b.geometry !== undefined) {
+      const geo = parseRouteGeometry(b.geometry);
+      fields.push("geometry_json=?"); params.push(JSON.stringify(geo));
+      fields.push("bearing=?");       params.push(computeBearing(geo));
+    }
+    if (b.notes !== undefined) { fields.push("notes=?"); params.push(b.notes); }
+    fields.push("updated_at=CURRENT_TIMESTAMP");
+    params.push(req.params.id);
+    if (fields.length > 1) await run(`UPDATE sl_corridor SET ${fields.join(",")} WHERE id=?`, params);
+    await audit(req.user.id, "UPDATE", "sl_corridor", req.params.id, b.name || "");
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete("/sl-network/corridors/:id", auth, requirePermission("lighting_edit"), async (req, res) => {
+  try {
+    await run("DELETE FROM sl_alignment WHERE corridor_id=?", [req.params.id]);
+    await run("DELETE FROM sl_corridor WHERE id=?", [req.params.id]);
+    await audit(req.user.id, "DELETE", "sl_corridor", req.params.id, "");
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Alignments (нэг замын A/B тал) ────────────────────────────
+router.get("/sl-network/alignments", auth, async (req, res) => {
+  try {
+    const { corridor_id } = req.query;
+    let sql = `SELECT a.*, c.name as corridor_name, c.bearing as corridor_bearing
+               FROM sl_alignment a
+               LEFT JOIN sl_corridor c ON c.id = a.corridor_id
+               WHERE 1=1`;
+    const params = [];
+    if (corridor_id) { sql += " AND a.corridor_id=?"; params.push(corridor_id); }
+    sql += " ORDER BY a.corridor_id, a.side_key";
+    res.json(await all(sql, params));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post("/sl-network/alignments", auth, requirePermission("lighting_edit"), async (req, res) => {
+  try {
+    const b = req.body || {};
+    if (!b.corridor_id) return res.status(400).json({ error: "corridor_id шаардлагатай" });
+    const r = await run(
+      `INSERT INTO sl_alignment(corridor_id,side_key,side_label,numbering_direction,notes) VALUES(?,?,?,?,?)`,
+      [b.corridor_id, b.side_key || "A", b.side_label || null,
+       b.numbering_direction || "start_to_end", b.notes || null]
+    );
+    await audit(req.user.id, "CREATE", "sl_alignment", r.id, `Corridor ${b.corridor_id} side ${b.side_key || "A"}`);
+    res.json({ id: r.id });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put("/sl-network/alignments/:id", auth, requirePermission("lighting_edit"), async (req, res) => {
+  try {
+    const b = req.body || {};
+    await run(
+      `UPDATE sl_alignment SET side_key=COALESCE(?,side_key), side_label=COALESCE(?,side_label),
+       numbering_direction=COALESCE(?,numbering_direction), notes=COALESCE(?,notes),
+       updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+      [b.side_key ?? null, b.side_label ?? null, b.numbering_direction ?? null,
+       b.notes ?? null, req.params.id]
+    );
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete("/sl-network/alignments/:id", auth, requirePermission("lighting_edit"), async (req, res) => {
+  try {
+    await run("DELETE FROM sl_alignment WHERE id=?", [req.params.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Feed Points (щит/тоолуур/ТП байршил) ─────────────────────
+router.get("/sl-network/feed-points", auth, async (req, res) => {
+  try {
+    res.json(await all("SELECT * FROM sl_feed_point ORDER BY updated_at DESC, id DESC"));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post("/sl-network/feed-points", auth, requirePermission("lighting_edit"), async (req, res) => {
+  try {
+    const b = req.body || {};
+    if (!validChoibalsanPoint(b.gps_lat, b.gps_lng)) return res.status(400).json({ error: "Invalid GPS" });
+    const r = await run(
+      `INSERT INTO sl_feed_point(name,gps_lat,gps_lng,type,notes,created_by) VALUES(?,?,?,?,?,?)`,
+      [String(b.name || "ТП").trim(), Number(b.gps_lat), Number(b.gps_lng),
+       b.type || "panel", b.notes || null, req.user.id]
+    );
+    await audit(req.user.id, "CREATE", "sl_feed_point", r.id, b.name || "");
+    res.json({ id: r.id });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put("/sl-network/feed-points/:id", auth, requirePermission("lighting_edit"), async (req, res) => {
+  try {
+    const b = req.body || {};
+    await run(
+      `UPDATE sl_feed_point SET name=COALESCE(?,name), gps_lat=COALESCE(?,gps_lat), gps_lng=COALESCE(?,gps_lng),
+       type=COALESCE(?,type), notes=COALESCE(?,notes), updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+      [b.name ?? null,
+       b.gps_lat != null ? Number(b.gps_lat) : null,
+       b.gps_lng != null ? Number(b.gps_lng) : null,
+       b.type ?? null, b.notes ?? null, req.params.id]
+    );
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete("/sl-network/feed-points/:id", auth, requirePermission("lighting_edit"), async (req, res) => {
+  try {
+    await run("DELETE FROM sl_feeder_cable WHERE feed_point_id=?", [req.params.id]);
+    await run("DELETE FROM sl_feed_point_device WHERE feed_point_id=?", [req.params.id]);
+    await run("DELETE FROM sl_feed_point WHERE id=?", [req.params.id]);
+    await audit(req.user.id, "DELETE", "sl_feed_point", req.params.id, "");
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Feed Point IoT node links ────────────────────────────────
+router.get("/sl-network/feed-point-devices", auth, async (req, res) => {
+  try {
+    const { feed_point_id } = req.query;
+    let sql = "SELECT * FROM sl_feed_point_device WHERE 1=1";
+    const params = [];
+    if (feed_point_id) { sql += " AND feed_point_id=?"; params.push(feed_point_id); }
+    sql += " ORDER BY feed_point_id, id";
+    res.json(await all(sql, params));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post("/sl-network/feed-point-devices", auth, requirePermission("lighting_edit"), async (req, res) => {
+  try {
+    const b = req.body || {};
+    const feedPointId = Number(b.feed_point_id);
+    const devEui = String(b.dev_eui || "").trim().toUpperCase();
+    if (!feedPointId || !devEui) return res.status(400).json({ error: "feed_point_id болон dev_eui шаардлагатай" });
+    const role = b.role || "controller";
+    if (role === "controller") {
+      await run("DELETE FROM sl_feed_point_device WHERE feed_point_id=? AND role='controller'", [feedPointId]);
+    }
+    const r = await run(
+      `INSERT INTO sl_feed_point_device(feed_point_id,dev_eui,role,notes) VALUES(?,?,?,?)`,
+      [feedPointId, devEui, role, b.notes || null]
+    );
+    await audit(req.user.id, "CREATE", "sl_feed_point_device", r.id || feedPointId, `FP${feedPointId} -> ${devEui}`);
+    res.json({ ok: true, id: r.id });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete("/sl-network/feed-point-devices/:id", auth, requirePermission("lighting_edit"), async (req, res) => {
+  try {
+    await run("DELETE FROM sl_feed_point_device WHERE id=?", [req.params.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Feeder Cables (тэжээл → сегмент холболт) ──────────────────
+router.get("/sl-network/feeder-cables", auth, async (req, res) => {
+  try {
+    const { feed_point_id, cable_segment_id } = req.query;
+    let sql = `SELECT fc.*, fp.name as feed_point_name, fp.gps_lat as fp_lat, fp.gps_lng as fp_lng,
+               r.name as segment_name, r.pole_start, r.pole_end, r.parent_route_id
+               FROM sl_feeder_cable fc
+               LEFT JOIN sl_feed_point fp ON fp.id = fc.feed_point_id
+               LEFT JOIN sl_network_routes r ON r.id = fc.cable_segment_id
+               WHERE 1=1`;
+    const params = [];
+    if (feed_point_id)    { sql += " AND fc.feed_point_id=?";    params.push(feed_point_id); }
+    if (cable_segment_id) { sql += " AND fc.cable_segment_id=?"; params.push(cable_segment_id); }
+    const rows = await all(sql, params);
+    res.json(rows.map(r => ({ ...r, geometry: JSON.parse(r.geometry_json || "[]") })));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post("/sl-network/feeder-cables", auth, requirePermission("lighting_edit"), async (req, res) => {
+  try {
+    const b = req.body || {};
+    if (!b.feed_point_id || !b.cable_segment_id)
+      return res.status(400).json({ error: "feed_point_id болон cable_segment_id шаардлагатай" });
+    const geometry = Array.isArray(b.geometry) ? b.geometry : [];
+    const r = await run(
+      `INSERT INTO sl_feeder_cable(feed_point_id,cable_segment_id,connection_pole_no,geometry_json,notes) VALUES(?,?,?,?,?)`,
+      [b.feed_point_id, b.cable_segment_id, b.connection_pole_no || null,
+       JSON.stringify(geometry), b.notes || null]
+    );
+    await audit(req.user.id, "CREATE", "sl_feeder_cable", r.id, `FP${b.feed_point_id}→SEG${b.cable_segment_id}`);
+    res.json({ id: r.id });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete("/sl-network/feeder-cables/:id", auth, requirePermission("lighting_edit"), async (req, res) => {
+  try {
+    await run("DELETE FROM sl_feeder_cable WHERE id=?", [req.params.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Cable Segment Status (on/off/fault/partial) ────────────────
+router.put("/sl-network/cable-segments/:id/status", auth, requirePermission("lighting_edit"), async (req, res) => {
+  try {
+    const { status } = req.body;
+    if (!["on", "off", "fault", "partial"].includes(status))
+      return res.status(400).json({ error: "Зөвшөөрөгдсөн утга: on / off / fault / partial" });
+    await run(
+      "UPDATE sl_network_routes SET segment_status=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND route_type='cable'",
+      [status, req.params.id]
+    );
+    await audit(req.user.id, "UPDATE", "sl_network_routes", req.params.id, `segment_status → ${status}`);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Corridor Summary (road_corridor дээрх нийт статистик) ─────
+router.get("/sl-network/corridor-summary", auth, async (req, res) => {
+  try {
+    const routes = await all(
+      "SELECT id, name, parent_route_id, route_type, segment_status, pole_start, pole_end FROM sl_network_routes"
+    );
+    const poles = await all(
+      "SELECT id, route_id, status FROM sl_network_poles WHERE pole_type != 'feed'"
+    );
+    const roadRoutes = routes.filter(r => r.route_type !== "cable" && r.route_type !== "feed_wire");
+    const summary = roadRoutes.map(road => {
+      const cableSegs = routes.filter(r => r.route_type === "cable" && Number(r.parent_route_id) === Number(road.id));
+      const roadPoles = poles.filter(p => Number(p.route_id) === Number(road.id));
+      const on = cableSegs.filter(s => (s.segment_status || "on") === "on")
+        .reduce((sum, s) => sum + Math.max(0, Number(s.pole_end || 0) - Number(s.pole_start || 0) + 1), 0);
+      const off = cableSegs.filter(s => s.segment_status === "off")
+        .reduce((sum, s) => sum + Math.max(0, Number(s.pole_end || 0) - Number(s.pole_start || 0) + 1), 0);
+      const fault = cableSegs.filter(s => s.segment_status === "fault")
+        .reduce((sum, s) => sum + Math.max(0, Number(s.pole_end || 0) - Number(s.pole_start || 0) + 1), 0);
+      const partial = cableSegs.filter(s => s.segment_status === "partial")
+        .reduce((sum, s) => sum + Math.max(0, Number(s.pole_end || 0) - Number(s.pole_start || 0) + 1), 0);
+      const total = roadPoles.length;
+      return {
+        id: road.id, name: road.name,
+        total_poles: total, cable_segments: cableSegs.length,
+        on_poles: on, off_poles: off, fault_poles: fault, partial_poles: partial,
+        corridor_status: fault > 0 ? "fault" : off > 0 ? (on > 0 ? "partial" : "off") : "on",
+      };
+    });
+    res.json(summary);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 

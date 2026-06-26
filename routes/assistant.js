@@ -115,7 +115,7 @@ router.post("/assistant/ask", auth, async (req, res) => {
   return res.json({
     mode: "fallback",
     log_id: logId,
-    title: guide ? guide.title : "ERP туслах",
+    title: guide ? guide.title : "Чойбалсан ERP зөвлөх",
     short_answer: fallbackFirstLine.slice(0, 220),
     answer: fallbackAnswer,
     sources: guide ? ["kb_articles"] : [],

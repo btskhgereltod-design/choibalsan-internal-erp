@@ -370,7 +370,7 @@ router.patch("/safety-reports/:id/status", auth, async (req, res) => {
   res.json({ ok: true });
 });
 
-router.delete("/safety-reports/:id", auth, async (req, res) => {
+router.delete("/safety-reports/:id", auth, requireRole("director", "safety"), async (req, res) => {
   const row = await get("SELECT * FROM safety_reports WHERE id=?", [req.params.id]);
   if (!row) return res.status(404).json({ error: "Олдсонгүй" });
   await run("DELETE FROM safety_comments WHERE report_id=?", [req.params.id]);
@@ -399,7 +399,13 @@ router.post("/safety-reports/:id/comments", auth, async (req, res) => {
 });
 
 router.delete("/safety-comments/:id", auth, async (req, res) => {
-  await run("DELETE FROM safety_comments WHERE id=? AND user_id=?", [req.params.id, req.user.id]);
+  const comment = await get("SELECT * FROM safety_comments WHERE id=?", [req.params.id]);
+  if (!comment) return res.status(404).json({ error: "Коммент олдсонгүй" });
+  const isPrivileged = ["director", "safety"].includes(req.user.role);
+  const isOwner = Number(comment.user_id) === Number(req.user.id);
+  if (!isPrivileged && !isOwner)
+    return res.status(403).json({ error: "Зөвхөн өөрийн коммент эсвэл director|safety устгах эрхтэй" });
+  await run("DELETE FROM safety_comments WHERE id=?", [req.params.id]);
   res.json({ ok: true });
 });
 

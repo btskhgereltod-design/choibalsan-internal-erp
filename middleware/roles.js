@@ -30,6 +30,7 @@ const ROLE_META = {
   safety:         { label: "ХАБЭА",                level: 2  },
   camera_engineer:{ label: "Камерын инженер",      level: 2  },
   worker:         { label: "Ажилтан",              level: 1  },
+  ai_readonly:    { label: "AI Стратегийн зөвлөх", level: 0  },
 };
 
 // ── Permission sets ───────────────────────────────────────────────────────────
@@ -103,6 +104,10 @@ const PERMISSIONS = {
   // ── Safety / ХАБЭА ───────────────────────────────────────────
   // Ажлын эхлэлтийн зөвшөөрөл болон дуусгалтын эрсдэл шалгалт
   safety_confirm:     ["director", "safety"],
+
+  // ── AI Strategic Advisor (Read-Only) ─────────────────────────────────────
+  // Зөвхөн /api/ai/* GET endpoint-ууд. Write/delete эрх огт байхгүй.
+  ai_read:            ["director", "ai_readonly"],
 
   // ── Admin / System ────────────────────────────────────────────
   // Системийн тохиргоо, хэрэглэгч удирдлага
