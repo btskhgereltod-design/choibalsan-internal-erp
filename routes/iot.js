@@ -152,6 +152,17 @@ function iotTodayLocal() {
   return local.toISOString().slice(0, 10);
 }
 
+function operatorEvent(type, at, message, extra = {}) {
+  return { type, at, message, ...extra };
+}
+
+function operatorEventSeverity(type) {
+  if (["power_lost", "light_off_expected", "signal_gap"].includes(type)) return "warning";
+  if (["auto_on_failed", "command_failed"].includes(type)) return "critical";
+  if (["power_restored", "light_restored", "auto_on_sent", "auto_off_sent"].includes(type)) return "ok";
+  return "info";
+}
+
 function classifyIotDeviceFault(row) {
   const heard = iotNodeHeard(row);
   const linePower = iotHasLinePower(row);
@@ -953,20 +964,47 @@ router.get("/iot/report", auth, async (req, res) => {
     let scheduleOnSamples = 0;
     let scheduleMatchedSamples = 0;
     const transitions = [];
+    const operatorEvents = [];
+    let prevLinePower = null;
     for (const row of rows) {
       const t = new Date(row.received_at).getTime();
       if (prevTime) {
         const gap = (t - prevTime) / 60000;
-        if (gap > 20) offlineGaps += 1;
+        if (gap > 20) {
+          offlineGaps += 1;
+          operatorEvents.push(operatorEvent(
+            "signal_gap",
+            row.received_at,
+            `Node дохио ${round(gap, 0)} минут тасарсан байж магадгүй`,
+            { minutes: round(gap, 1) }
+          ));
+        }
         if (gap > maxGapMinutes) maxGapMinutes = gap;
       }
       const on = isReadingOn(row);
+      const linePower = iotHasLinePower(row);
       const schedule = activeScheduleFor(scheduleLogs, config.category, localDateKeyFromIso(row.received_at));
       const expectedOn = scheduledOnAt(schedule, row.received_at);
       if (expectedOn !== null) {
         scheduleKnownSamples += 1;
         if (expectedOn) scheduleOnSamples += 1;
         if (expectedOn === on) scheduleMatchedSamples += 1;
+      }
+      if (prevLinePower !== null && prevLinePower !== linePower) {
+        operatorEvents.push(operatorEvent(
+          linePower ? "power_restored" : "power_lost",
+          row.received_at,
+          linePower ? "Шитний тэжээл сэргэсэн" : "Шитний тэжээл тасарсан",
+          { voltage: round(row.voltage ?? row.ua, 1) }
+        ));
+      }
+      if (expectedOn === true && prevOn !== null && prevOn !== on) {
+        operatorEvents.push(operatorEvent(
+          on ? "light_restored" : "light_off_expected",
+          row.received_at,
+          on ? "Асах ёстой үед гэрэл дахин ассан" : "Асах ёстой үед гэрэл унтарсан",
+          { power: round(row.power ?? row.total_power, 3), current: round(row.current ?? row.ia, 2) }
+        ));
       }
       if (prevOn !== null && prevOn !== on) {
         transitions.push({
@@ -979,6 +1017,7 @@ router.get("/iot/report", auth, async (req, res) => {
       }
       prevTime = t;
       prevOn = on;
+      prevLinePower = linePower;
     }
     const commandsForDevice = commands
       .filter(c => normalizeDevEui(c.dev_eui) === devEui)
@@ -989,9 +1028,25 @@ router.get("/iot/report", auth, async (req, res) => {
         status: c.status,
         model: c.device_model,
       }));
+    for (const c of commands.filter(c => normalizeDevEui(c.dev_eui) === devEui)) {
+      const role = String(c.requested_by_role || "");
+      if (role === "system" && c.action === "ON") {
+        operatorEvents.push(operatorEvent("auto_on_sent", c.requested_at, "ERP автоматаар ON command дахин илгээсэн", { status: c.status }));
+      } else if (role === "system" && c.action === "OFF") {
+        operatorEvents.push(operatorEvent("auto_off_sent", c.requested_at, "ERP schedule дагуу OFF command илгээсэн", { status: c.status }));
+      } else if (c.action === "ON") {
+        operatorEvents.push(operatorEvent("manual_on_sent", c.requested_at, "Оператор ON command илгээсэн", { status: c.status, role }));
+      } else if (c.action === "OFF") {
+        operatorEvents.push(operatorEvent("manual_off_sent", c.requested_at, "Оператор OFF command илгээсэн", { status: c.status, role }));
+      }
+    }
     const energyDelta = Number(last.energy) - Number(first.energy);
     const avgPowerKw = avgOf("power");
     const latestSchedule = activeScheduleFor(scheduleLogs, config.category, localDateKeyFromIso(last.received_at || new Date().toISOString()));
+    const sortedOperatorEvents = operatorEvents
+      .filter(e => e.at)
+      .map(e => ({ ...e, severity: operatorEventSeverity(e.type) }))
+      .sort((a, b) => String(a.at).localeCompare(String(b.at)));
     return {
       devEui,
       deviceName: last.device_name || first.device_name || devEui,
@@ -1024,6 +1079,7 @@ router.get("/iot/report", auth, async (req, res) => {
       lastSeen: last.received_at || null,
       offlineGaps,
       maxGapMinutes: round(maxGapMinutes, 1),
+      operatorEvents: sortedOperatorEvents.slice(-30),
       events: [...commandsForDevice, ...transitions].sort((a, b) => String(a.at).localeCompare(String(b.at))).slice(-20),
     };
   });
@@ -1045,6 +1101,22 @@ router.get("/iot/report", auth, async (req, res) => {
     offlineGaps: summaries.reduce((sum, r) => sum + Number(r.offlineGaps || 0), 0),
     commands: commands.length,
   };
+  const operatorEvents = summaries
+    .flatMap(d => (d.operatorEvents || []).map(e => ({
+      ...e,
+      devEui: d.devEui,
+      deviceName: d.deviceName,
+    })))
+    .sort((a, b) => String(a.at).localeCompare(String(b.at)));
+  const operatorSummary = {
+    events: operatorEvents,
+    powerEvents: operatorEvents.filter(e => ["power_lost", "power_restored", "signal_gap"].includes(e.type)).length,
+    autoCommands: operatorEvents.filter(e => ["auto_on_sent", "auto_off_sent"].includes(e.type)).length,
+    lightProblems: operatorEvents.filter(e => e.type === "light_off_expected").length,
+    recovered: operatorEvents.filter(e => e.type === "light_restored").length,
+    critical: operatorEvents.filter(e => e.severity === "critical").length,
+    warnings: operatorEvents.filter(e => e.severity === "warning").length,
+  };
 
   res.json({
     period: range.period,
@@ -1053,6 +1125,7 @@ router.get("/iot/report", auth, async (req, res) => {
     from: fromIso,
     to: toIso,
     totals,
+    operatorSummary,
     devices: summaries.sort((a, b) => String(a.deviceName).localeCompare(String(b.deviceName))),
     commands: commands.slice(-50),
   });

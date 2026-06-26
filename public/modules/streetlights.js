@@ -146,9 +146,8 @@ async function sl_dashboard() {
     { key:"faults",   icon:"⚡", label:"Гэмтэл" },
     { key:"points",   icon:"📍", label:"Тоолуур" },
     { key:"sched",    icon:"🌙", label:"Цаг тохиргоо" },
-    { key:"readings", icon:"📊", label:"Уншилт" },
     { key:"analytics", icon:"📈", label:"Судалгаа" },
-    ...(isFinance ? [{ key:"finance", icon:"💰", label:"Цахилгааны төлбөр" }] : []),
+    { key:"finance",   icon:"💰", label:"Цахилгааны төлбөр" },
   ];
 
   const totalObjects = SL_ASSET_CATS
@@ -216,7 +215,7 @@ async function slHubTab(tab) {
   else if (tab === "faults")   el.innerHTML = _slTabFaults(d);
   else if (tab === "points")   await _slTabPoints(el);
   else if (tab === "sched")    return slHubLightSched();
-  else if (tab === "readings") await _slTabReadings(el);
+  else if (tab === "readings") return slHubTab("finance");
   else if (tab === "analytics") await _slTabAnalytics(el);
   else if (tab === "lora")     return slHubTab("home");
   else if (tab === "finance")  await _slTabFinance(el);
@@ -1522,7 +1521,10 @@ async function _slTabFinance(el) {
             <td style="text-align:center">${isPaid
               ? `<span style="font-size:11px;color:#16a34a;font-weight:600">${b.paid_at?.slice(0,10)||''}</span>`
               : `${isFinance && isConfirmed ? `<button class="btn" style="padding:2px 10px;font-size:11px;background:#16a34a;border-color:#16a34a" onclick="el_pay_modal(${b.id},${b.our_amount})">Төлбөр бүртгэх</button>` : `<span style="color:#94a3b8;font-size:12px">—</span>`}`}</td>
-            <td><button class="btn secondary" style="padding:2px 9px;font-size:11px" onclick="sl_readings_for(${b.id})">Харах →</button></td>
+            <td style="display:flex;gap:5px;white-space:nowrap">
+              <button class="btn secondary" style="padding:2px 9px;font-size:11px" onclick="sl_readings_for(${b.id})">Харах →</button>
+              ${isFinance ? `<button class="btn" style="padding:2px 9px;font-size:11px;background:#ef4444;border-color:#ef4444" onclick="el_bill_delete(${b.id},'${b.billing_year}-${String(b.billing_month).padStart(2,'0')}')">Устгах</button>` : ""}
+            </td>
           </tr>`;
         }).join("")}
         ${!(d.recent_bills||[]).length?`<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:30px">Нэхэмжлэл байхгүй — дээрх товчоор PDF оруулна уу</td></tr>`:""}
@@ -1889,8 +1891,11 @@ async function sl_readings_for(id, bills) {
   ${openChecks.length ? `
   <div class="panel" id="checksSection" style="margin-bottom:16px">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-bottom:1px solid #fecaca;background:#fef2f2;border-radius:10px 10px 0 0">
-      <div style="font-size:13px;font-weight:700;color:#dc2626">⚠ Нээлттэй шалгалтууд</div>
-      <span style="background:#fee2e2;color:#dc2626;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:700">${openChecks.length}</span>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="font-size:13px;font-weight:700;color:#dc2626">⚠ Нээлттэй шалгалтууд</div>
+        <span style="background:#fee2e2;color:#dc2626;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:700">${openChecks.length}</span>
+      </div>
+      ${canEdit() ? `<button class="btn" style="padding:4px 12px;font-size:11px;background:#16a34a;border-color:#16a34a" onclick="el_resolve_all([${openChecks.map(c=>c.id).join(",")}],${id})">✓ Бүгдийг шийдвэрлэх</button>` : ""}
     </div>
     <div class="table-wrap">
       <table>
@@ -1958,6 +1963,18 @@ async function el_resolve(checkId, billId) {
   try {
     await put_(`/api/el-check/${checkId}/resolve`, { resolution_note: note });
     toast("Шийдвэрлэгдлээ");
+    sl_readings_for(billId);
+  } catch(e) { toast("⚠️ " + e.message); }
+}
+
+async function el_resolve_all(checkIds, billId) {
+  if (!checkIds || !checkIds.length) return;
+  if (!confirm(`${checkIds.length} шалгалтыг бүгдийг шийдвэрлэх үү?`)) return;
+  try {
+    for (const cid of checkIds) {
+      await put_(`/api/el-check/${cid}/resolve`, { resolution_note: "Бүгдийг шийдвэрлэх" });
+    }
+    toast(`✅ ${checkIds.length} шалгалт шийдвэрлэгдлээ`);
     sl_readings_for(billId);
   } catch(e) { toast("⚠️ " + e.message); }
 }
@@ -2269,12 +2286,13 @@ async function el_confirm(dataJson) {
   } catch(e) { toast("⚠️ " + e.message); }
 }
 
-async function el_bill_delete(id) {
-  if (!confirm("Энэ нэхэмжлэлийг бүх өгөгдлийн хамт устгах уу?")) return;
+async function el_bill_delete(id, label) {
+  const name = label ? `${label} сарын нэхэмжлэл` : "энэ нэхэмжлэл";
+  if (!confirm(`${name}-г бүх өгөгдлийн хамт устгах уу?\nЭнэ үйлдлийг буцаах боломжгүй.`)) return;
   try {
     await del_(`/api/eb/${id}`);
     toast("Устгагдлаа ✓");
-    sl_bills();
+    slHubTab("billing");
   } catch(e) { toast("⚠️ " + e.message); }
 }
 
@@ -3034,8 +3052,8 @@ async function sl_faults() {
           <th>Ангилал</th>
           <th>Байршил</th>
           <th style="text-align:center">Нийт толгой</th>
-          <th style="text-align:center">Асахгүй</th>
-          <th style="text-align:center">Засагдсан</th>
+          <th style="text-align:center">Анх гэмтсэн</th>
+          <th style="text-align:center">Зассан</th>
           <th style="text-align:center">Үлдсэн</th>
           <th>Огноо</th>
           <th style="text-align:center">Төлөв</th>
@@ -3072,7 +3090,7 @@ function faultRows(faults, activeCat) {
       <td style="font-weight:600">${f.location_name}</td>
       <td style="text-align:center;font-size:13px">${f.total_heads}</td>
       <td style="text-align:center">
-        <span style="background:#fef2f2;color:#dc2626;border-radius:12px;padding:2px 10px;font-weight:800;font-size:13px">${f.broken_count}</span>
+        <span style="background:#fef2f2;color:#dc2626;border-radius:12px;padding:2px 10px;font-weight:800;font-size:13px">${f.broken_count + f.fixed_count}</span>
       </td>
       <td style="text-align:center">
         <span style="background:#f0fdf4;color:#16a34a;border-radius:12px;padding:2px 10px;font-weight:700;font-size:13px">${f.fixed_count}</span>
@@ -3264,17 +3282,21 @@ async function faultOpenRepair(faultId) {
       <button onclick="faultCloseOverlay()" style="border:none;background:rgba(255,255,255,.1);color:#fff;border-radius:8px;padding:5px 12px;cursor:pointer">✕</button>
     </div>
     <div style="padding:20px">
-      <div style="background:#f0fdf4;border-radius:10px;padding:12px 16px;margin-bottom:16px">
-        <div style="font-size:12px;color:#16a34a;font-weight:700;margin-bottom:4px">${fault.location_name}</div>
-        <div style="display:flex;gap:16px;font-size:13px">
-          <span>Нийт: <b>${fault.total_heads}</b></span>
-          <span style="color:#dc2626">Асахгүй: <b>${fault.broken_count}</b></span>
-          <span style="color:#16a34a">Засагдсан: <b>${fault.fixed_count}</b></span>
+      <div style="background:#f8fafc;border-radius:10px;padding:12px 16px;margin-bottom:12px">
+        <div style="font-size:12px;color:#334155;font-weight:700;margin-bottom:6px">${fault.location_name}</div>
+        <div style="display:flex;gap:14px;font-size:12px;flex-wrap:wrap">
+          <span style="color:#64748b">Нийт толгой: <b>${fault.total_heads}</b></span>
+          <span style="color:#dc2626">Анх гэмтсэн: <b>${fault.broken_count + fault.fixed_count}</b></span>
+          <span style="color:#16a34a">Зассан: <b>${fault.fixed_count}</b></span>
         </div>
+      </div>
+      <div style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:10px 16px;margin-bottom:14px;display:flex;align-items:center;gap:10px">
+        <span style="font-size:22px;font-weight:900;color:#d97706">${fault.broken_count}</span>
+        <span style="font-size:13px;color:#92400e;font-weight:600">толгой засагдахыг хүлээж байна</span>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
         <div>
-          <div style="font-size:11px;color:#667085;margin-bottom:4px">Хэдэн толгой засагдав? *</div>
+          <div style="font-size:11px;color:#667085;margin-bottom:4px">Засагдсан толгой * <span style="color:#d97706">(хамгийн ихдээ ${fault.broken_count})</span></div>
           <input id="fr_fixed" type="number" min="1" max="${fault.broken_count}" class="input" style="margin:0;border-color:#16a34a;font-size:18px;font-weight:800;color:#16a34a" placeholder="0" oninput="faultRepairPreview(${fault.broken_count})">
         </div>
         <div>
@@ -3299,10 +3321,19 @@ function faultRepairPreview(maxBroken) {
   const fixed = parseInt(document.getElementById("fr_fixed")?.value) || 0;
   const prev  = document.getElementById("fr_preview");
   if (!prev) return;
-  if (fixed > 0) {
-    const remaining = Math.max(0, maxBroken - fixed);
+  if (fixed > maxBroken) {
     prev.style.display = "block";
-    prev.innerHTML = `<b style="color:#16a34a">${fixed}</b> толгой шинээр асна → Үлдсэн асахгүй: <b style="color:${remaining>0?'#d97706':'#16a34a'}">${remaining}</b>${remaining===0?" ✓ Бүгд засагдлаа":""}`;
+    prev.style.background = "#fef2f2";
+    prev.style.color = "#991b1b";
+    prev.innerHTML = `⚠️ Хэтэрсэн байна — хамгийн ихдээ <b>${maxBroken}</b> толгой засагдах боломжтой`;
+    return;
+  }
+  prev.style.background = "#f0fdf4";
+  prev.style.color = "#166534";
+  if (fixed > 0) {
+    const remaining = maxBroken - fixed;
+    prev.style.display = "block";
+    prev.innerHTML = `<b style="color:#16a34a">${fixed}</b> толгой шинээр асна → Үлдсэн: <b style="color:${remaining>0?'#d97706':'#16a34a'}">${remaining}</b>${remaining===0?" ✓ Бүгд засагдлаа":""}`;
   } else {
     prev.style.display = "none";
   }
@@ -3381,7 +3412,7 @@ Object.assign(window, {
   sl_points_filter, sl_points_toggle_all, sl_points_select_all, sl_points_deselect,
   sl_points_chk_change, sl_points_bootstrap, sl_points_bootstrap_run,
   sl_bulk_verify, sl_bulk_delete,
-  el_preview, el_preview_upload, el_preview_print, el_confirm, el_bill_delete, el_resolve,
+  el_preview, el_preview_upload, el_preview_print, el_confirm, el_bill_delete, el_resolve, el_resolve_all,
   sl_budget, sl_budget_show_form, sl_budget_calc_total, sl_budget_save, sl_budget_delete,
   sl_ger_list, gerApplyFilter,
   gerAddInspect, gerSaveInspect, gerViewWorks,

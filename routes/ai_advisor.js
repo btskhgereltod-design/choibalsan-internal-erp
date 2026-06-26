@@ -2076,6 +2076,55 @@ router.get("/ai/code-export", auth, aiRateLimit, async (req, res) => {
   md.push(`- Draft workflow: \`POST /api/iot/diagnostics/draft-work-orders\` нь active fault candidate дээр \`asset_events\` draft ажил үүсгэнэ. Duplicate хамгаалалт нь \`material_note\` доторх \`IOT_FAULT_KEY:...\` marker-аар хийгдэнэ.`);
   md.push(`- Fault category эхний хувилбарууд: \`node_signal_lost\`, \`decoder_or_payload_missing\`, \`panel_no_line_power\`, \`street_light_off\`, \`street_state_unknown\`, \`ok\`.`);
 
+  // ── Electricity billing domain rules ────────────────────────────────────────
+  md.push(`\n## Цахилгааны төлбөрийн системийн логик\n`);
+  md.push(`Энэ хэсэг нь \`Гэрэлтүүлэг → Цахилгааны төлбөр\` таб болон \`routes/electricity.js\` дахь логикийн чухал дүрмүүд.`);
+
+  md.push(`\n### Үндсэн өгөгдлийн бүтэц`);
+  md.push(`- **\`electricity_bill_imports\`** — PDF-ээс import хийгдсэн нэхэмжлэл (нэг сар нэг мөр, UNIQUE billing_year+billing_month).`);
+  md.push(`  - \`total_amount\` = PDF-ийн нийт нэхэмжлэлийн дүн (бүх тоолуур, VAT орсон). \`extractMeta()\`-аар PDF-ээс уншина.`);
+  md.push(`  - \`our_amount\` = owner_status='OURS' тоолуурын нийлбэр дүн (capacity орно, VAT үгүй). Confirm хийх үед тооцоолно.`);
+  md.push(`  - \`our_kwh\` = OURS тоолуурын нийлбэр кВт.ц.`);
+  md.push(`  - \`diff_amount\` = total_amount − our_amount (бусад байгуулллагын хэсэг).`);
+  md.push(`  - \`status\` = 'confirmed' (import дууссан) | 'paid' (төлбөр бүртгэгдсэн). Import хийхэд шууд 'confirmed' болно.`);
+  md.push(`  - \`paid_at\`, \`paid_amount\`, \`payment_ref\`, \`paid_by\` — \`PUT /api/eb/:id/pay\` дуусгавал тохируулагдана.`);
+  md.push(`- **\`electricity_bill_points\`** — нэхэмжлэл дотрын тоолуур тус бүрийн мэдээлэл (нормалчилсан).`);
+  md.push(`  - \`capacity_amount\` = тухайн тоолуурын чадлын төлбөр (FIXED row). \`our_amount\`-д аль хэдийн орсон.`);
+  md.push(`  - \`owner_status\` = import үед \`meter_points\` registry-аас татсан утга ('OURS'|'OTHER'|'UNKNOWN').`);
+  md.push(`- **\`electricity_bill_checks\`** — import үед автомат шалгалтын үр дүн. \`is_resolved=0\` = нээлттэй.`);
+  md.push(`  - check_code-ууд: NEW_POINT, OWNER_MISMATCH, TRANSFERRED_BUT_BILLED, DUPLICATE_METER, ZERO_USAGE, TARIFF_MISMATCH, USAGE_SPIKE, USAGE_DROP.`);
+  md.push(`  - \`warnings\` card дээрх тоо = бүх import-уудын нийлсэн unresolved count. Сар бүр нэмэгдэнэ.`);
+  md.push(`- **\`meter_points\`** — тоолуурын master registry. \`owner_status\`='OURS'|'OTHER'|'UNKNOWN'|'TRANSFERRED'.`);
+  md.push(`  - \`verified=0\` → "Баталгаажаагүй цэг" card дээрх тоо. Bill confirmation-тай холбоогүй.`);
+
+  md.push(`\n### PDF import pipeline`);
+  md.push(`1. \`POST /api/el-import/preview\` — PDF upload → \`readPDF()\` → \`extractMeta()\` → \`parsePDFRows()\` → \`normalizeRows()\` → \`runChecks()\` → preview JSON буцаана.`);
+  md.push(`2. \`POST /api/el-import/confirm\` — preview JSON хүлээн авч DB-д хадгална. status='confirmed' шууд тохируулна.`);
+  md.push(`3. \`DELETE /api/eb/:id\` — import + бүх child (points/checks/raw_rows) CASCADE устгана.`);
+
+  md.push(`\n### \`extractMeta()\` — PDF-ийн нийт дүн авах логик`);
+  md.push(`- **АЮУЛ**: pdf2json нь нэг хуудасны текстийг \`\\n\`-гүй, space-ээр нийлүүлдэг. Тиймээс мөр-мөрөөр задлах боломжгүй.`);
+  md.push(`- **Зөв логик** (одоо хэрэгжсэн): \`Эцсийн үлдэгдэл\` эсвэл \`Нийт орлого\` гарч ирэхийн ӨМНӨХ текстэд хамгийн сүүлийн 1M+ тоог \`total_amount\` болгон авна.`);
+  md.push(`  - Тухайн байрлалаас өмнөх сүүлийн 1M+ тоо = PDF-ийн "Нийт" summary мөрийн нийт дүн (жишээ: 24,347,818.57).`);
+  md.push(`  - "Эцсийн үлдэгдэл" болон "Нийт орлого" нь accounting summary мөрүүд — зардлын дүн биш.`);
+  md.push(`- **Буруу байсан логик**: PDF текстийн хамгийн сүүлийн 1M+ тоог авдаг байсан → "Нийт орлого" (5.48M) авч "Нийт төлбөр" (24.35M)-г орхидог байлаа.`);
+
+  md.push(`\n### \`/api/el-summary\` — Summary cards`);
+  md.push(`- \`total_amount\`, \`our_amount\`, \`our_kwh\` = **хамгийн сүүлийн confirmed import**-оос (latest bill).`);
+  md.push(`- \`warnings\` = electricity_bill_checks WHERE severity IN ('WARNING','ERROR') AND is_resolved=0 — бүх import нийлсэн тоо.`);
+  md.push(`- \`recent_bills\` = сүүлийн 6 import, **бүх status** (pending/confirmed/paid хамт).`);
+
+  md.push(`\n### \`/api/el-budget\` — Цахилгааны зардлын төлөвлөгөо`);
+  md.push(`- **Гүйцэтгэл** = \`electricity_bill_imports.total_amount\` (тухайн сарын нэхэмжлэлийн нийт дүн).`);
+  md.push(`- \`our_amount\` ашиглаж болохгүй — энэ нь OURS тоолуурын хэсэг, харин байгуулллага нийт нэхэмжлэлийг харьцуулна.`);
+  md.push(`- Зөрүү = Гүйцэтгэл − Төлөвлөгоо. Сөрөг = төлөвлөгоонд багтсан (сайн).`);
+
+  md.push(`\n### PDF-ийн тарифын бүтэц`);
+  md.push(`- \`parsePDFRows()\` нь зөвхөн **241** (METERED, ердийн хэрэглэгч) ба **15500** (FIXED, capacity charge) тарифыг таньдаг.`);
+  md.push(`- Тариф **265** таних regex одоогоор байхгүй — 265 тарифтай мөр импортод ордоггүй.`);
+  md.push(`- \`capacity_amount\` (FIXED row) нь \`electricity_bill_points\`-д тусдаа хадгалагдах боловч UI дээр тусдаа харагдахгүй, \`our_amount\`-д нийлсэн байна.`);
+  md.push(`- VAT (\`НӨАТ\`) PDF-ээс уншигддаггүй, \`electricity_bill_imports\`-д \`vat_amount\` field байхгүй.`);
+
   // Architectural rules
   md.push(`\n## Архитектурын чухал дүрмүүд\n`);
   md.push(`1. **state** — \`import { state } from "./common.js"\` хэлбэрээр л ашиглана. \`window.state\` гэж байхгүй.`);

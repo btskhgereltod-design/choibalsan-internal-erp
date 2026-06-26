@@ -383,6 +383,44 @@ function reportEventText(event) {
   return event.type || "-";
 }
 
+function renderOperatorSummary() {
+  const summary = _iotReport?.operatorSummary || {};
+  const events = summary.events || [];
+  const cards = [
+    ["Power", summary.powerEvents || 0, "tasralt/sergelt", "#f59e0b"],
+    ["Auto", summary.autoCommands || 0, "ERP command", "#2563eb"],
+    ["Problem", summary.lightProblems || 0, "asah yostoi ued untarsan", "#dc2626"],
+    ["Recovered", summary.recovered || 0, "dahin assan", "#16a34a"],
+  ];
+  return `<div class="iot-panel iot-operator-summary">
+    <div class="iot-panel-head">
+      <div>
+        <div class="iot-panel-title">Operatoriin ugluunii shuniin dugnelt</div>
+        <div class="iot-map-sub">Power tasralt, auto recovery, ON/OFF command, gerel sergesen eseh</div>
+      </div>
+      <span>${events.length} event</span>
+    </div>
+    <div class="iot-operator-cards">
+      ${cards.map(([label, value, sub, color]) => `
+        <div class="iot-report-card" style="--accent:${color}">
+          <span>${label}</span>
+          <b>${value}</b>
+          <i>${sub}</i>
+        </div>
+      `).join("")}
+    </div>
+    <div class="iot-operator-timeline">
+      ${events.length ? events.slice(-18).reverse().map(e => `
+        <div class="iot-operator-event is-${escapeHtml(e.severity || "info")}">
+          <time>${fmtDate(e.at)}</time>
+          <b>${fmtText(e.deviceName)}</b>
+          <span>${fmtText(e.message)}</span>
+        </div>
+      `).join("") : `<div class="iot-empty-dark">Songoson hugatsaand operator anhaarah event alga.</div>`}
+    </div>
+  </div>`;
+}
+
 function chartTimeLabel(value) {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "";
@@ -482,6 +520,7 @@ function renderReportPanel() {
         </div>
       `).join("")}
     </div>
+    ${renderOperatorSummary()}
     ${renderTimeseriesPanel(devices)}
     <div class="iot-report-grid">
       <div class="iot-panel">
@@ -3507,6 +3546,15 @@ renderIotPage = function() {
       .iot-report-card span{display:block;color:#506f8b;font-size:11px;text-transform:uppercase;font-weight:900}
       .iot-report-card b{display:block;color:#102033;font-size:22px;line-height:1.15;margin-top:5px}
       .iot-report-card i{display:block;color:#58728b;font-size:11px;font-style:normal;margin-top:5px}
+      .iot-operator-cards{display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));gap:10px;margin-bottom:12px}
+      .iot-operator-timeline{display:grid;gap:8px}
+      .iot-operator-event{display:grid;grid-template-columns:132px 160px minmax(0,1fr);gap:10px;align-items:center;border:1px solid #d5e0ea;border-left:4px solid #64748b;border-radius:8px;background:#f8fbff;padding:9px 11px;font-size:12px}
+      .iot-operator-event.is-ok{border-left-color:#16a34a;background:#f0fdf4}
+      .iot-operator-event.is-warning{border-left-color:#f59e0b;background:#fffbeb}
+      .iot-operator-event.is-critical{border-left-color:#dc2626;background:#fef2f2}
+      .iot-operator-event time{color:#58728b;font-weight:800}
+      .iot-operator-event b{color:#172033}
+      .iot-operator-event span{color:#1d2f44;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
       .iot-report-grid{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:12px;align-items:start}
       .iot-report-event{display:grid;grid-template-columns:1fr;gap:3px;border-top:1px solid #d5e0ea;padding:10px 0}
       .iot-report-event b{font-size:12px;color:#172033}.iot-report-event span{font-size:12px;color:#1d2f44}.iot-report-event time{font-size:11px;color:#58728b}
