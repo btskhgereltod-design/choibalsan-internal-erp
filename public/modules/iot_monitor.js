@@ -40,6 +40,7 @@ let _iotFeedPointDeviceLinks = [];
 let _iotDualSide = false;
 let _iotSelectedFeedPointId = null;
 let _iotRoadWidth = 14;
+let _iotScheduleInfo = [];
 
 function fmtNum(value, digits = 2, suffix = "") {
   if (value === null || value === undefined || value === "") return "-";
@@ -697,25 +698,36 @@ function renderCategoryCards() {
   </div>`;
 }
 
+function deviceScheduleAlert(row) {
+  const eui = String(row.devEui || "").toUpperCase();
+  const sched = _iotScheduleInfo.find(s => String(s.devEui || "").toUpperCase() === eui);
+  const online = isDeviceOnline(row);
+  const relay = relayState(row);
+  if (!online) return { bad: true, msg: "Дохио тасарсан" };
+  if (!sched) {
+    if (relay === "off") return { bad: false, msg: "Гэрэл унтарсан (хуваарь тодорхойгүй)" };
+    return { bad: false, msg: "Дохио ирсэн" };
+  }
+  if (sched.scheduled_action === "ON" && relay === "off") return { bad: true, msg: "Асах ёстой цагт гэрэл асаагүй" };
+  if (sched.scheduled_action === "OFF" && relay === "on") return { bad: true, msg: "Унтрах ёстой цагт гэрэл асчээ" };
+  if (sched.scheduled_action === "ON" && relay === "on") return { bad: false, msg: "Хуваарийн дагуу ассан" };
+  return { bad: false, msg: "Хуваарийн дагуу унтарсан" };
+}
+
 function renderAlerts() {
-  const rows = _iotRows
-    .filter(r => !isDeviceOnline(r) || relayState(r) === "off" || r.command_confirmation_status === "sent_not_confirmed")
-    .slice(0, 5);
-  const fallback = _iotRows.slice(0, 3);
-  const source = rows.length ? rows : fallback;
+  const alertRows = _iotRows.map(r => ({ row: r, alert: deviceScheduleAlert(r) }));
+  const bad = alertRows.filter(a => a.alert.bad);
+  const source = bad.length ? bad : alertRows.slice(0, 3);
   return `<div class="iot-panel iot-alert-panel">
     <div class="iot-panel-head"><div class="iot-panel-title">Сэрэмжлүүлэг</div><button onclick="iotSetView('list')">Бүгдийг харах →</button></div>
-    ${source.length ? source.map(row => {
-      const bad = !isDeviceOnline(row) || relayState(row) === "off";
-      return `<div class="iot-alert-row">
-        <div class="iot-alert-icon ${bad ? "is-bad" : "is-ok"}">${bad ? "!" : "✓"}</div>
+    ${source.length ? source.map(({ row, alert }) => `<div class="iot-alert-row">
+        <div class="iot-alert-icon ${alert.bad ? "is-bad" : "is-ok"}">${alert.bad ? "!" : "✓"}</div>
         <div>
           <b>${fmtText(row.deviceName)}</b>
-          <span>${bad ? "Дохио/гудамжны гэрэл шалгах" : "Хэмжилтийн дохио ирсэн"}</span>
+          <span>${escapeHtml(alert.msg)}</span>
         </div>
         <time>${fmtDate(row.last_seen)}</time>
-      </div>`;
-    }).join("") : `<div class="iot-empty-dark">Мэдээлэл алга</div>`}
+      </div>`).join("") : `<div class="iot-empty-dark">Мэдээлэл алга</div>`}
   </div>`;
 }
 
@@ -779,6 +791,12 @@ function renderErpSyncPanel() {
 
 function renderWeatherLikePanel() {
   const s = iotStats();
+  const scheduleRows = _iotScheduleInfo.map(info => {
+    if (info.is_always_off) return `<span>${escapeHtml(info.category)}</span><b style="color:#dc2626">Унтраалттай</b>`;
+    const on = info.on_time || "—";
+    const off = info.off_time || "—";
+    return `<span>${escapeHtml(info.category)}</span><b>${on} → ${off}</b>`;
+  }).join("");
   return `<div class="iot-panel iot-weather-panel">
     <div class="iot-panel-title">Системийн байдал</div>
     <div class="iot-weather-main"><span>☀</span><b>${s.avgRssi === null ? "-" : Math.round(s.avgRssi)} dBm</b></div>
@@ -786,6 +804,7 @@ function renderWeatherLikePanel() {
       <span>Node дохио</span><b>${s.online}/${s.total} сонсогдсон</b>
       <span>Чадал</span><b>${fmtNum(s.power, 2, " kW")}</b>
       <span>Энерги</span><b>${fmtNum(s.energy, 2, " kWh")}</b>
+      ${scheduleRows ? `<span style="grid-column:1/-1;border-top:1px solid #e2e8f0;margin-top:4px;padding-top:6px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:#94a3b8">Өнөөдрийн хуваарь</span>${scheduleRows}` : ""}
     </div>
   </div>`;
 }
@@ -1579,11 +1598,11 @@ async function iotSaveNodeLocationFromFeedPoint(feedPointId, node) {
 
 function iotPoleZoomStyle(zoom) {
   const z = Number(zoom || 13);
-  if (z <= 11) return { r: 2, border: 1, font: 0, glow: 0, opacity: 0.65 };
-  if (z <= 12) return { r: 3, border: 1, font: 0, glow: 0, opacity: 0.72 };
-  if (z <= 13) return { r: 4, border: 1, font: 0, glow: 4, opacity: 0.82 };
-  if (z <= 14) return { r: 5, border: 1, font: 7, glow: 7, opacity: 0.90 };
-  if (z <= 15) return { r: 6, border: 2, font: 8, glow: 10, opacity: 0.95 };
+  if (z <= 12) return { r: 1, border: 0, font: 0, glow: 0, opacity: 0 };
+  if (z <= 13) return { r: 1, border: 0, font: 0, glow: 0, opacity: 0.18 };
+  if (z <= 14) return { r: 2, border: 1, font: 0, glow: 0, opacity: 0.45 };
+  if (z <= 15) return { r: 4, border: 1, font: 0, glow: 4, opacity: 0.78 };
+  if (z <= 16) return { r: 5, border: 1, font: 7, glow: 7, opacity: 0.92 };
   return { r: 8, border: 2, font: 10, glow: 14, opacity: 1 };
 }
 
@@ -1912,17 +1931,20 @@ async function initIotMap() {
         color: "rgba(0,229,255,0.18)", weight: 12, opacity: 1,
       }).addTo(networkRouteLayer);
     }
+    const zoomNow = _iotMap.getZoom();
+    const cableHaloWeight = zoomNow <= 13 ? 5 : zoomNow <= 15 ? 7 : (_iotScadaMode ? 11 : 9);
+    const cableLineWeight = zoomNow <= 13 ? 2.5 : zoomNow <= 15 ? 3.5 : (_iotScadaMode ? 4 : 5);
     if (isCable) {
       window.L.polyline(geometry.map(p => [p.lat, p.lng]), {
         color: _iotScadaMode ? "rgba(255,107,53,0.28)" : "rgba(239,68,68,0.30)",
-        weight: _iotScadaMode ? 11 : 9,
+        weight: cableHaloWeight,
         opacity: 1,
       }).addTo(networkRouteLayer);
     }
     const cableLabel = isCable && route.pole_start ? ` · ${route.pole_start}-${route.pole_end} шон` : "";
     const routeLine = window.L.polyline(geometry.map(p => [p.lat, p.lng]), {
       color: routeColor,
-      weight: isCable ? (_iotScadaMode ? 4 : 5) : (_iotScadaMode ? 2.5 : 4),
+      weight: isCable ? cableLineWeight : (_iotScadaMode ? 2.5 : 4),
       opacity: route.status === "active" ? 0.92 : 0.62,
       dashArray: isCable ? "12 6" : (route.status === "active" ? "" : "8 7"),
     }).bindTooltip(isCable ? `🔌 ${escapeHtml(route.name || "Кабель")}${cableLabel}` : escapeHtml(route.name || "Трасс"), { sticky: true })
@@ -3755,9 +3777,9 @@ renderIotPage = function() {
       .iot-view-overview .iot-kpi-label{font-size:9px;line-height:1.15}
       .iot-view-overview .iot-kpi-value{font-size:20px;margin-top:1px}
       .iot-view-overview .iot-kpi-sub{font-size:10px;margin-top:2px}
-      .iot-view-overview .iot-command-grid{display:grid;grid-template-columns:1fr 300px;grid-template-rows:1fr;min-height:0;flex:1;overflow:hidden}
-      .iot-view-overview .iot-command-grid main{grid-column:1 / -1;grid-row:1;z-index:1;height:100%;min-height:0;overflow:hidden;display:flex}
-      .iot-view-overview .iot-command-grid aside{grid-column:2;grid-row:1;z-index:2;min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:8px;padding:8px 0}
+      .iot-view-overview .iot-command-grid{display:grid;grid-template-columns:minmax(0,1fr) 300px;grid-template-rows:1fr;gap:10px;min-height:0;flex:1;overflow:hidden}
+      .iot-view-overview .iot-command-grid main{grid-column:1;grid-row:1;height:100%;min-height:0;overflow:hidden;display:flex;min-width:0}
+      .iot-view-overview .iot-command-grid aside{grid-column:2;grid-row:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:8px;padding:8px 0 72px;min-width:0}
       .iot-view-overview .iot-panel{background:rgba(255,255,255,0.93);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
       .iot-view-overview .iot-alert-panel{min-height:0;overflow-y:auto}
       .iot-node-live-panel{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
@@ -3770,11 +3792,11 @@ renderIotPage = function() {
       .iot-node-live-state{font-size:11px;font-weight:800;margin-bottom:4px}
       .iot-node-live-vals{display:flex;gap:10px;font-size:11px;color:#475569;font-family:Consolas,monospace;flex-wrap:wrap}
       .iot-node-live-time{font-size:10px;color:#94a3b8;margin-top:3px}
-      .iot-view-overview .iot-map-shell{height:100%;display:flex;flex-direction:column;min-height:0}
+      .iot-view-overview .iot-map-shell{height:100%;width:100%;display:flex;flex-direction:column;min-height:0;min-width:0}
       .iot-view-overview .iot-map-toolbar{padding:9px 12px}
       .iot-view-overview .iot-map-sub{font-size:11px;line-height:1.25}
       .iot-view-overview .iot-map-legend{padding:7px 9px;font-size:11px;gap:8px;display:flex;align-items:center}
-      .iot-view-overview .iot-map-canvas{height:auto;min-height:0;flex:1}
+      .iot-view-overview .iot-map-canvas{height:auto;min-height:0;flex:1;width:100%}
       .iot-view-overview .iot-panel{padding:10px}
       .iot-view-overview .iot-panel-head{margin-bottom:6px}
       .iot-view-overview .iot-panel-title{font-size:12px}
@@ -3980,7 +4002,7 @@ renderIotPage = function() {
 
 async function iotRefresh() {
   try {
-    const [devices, meters, lights, gerInventory, routes, poles, feedPoints, feederCables, feedPointDeviceLinks] = await Promise.all([
+    const [devices, meters, lights, gerInventory, routes, poles, feedPoints, feederCables, feedPointDeviceLinks, scheduleInfo] = await Promise.all([
       api("/api/iot/devices"),
       api("/api/mp").catch(() => []),
       api("/api/sl-points").catch(() => []),
@@ -3990,6 +4012,7 @@ async function iotRefresh() {
       api("/api/sl-network/feed-points").catch(() => []),
       api("/api/sl-network/feeder-cables").catch(() => []),
       api("/api/sl-network/feed-point-devices").catch(() => []),
+      api("/api/iot/schedule-info").catch(() => []),
     ]);
     _iotRows = devices;
     _iotMeterPoints = Array.isArray(meters) ? meters : [];
@@ -4000,6 +4023,7 @@ async function iotRefresh() {
     _iotFeedPoints = Array.isArray(feedPoints) ? feedPoints : [];
     _iotFeederCables = Array.isArray(feederCables) ? feederCables : [];
     _iotFeedPointDeviceLinks = Array.isArray(feedPointDeviceLinks) ? feedPointDeviceLinks : [];
+    _iotScheduleInfo = Array.isArray(scheduleInfo) ? scheduleInfo : [];
     if (_iotView === "report") _iotReport = await api(`/api/iot/report?period=${encodeURIComponent(_iotReportPeriod)}`);
     if (_iotMap) {
       _iotSavedCenter = _iotMap.getCenter();

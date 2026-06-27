@@ -1010,6 +1010,47 @@ router.get("/iot/devices", auth, async (_req, res) => {
   res.json(rows);
 });
 
+router.get("/iot/schedule-info", auth, async (_req, res) => {
+  const now = new Date();
+  const dateKey = localDateKeyFromIso(now.toISOString());
+  const curMinutes = localMinutesFromIso(now.toISOString());
+  const logs = await all(
+    `SELECT category, on_time, off_time, is_always_off
+       FROM light_schedule_logs
+      WHERE valid_from <= ?
+      ORDER BY category, valid_from DESC, id DESC`,
+    [dateKey]
+  );
+  const seen = new Set();
+  const latestPerCategory = logs.filter(l => {
+    if (seen.has(l.category)) return false;
+    seen.add(l.category);
+    return true;
+  });
+  const solarOnMins = suitableOnMinutes(dateKey);
+  const solarOn = timeFromMinutes(solarOnMins);
+  function desiredAction(log) {
+    if (!log || Number(log.is_always_off || 0)) return "OFF";
+    const on = solarOnMins ?? minutesFromTime(log.on_time);
+    const off = minutesFromTime(log.off_time);
+    if (on === null || off === null || curMinutes === null) return null;
+    const isOnWindow = off <= on ? (curMinutes >= on || curMinutes < off) : (curMinutes >= on && curMinutes < off);
+    return isOnWindow ? "ON" : "OFF";
+  }
+  const result = Object.entries(IOT_NODE_CONFIG).map(([devEui, cfg]) => {
+    const log = latestPerCategory.find(l => l.category === cfg.category) || null;
+    return {
+      devEui,
+      category: cfg.category,
+      on_time: solarOn || log?.on_time || null,
+      off_time: log?.off_time || null,
+      is_always_off: Number(log?.is_always_off || 0),
+      scheduled_action: desiredAction(log),
+    };
+  });
+  res.json(result);
+});
+
 router.post("/iot/devices/:devEui/location", auth, requirePermission("lighting_edit"), async (req, res) => {
   const devEui = normalizeDevEui(req.params.devEui);
   const lat = Number(req.body?.lat ?? req.body?.gps_lat);
