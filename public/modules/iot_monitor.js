@@ -851,30 +851,45 @@ function renderOperatorGuide() {
   </details>`;
 }
 
+function renderNodeLivePanel() {
+  if (!_iotRows.length) return "";
+  return `<div class="iot-panel iot-node-live-panel">
+    <div class="iot-panel-head">
+      <div class="iot-panel-title">Node хэмжилт</div>
+      <span>${_iotRows.length} node</span>
+    </div>
+    <div class="iot-node-live-list">
+      ${_iotRows.map(row => {
+        const online = isDeviceOnline(row);
+        const relay = relayState(row);
+        const relayColor = relay === "on" ? "#16a34a" : relay === "off" ? "#dc2626" : "#64748b";
+        const relayLabel = relay === "on" ? "ГЭРЭЛ АССАН" : relay === "off" ? "ГЭРЭЛ АСААГҮЙ" : "ТӨЛӨВ ТОДОРХОЙГҮЙ";
+        return `<div class="iot-node-live-row">
+          <div class="iot-node-live-top">
+            <span class="iot-node-live-name">${fmtText(row.deviceName)}</span>
+            <span class="iot-node-live-badge" style="background:${online ? "#dcfce7" : "#fee2e2"};color:${online ? "#166534" : "#991b1b"}">${online ? "● Дохио ирсэн" : "○ Тасарсан"}</span>
+          </div>
+          <div class="iot-node-live-state" style="color:${relayColor}">${relayLabel}</div>
+          <div class="iot-node-live-vals">
+            <span>${fmtIotValue(row, "voltage", 1, " V")}</span>
+            <span>${fmtIotValue(row, "current", 2, " A")}</span>
+            <span>${fmtIotValue(row, "power", 3, " kW")}</span>
+            <span>${fmtIotValue(row, "energy", 3, " kWh")}</span>
+          </div>
+          <div class="iot-node-live-time">${fmtDate(row.last_seen)}</div>
+        </div>`;
+      }).join("")}
+    </div>
+  </div>`;
+}
+
 function renderCommandDashboard() {
   return `
     <div class="iot-command-dashboard">
-      <div class="iot-command-title">
-        <div>
-          <h2>ДОРНОД АЙМГИЙН УХААЛАГ ГУДАМЖНЫ ГЭРЭЛТҮҮЛГИЙН УДИРДЛАГА, ХЯНАЛТЫН СИСТЕМ</h2>
-          <p>ADW300 380V 3 фаз / ADW310 220V 1 фаз · ChirpStack uplink дохио · ERP live хяналт</p>
-        </div>
-        <div class="iot-title-actions">
-          <button onclick="iotRefresh()">Шинэчлэх</button>
-          <button onclick="iotToggleMaximize()">${_iotMaximized ? "Хэвийн" : "Дэлгэц дүүрэн"}</button>
-        </div>
-      </div>
-      ${renderOperatorGuide()}
       ${renderCommandKpis()}
       <div class="iot-command-grid">
-        <aside>${renderCategoryCards()}</aside>
-        <main>${renderMapPanel()}</main>
-        <aside>${renderAlerts()}${renderWeatherLikePanel()}</aside>
-      </div>
-      <div class="iot-command-bottom">
-        ${renderEnergyChart()}
-        ${renderStatusDonut()}
-        ${renderErpSyncPanel()}
+        <main>${renderMapPanel({ editable: false })}</main>
+        <aside>${renderAlerts()}${renderNodeLivePanel()}${renderWeatherLikePanel()}</aside>
       </div>
     </div>`;
 }
@@ -966,20 +981,23 @@ function coordForRow(row, index) {
   const raw = rawPayloadObject(row);
   const obj = raw.object || {};
   const deviceInfo = raw.deviceInfo || {};
+  const manualLat = pickNumber(row?.manualLat, row?.manual_lat);
+  const manualLng = pickNumber(row?.manualLng, row?.manual_lng);
+  if (manualLat !== null && manualLng !== null && isChoibalsanCoord(manualLat, manualLng)) {
+    return { lat: manualLat, lng: manualLng, estimated: false, source: "manual" };
+  }
   const lat = pickNumber(
     row?.lat, row?.latitude, row?.gps_lat, row?.gpsLat,
     obj.lat, obj.latitude, obj.gps_lat, obj.gpsLat,
-    deviceInfo.lat, deviceInfo.latitude,
-    deepFindNumber(raw, ["lat", "latitude", "gps_lat", "gpsLat"])
+    deviceInfo.lat, deviceInfo.latitude
   );
   const lng = pickNumber(
     row?.lng, row?.lon, row?.long, row?.longitude, row?.gps_lng, row?.gpsLon,
     obj.lng, obj.lon, obj.long, obj.longitude, obj.gps_lng, obj.gpsLon,
-    deviceInfo.lng, deviceInfo.lon, deviceInfo.longitude,
-    deepFindNumber(raw, ["lng", "lon", "long", "longitude", "gps_lng", "gpsLon"])
+    deviceInfo.lng, deviceInfo.lon, deviceInfo.longitude
   );
   if (lat !== null && lng !== null && isChoibalsanCoord(lat, lng)) {
-    return { lat, lng, estimated: false };
+    return { lat, lng, estimated: false, source: "payload" };
   }
   return fallbackCoord(row, index);
 }
@@ -989,6 +1007,40 @@ function coordForStoredPoint(row) {
   const lng = pickNumber(row?.gps_lng, row?.gpsLng, row?.lng, row?.lon, row?.longitude);
   if (lat !== null && lng !== null && isChoibalsanCoord(lat, lng)) return { lat, lng };
   return null;
+}
+
+function gatewayLocationsFromRows(rows) {
+  const byGateway = new Map();
+  (rows || []).forEach(row => {
+    const raw = rawPayloadObject(row);
+    const rxList = Array.isArray(raw.rxInfo) ? raw.rxInfo : [];
+    rxList.forEach(rx => {
+      const loc = rx?.location || {};
+      const lat = pickNumber(loc.latitude, loc.lat, rx.latitude, rx.lat);
+      const lng = pickNumber(loc.longitude, loc.lng, loc.lon, rx.longitude, rx.lng, rx.lon);
+      if (lat === null || lng === null || !isChoibalsanCoord(lat, lng)) return;
+      const gatewayId = String(rx.gatewayId || rx.gateway_id || rx.gwId || `${lat.toFixed(6)},${lng.toFixed(6)}`);
+      const prev = byGateway.get(gatewayId) || {
+        gatewayId,
+        lat,
+        lng,
+        rssi: null,
+        snr: null,
+        seen: 0,
+        devices: new Set(),
+        lastSeen: null,
+      };
+      prev.lat = lat;
+      prev.lng = lng;
+      prev.rssi = pickNumber(rx.rssi, prev.rssi);
+      prev.snr = pickNumber(rx.snr, prev.snr);
+      prev.seen += 1;
+      if (row?.devEui) prev.devices.add(String(row.devEui).toUpperCase());
+      if (!prev.lastSeen || String(row?.last_seen || "") > String(prev.lastSeen || "")) prev.lastSeen = row?.last_seen || null;
+      byGateway.set(gatewayId, prev);
+    });
+  });
+  return Array.from(byGateway.values()).map(gw => ({ ...gw, devices: Array.from(gw.devices) }));
 }
 
 function normIotText(value) {
@@ -1479,7 +1531,8 @@ function mapPopup(row, coord) {
         <span>Энерги</span><b>${fmtNum(iotNumericValue(row, "energy"), 3, " kWh")}</b>
         <span>Сүүлд</span><b>${fmtDate(row.last_seen)}</b>
       </div>
-      ${coord.estimated ? `<div style="margin-top:8px;color:#92400e;font-size:11px">Байршил payload-д байхгүй тул түр ойролцоогоор байрлуулсан.</div>` : ""}
+      ${coord.source === "manual" ? `<div style="margin-top:8px;color:#166534;font-size:11px">Байршлыг оператор map дээр гараар тогтоосон.</div>` : ""}
+      ${coord.estimated ? `<div style="margin-top:8px;color:#92400e;font-size:11px">Байршил payload-д байхгүй тул түр ойролцоогоор байрлуулсан. Сүлжээний зураглал дээр marker-ийг чирж зөв байрлуулж хадгална.</div>` : ""}
     </div>
   `;
 }
@@ -1487,11 +1540,41 @@ function mapPopup(row, coord) {
 function markerHtml(row, coord) {
   const online = isDeviceOnline(row);
   const load = relayState(row);
-  const color = online ? (load === "on" ? "#16a34a" : "#2563eb") : "#dc2626";
+  const color = online ? (load === "on" ? "#16a34a" : "#6b7280") : "#dc2626";
   const ring = coord.estimated ? "#f59e0b" : "#ffffff";
   return `<div class="iot-map-marker" style="background:${color};border-color:${ring}">
     <span>${load === "on" ? "ON" : load === "off" ? "OFF" : "IoT"}</span>
   </div>`;
+}
+
+async function iotSaveNodeLocation(devEui, latlng) {
+  const lat = Number(latlng?.lat);
+  const lng = Number(latlng?.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || !isChoibalsanCoord(lat, lng)) {
+    toast("Node байрлал Чойбалсан орчмоос гадуур байна");
+    throw new Error("Invalid node location");
+  }
+  const result = await api(`/api/iot/devices/${encodeURIComponent(devEui)}/location`, {
+    method: "POST",
+    body: JSON.stringify({ lat, lng }),
+  });
+  const row = _iotRows.find(r => String(r.devEui || "").toUpperCase() === String(devEui || "").toUpperCase());
+  if (row) {
+    row.manualLat = lat;
+    row.manualLng = lng;
+    row.manualLocationAt = new Date().toISOString();
+  }
+  toast(`${result.deviceName || devEui}: байрлал хадгалагдлаа`);
+  return result;
+}
+
+async function iotSaveNodeLocationFromFeedPoint(feedPointId, node) {
+  const fp = _iotFeedPoints.find(row => Number(row.id) === Number(feedPointId));
+  const lat = Number(fp?.gps_lat ?? fp?.lat);
+  const lng = Number(fp?.gps_lng ?? fp?.lng);
+  if (!node?.devEui || !Number.isFinite(lat) || !Number.isFinite(lng) || !isChoibalsanCoord(lat, lng)) return false;
+  await iotSaveNodeLocation(node.devEui, { lat, lng });
+  return true;
 }
 
 function iotPoleZoomStyle(zoom) {
@@ -1641,7 +1724,7 @@ function updateIotPoleMarkerStyles(poleRefs = []) {
   });
 }
 
-function renderMapPanel() {
+function renderMapPanel({ editable = true } = {}) {
   const points = _iotRows.map((row, index) => ({ row, coord: coordForRow(row, index) }));
   const online = points.filter(p => isDeviceOnline(p.row)).length;
   const estimated = points.filter(p => p.coord.estimated).length;
@@ -1653,11 +1736,11 @@ function renderMapPanel() {
     <div class="iot-map-shell">
       <div class="iot-map-toolbar">
         <div>
-          <div class="iot-panel-title">Газрын зураг</div>
-          <div class="iot-map-sub">${points.length} ADW · ${online} дохио ирсэн · ${metersWithGps} шит · ${lightsWithGps} гэрэл · ${routeCount} трасс · ${poleCount} шон · ${estimated} түр байршил</div>
+          <div class="iot-panel-title">${editable ? "Сүлжээний зураглал, тохиргоо" : "Map хяналт"}</div>
+          <div class="iot-map-sub">${points.length} ADW · ${online} дохио ирсэн · ${metersWithGps} шит · ${lightsWithGps} гэрэл · ${routeCount} трасс · ${poleCount} шон · ${estimated} түр байршил${editable ? " · зураглал засварлах хэсэг" : " · зөвхөн хяналт"}</div>
         </div>
         <div style="display:flex;align-items:center;gap:10px">
-          <div class="iot-map-legend"><span><i class="ok"></i>Гудамж ассан</span><span><i class="warn"></i>Түр байршил</span><span><i class="bad"></i>Дохио тасарсан / асаагүй</span></div>
+          <div class="iot-map-legend"><span><i class="ok"></i>Гэрэл ассан</span><span><i class="off"></i>Гэрэл унтарсан</span><span><i class="bad"></i>Дохио тасарсан</span><span><i class="est"></i>Түр байршил</span></div>
           <button type="button" class="iot-fullscreen-btn" onclick="iotToggleMaximize()" title="${_iotMaximized ? "Буцах" : "Дэлгэц дүүрэн харах"}">
             ${_iotMaximized
               ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg> Буцах`
@@ -1665,7 +1748,7 @@ function renderMapPanel() {
           </button>
         </div>
       </div>
-      ${renderNetworkWorkspace()}
+      ${editable ? renderNetworkWorkspace() : ""}
       <div id="iotMap" class="iot-map-canvas"></div>
     </div>`;
 }
@@ -1673,7 +1756,7 @@ function renderMapPanel() {
 function renderIotBody() {
   if (_iotView === "report") return renderReportPanel();
   if (_iotView === "list") return renderTable();
-  if (_iotView === "map") return `${renderOperatorGuide()}${renderMapPanel()}`;
+  if (_iotView === "map") return `${renderOperatorGuide()}${renderMapPanel({ editable: true })}`;
   return renderCommandDashboard();
 }
 
@@ -1721,36 +1804,18 @@ async function initIotMap() {
   _iotSavedCenter = null;
   _iotSavedZoom = null;
   _iotMap = window.L.map("iotMap", { zoomControl: true, preferCanvas: true }).setView(initCenter, initZoom);
-  const streetLayer = window.L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
-    maxZoom: 19,
-    attribution: "&copy; OpenStreetMap &copy; CARTO",
-  });
-  const googleSatelliteLayer = window.L.tileLayer("https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}", {
+  window.L.tileLayer("https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}", {
     maxZoom: 20,
     subdomains: ["0", "1", "2", "3"],
     attribution: "&copy; Google",
   }).addTo(_iotMap);
-  const esriSatelliteLayer = window.L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
-    maxZoom: 19,
-    attribution: "Tiles &copy; Esri",
-  });
-  const scadaDarkLayer = window.L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-    maxZoom: 20,
-    attribution: "&copy; OpenStreetMap &copy; CARTO",
-  });
-  if (_iotScadaMode) scadaDarkLayer.addTo(_iotMap);
-  window.L.control.layers({
-    "Google satellite": googleSatelliteLayer,
-    "Esri satellite": esriSatelliteLayer,
-    "Замын зураг": streetLayer,
-    "🖥 SCADA харанхуй": scadaDarkLayer,
-  }, null, { position: "topleft", collapsed: false }).addTo(_iotMap);
   _iotMarkers = window.L.featureGroup().addTo(_iotMap);
   const meterLayer = window.L.featureGroup().addTo(_iotMap);
   const lightLayer = window.L.featureGroup().addTo(_iotMap);
   const linkLayer = window.L.featureGroup().addTo(_iotMap);
   const networkRouteLayer = window.L.featureGroup().addTo(_iotMap);
   const poleLayer = window.L.featureGroup().addTo(_iotMap);
+  const gatewayLayer = window.L.featureGroup().addTo(_iotMap);
   const poleMarkerRefs = [];
   const feedLayer = window.L.featureGroup().addTo(_iotMap);
   _iotFeedHighlightLayer = window.L.featureGroup().addTo(_iotMap);
@@ -1764,9 +1829,24 @@ async function initIotMap() {
       iconAnchor: [21, 21],
       popupAnchor: [0, -18],
     });
-    window.L.marker([coord.lat, coord.lng], { icon })
-      .bindPopup(mapPopup(row, coord))
-      .addTo(_iotMarkers);
+    const marker = window.L.marker([coord.lat, coord.lng], {
+      icon,
+      draggable: _iotView === "map",
+      autoPan: true,
+    }).bindPopup(mapPopup(row, coord));
+    if (_iotView === "map") {
+      marker.on("dragend", async () => {
+        const pos = marker.getLatLng();
+        try {
+          await iotSaveNodeLocation(row.devEui, pos);
+          marker.setPopupContent(mapPopup(row, { lat: pos.lat, lng: pos.lng, estimated: false, source: "manual" }));
+        } catch (e) {
+          marker.setLatLng([coord.lat, coord.lng]);
+          toast(e.message || "Node байрлал хадгалах үед алдаа гарлаа");
+        }
+      });
+    }
+    marker.addTo(_iotMarkers);
   });
   const meterByNo = new Map();
   _iotMeterPoints.forEach(point => {
@@ -1953,15 +2033,36 @@ async function initIotMap() {
     .addTo(newFeedPointLayer);
   });
 
+  gatewayLocationsFromRows(_iotRows).forEach(gw => {
+    const icon = window.L.divIcon({
+      className: "",
+      html: `<div style="width:30px;height:30px;border-radius:50%;background:#7c3aed;border:3px solid #fff;box-shadow:0 0 0 3px rgba(124,58,237,.28),0 4px 12px rgba(0,0,0,.28);display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;font-weight:900">📡</div>`,
+      iconSize: [30, 30],
+      iconAnchor: [15, 15],
+    });
+    const popup = `
+      <div style="min-width:230px;font-size:12px;color:#334155">
+        <div style="font-size:10px;font-weight:900;color:#6d28d9;text-transform:uppercase;margin-bottom:5px">Unitel gateway antenna</div>
+        <div style="font-weight:900;color:#0f172a;margin-bottom:5px">${escapeHtml(gw.gatewayId)}</div>
+        <div style="display:grid;grid-template-columns:76px 1fr;gap:4px 8px">
+          <span style="color:#64748b">GPS</span><b style="font-family:Consolas,monospace">${fmtNum(gw.lat, 6)}, ${fmtNum(gw.lng, 6)}</b>
+          <span style="color:#64748b">RSSI/SNR</span><b>${fmtNum(gw.rssi, 0, " dBm")} / ${fmtNum(gw.snr, 1, " dB")}</b>
+          <span style="color:#64748b">Node</span><b>${gw.devices.length} төхөөрөмжийн дохионд харагдсан</b>
+        </div>
+        <div style="margin-top:8px;color:#92400e;font-size:11px">Энэ нь node-ийн байрлал биш. Дохио хүлээж авсан gateway antenna-ийн байрлал.</div>
+      </div>
+    `;
+    window.L.marker([gw.lat, gw.lng], { icon })
+      .bindPopup(popup)
+      .bindTooltip(`📡 Unitel gateway · ${escapeHtml(gw.gatewayId)}`, { sticky: true })
+      .addTo(gatewayLayer);
+  });
+
   window.L.control.layers({}, {
     "ADW төхөөрөмж": _iotMarkers,
-    "Шит / тоолуур": meterLayer,
-    "Гэрлийн цэг": lightLayer,
-    "Тэжээлийн холбоос": linkLayer,
     "Трасс / коридор": networkRouteLayer,
     "Шон / pole": poleLayer,
-    "⚡ Тэжээл (хуучин)": feedLayer,
-    "⚡ Тэжээл (шинэ)": newFeedPointLayer,
+    "⚡ Тэжээлийн цэг": newFeedPointLayer,
   }, { position: "topright", collapsed: false }).addTo(_iotMap);
   const fitLayer = window.L.featureGroup([
     ..._iotMarkers.getLayers(),
@@ -3151,6 +3252,7 @@ async function iotLinkNodeToFeedPoint(feedPointId) {
     dev_eui: devEui,
     role: "controller",
   });
+  await iotSaveNodeLocationFromFeedPoint(feedPointId, node).catch(err => console.warn("Node location auto-save failed", err));
   toast(`${node.deviceName || node.devEui} тэжээлийн цэгтэй холбогдлоо`);
   await iotRefresh();
 }
@@ -3187,6 +3289,7 @@ async function iotLinkNodeToFeedPointLive(feedPointId) {
     dev_eui: devEui,
     role: "controller",
   });
+  await iotSaveNodeLocationFromFeedPoint(feedPointId, node).catch(err => console.warn("Node location auto-save failed", err));
   toast(`${node.deviceName || node.devEui} тэжээлийн цэгтэй холбогдлоо`);
   refreshFeedPointPopup(feedPointId);
   setTimeout(() => iotRefresh().catch(err => console.warn("Feed point device refresh failed", err)), 600);
@@ -3243,6 +3346,7 @@ async function iotLinkNodeToFeedPointReplace(feedPointId) {
     dev_eui: devEui,
     role: "controller",
   });
+  await iotSaveNodeLocationFromFeedPoint(feedPointId, node).catch(err => console.warn("Node location auto-save failed", err));
   toast(`${node.deviceName || node.devEui} энэ шитний ADW төхөөрөмжөөр оноогдлоо`);
   refreshFeedPointPopup(feedPointId);
   setTimeout(() => iotRefresh().catch(err => console.warn("Feed point device refresh failed", err)), 600);
@@ -3564,11 +3668,11 @@ function renderIotPage() {
       </div>
       <div class="iot-tabs" role="tablist" aria-label="IoT харагдац">
         <button class="iot-tab ${_iotView === "list" ? "is-active" : ""}" onclick="iotSetView('list')">Жагсаалт</button>
-        <button class="iot-tab ${_iotView === "map" ? "is-active" : ""}" onclick="iotSetView('map')">Газрын зураг</button>
+        <button class="iot-tab ${_iotView === "map" ? "is-active" : ""}" onclick="iotSetView('map')">Сүлжээний зураглал</button>
       </div>
       <div id="iotBody">${renderIotBody()}</div>
     </div>`;
-  if (_iotView === "map") initIotMap();
+  if (_iotView === "overview" || _iotView === "map") initIotMap();
 }
 
 renderIotPage = function() {
@@ -3638,8 +3742,52 @@ renderIotPage = function() {
       .iot-kpi-label{font-size:11px;color:#506f8b;text-transform:uppercase;font-weight:800}
       .iot-kpi-value{font-size:24px;line-height:1.1;font-weight:950;color:#102033;margin-top:3px}
       .iot-kpi-sub{font-size:11px;color:#1f6fb2;margin-top:5px}
-      .iot-command-grid{display:grid;grid-template-columns:236px minmax(420px,1fr) 300px;gap:12px;align-items:stretch}
+      .iot-command-grid{display:grid;grid-template-columns:minmax(520px,1fr) 300px;gap:12px;align-items:stretch}
       .iot-command-grid aside{display:flex;flex-direction:column;gap:12px;min-width:0}
+      .iot-page.iot-view-overview{padding:12px 16px}
+      .iot-view-overview .iot-tabs{margin-bottom:8px}
+      .iot-view-overview{height:calc(100dvh - 178px);overflow:hidden;display:flex;flex-direction:column}
+      .iot-view-overview #iotBody{flex:1;min-height:0;display:flex;flex-direction:column}
+      .iot-view-overview .iot-command-dashboard{gap:8px;height:100%;min-height:0;overflow:hidden;display:flex;flex-direction:column}
+      .iot-view-overview .iot-command-kpis{grid-template-columns:repeat(7,minmax(110px,1fr));gap:8px}
+      .iot-view-overview .iot-command-kpi{padding:9px 10px;gap:9px;min-height:58px}
+      .iot-view-overview .iot-kpi-icon{width:30px;height:30px;font-size:14px}
+      .iot-view-overview .iot-kpi-label{font-size:9px;line-height:1.15}
+      .iot-view-overview .iot-kpi-value{font-size:20px;margin-top:1px}
+      .iot-view-overview .iot-kpi-sub{font-size:10px;margin-top:2px}
+      .iot-view-overview .iot-command-grid{display:grid;grid-template-columns:1fr 300px;grid-template-rows:1fr;min-height:0;flex:1;overflow:hidden}
+      .iot-view-overview .iot-command-grid main{grid-column:1 / -1;grid-row:1;z-index:1;height:100%;min-height:0;overflow:hidden;display:flex}
+      .iot-view-overview .iot-command-grid aside{grid-column:2;grid-row:1;z-index:2;min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:8px;padding:8px 0}
+      .iot-view-overview .iot-panel{background:rgba(255,255,255,0.93);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+      .iot-view-overview .iot-alert-panel{min-height:0;overflow-y:auto}
+      .iot-node-live-panel{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+      .iot-node-live-list{display:flex;flex-direction:column;overflow-y:auto;flex:1;min-height:0}
+      .iot-node-live-row{padding:8px 0;border-bottom:1px solid #f1f5f9}
+      .iot-node-live-row:last-child{border-bottom:none}
+      .iot-node-live-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;gap:6px}
+      .iot-node-live-name{font-weight:700;font-size:12px;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .iot-node-live-badge{font-size:10px;padding:2px 7px;border-radius:999px;font-weight:700;white-space:nowrap;flex-shrink:0}
+      .iot-node-live-state{font-size:11px;font-weight:800;margin-bottom:4px}
+      .iot-node-live-vals{display:flex;gap:10px;font-size:11px;color:#475569;font-family:Consolas,monospace;flex-wrap:wrap}
+      .iot-node-live-time{font-size:10px;color:#94a3b8;margin-top:3px}
+      .iot-view-overview .iot-map-shell{height:100%;display:flex;flex-direction:column;min-height:0}
+      .iot-view-overview .iot-map-toolbar{padding:9px 12px}
+      .iot-view-overview .iot-map-sub{font-size:11px;line-height:1.25}
+      .iot-view-overview .iot-map-legend{padding:7px 9px;font-size:11px;gap:8px;display:flex;align-items:center}
+      .iot-view-overview .iot-map-canvas{height:auto;min-height:0;flex:1}
+      .iot-view-overview .iot-panel{padding:10px}
+      .iot-view-overview .iot-panel-head{margin-bottom:6px}
+      .iot-view-overview .iot-panel-title{font-size:12px}
+      .iot-view-overview .iot-alert-row{grid-template-columns:28px 1fr;gap:8px;padding:7px 0}
+      .iot-view-overview .iot-alert-row time{grid-column:2;font-size:10px}
+      .iot-view-overview .iot-alert-icon{width:24px;height:24px}
+      .iot-view-overview .iot-weather-main{margin:10px 0}
+      .iot-view-overview .iot-weather-main span{font-size:26px}
+      .iot-view-overview .iot-weather-main b{font-size:22px}
+      .iot-view-overview .iot-weather-grid{gap:5px;font-size:11px}
+      .iot-overview-grid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:12px;align-items:start}
+      .iot-overview-grid aside{display:flex;flex-direction:column;gap:12px;min-width:0}
+      .iot-overview-main{background:linear-gradient(180deg,#f8fbff,#edf4fa);border:1px solid #b8c7d6;border-radius:8px;box-shadow:0 10px 22px rgba(31,55,77,.08);padding:14px;min-width:0}
       .iot-category-stack{display:flex;flex-direction:column;gap:10px}
       .iot-category-card{display:flex;gap:12px;padding:13px}
       .iot-category-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;flex:0 0 auto}
@@ -3711,7 +3859,7 @@ renderIotPage = function() {
       .iot-map-legend{display:grid;gap:7px;font-size:12px;color:#1d2f44;background:#f8fbff;border:1px solid #c5d2df;border-radius:8px;padding:10px 12px}
       .iot-map-legend span{display:flex;align-items:center;gap:8px}
       .iot-map-legend i{width:10px;height:10px;border-radius:999px;display:inline-block}
-      .iot-map-legend .ok{background:#22c55e}.iot-map-legend .warn{background:#f59e0b}.iot-map-legend .bad{background:#ef4444}
+      .iot-map-legend .ok{background:#fde047;border:1px solid #0f172a}.iot-map-legend .off{background:#6b7280}.iot-map-legend .bad{background:#dc2626}.iot-map-legend .est{background:#f59e0b}
       .iot-map-canvas{height:420px;width:100%;background:#d7e1eb}
       .iot-view-map .iot-map-canvas{height:calc(100vh - 200px);min-height:580px}
       .iot-view-map .iot-map-toolbar{padding:10px 14px}
@@ -3792,6 +3940,10 @@ renderIotPage = function() {
         .iot-report-cards{grid-template-columns:repeat(3,minmax(140px,1fr))}
         .iot-report-grid{grid-template-columns:1fr}
         .iot-command-grid{grid-template-columns:1fr}
+        .iot-view-overview .iot-command-kpis{grid-template-columns:repeat(7,minmax(90px,1fr))}
+        .iot-view-overview .iot-command-grid{grid-template-columns:minmax(520px,1fr) 280px}
+        .iot-view-overview .iot-map-canvas{height:auto;min-height:0;flex:1}
+        .iot-overview-grid{grid-template-columns:1fr}
         .iot-command-bottom{grid-template-columns:1fr}
         .iot-guide-split{grid-template-columns:1fr}
         .iot-guide-operator{border-right:0;border-bottom:1px solid #d5e0ea}
@@ -3814,10 +3966,10 @@ renderIotPage = function() {
     </style>
     <div class="iot-page iot-view-${_iotView}">
       <div class="iot-tabs" role="tablist" aria-label="IoT харагдац">
-        <button class="iot-tab ${_iotView === "overview" ? "is-active" : ""}" onclick="iotSetView('overview')">Ерөнхий хяналт</button>
-        <button class="iot-tab ${_iotView === "map" ? "is-active" : ""}" onclick="iotSetView('map')">Газрын зураг</button>
-        <button class="iot-tab ${_iotView === "list" ? "is-active" : ""}" onclick="iotSetView('list')">Жагсаалт</button>
-        <button class="iot-tab ${_iotView === "report" ? "is-active" : ""}" onclick="iotSetView('report')">Тайлан</button>
+        <button class="iot-tab ${_iotView === "overview" ? "is-active" : ""}" onclick="iotSetView('overview')">Нөхцөл байдлын самбар</button>
+        <button class="iot-tab ${_iotView === "map" ? "is-active" : ""}" onclick="iotSetView('map')">Зураглал, бүтэц засвар</button>
+        <button class="iot-tab ${_iotView === "list" ? "is-active" : ""}" onclick="iotSetView('list')">Node удирдлага</button>
+        <button class="iot-tab ${_iotView === "report" ? "is-active" : ""}" onclick="iotSetView('report')">Ажиллагааны түүх</button>
       </div>
       <div id="iotBody">${renderIotBody()}</div>
     </div>`;
@@ -4048,6 +4200,7 @@ Object.assign(window, {
   iotSetReportPeriod,
   iotSetChartDevice,
   iotSetChartBucket,
+  iotSaveNodeLocation,
   iotUpdateRouteNameOptions,
   setIotDrawHint,
   iotSetDrawMode,

@@ -739,6 +739,10 @@ function latestDeviceSelect(whereClause = "") {
       s.maintenance_reason AS maintenanceReason,
       s.maintenance_by AS maintenanceBy,
       s.maintenance_at AS maintenanceAt,
+      s.manual_lat AS manualLat,
+      s.manual_lng AS manualLng,
+      s.manual_location_by AS manualLocationBy,
+      s.manual_location_at AS manualLocationAt,
       u.full_name AS manualOffOperatorName,
       u.username AS manualOffOperatorUsername,
       mu.full_name AS maintenanceOperatorName,
@@ -1004,6 +1008,51 @@ router.get("/iot/devices", auth, async (_req, res) => {
     ORDER BY datetime(l.received_at) DESC, l.device_name COLLATE NOCASE
   `);
   res.json(rows);
+});
+
+router.post("/iot/devices/:devEui/location", auth, requirePermission("lighting_edit"), async (req, res) => {
+  const devEui = normalizeDevEui(req.params.devEui);
+  const lat = Number(req.body?.lat ?? req.body?.gps_lat);
+  const lng = Number(req.body?.lng ?? req.body?.gps_lng ?? req.body?.lon);
+  if (!devEui) return res.status(400).json({ error: "devEui is required" });
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return res.status(400).json({ error: "lat/lng must be numbers" });
+  }
+  if (lat < 47 || lat > 49.5 || lng < 113 || lng > 116.5) {
+    return res.status(400).json({ error: "Location is outside Choibalsan area" });
+  }
+  const latest = await get(
+    `SELECT dev_eui, device_name FROM iot_meter_readings WHERE dev_eui=? ORDER BY datetime(received_at) DESC, id DESC LIMIT 1`,
+    [devEui]
+  );
+  if (!latest) return res.status(404).json({ error: "Device not found" });
+
+  await run(
+    `INSERT INTO iot_device_settings(dev_eui,updated_by,updated_at,manual_lat,manual_lng,manual_location_by,manual_location_at)
+     VALUES(?,?,CURRENT_TIMESTAMP,?,?,?,CURRENT_TIMESTAMP)
+     ON CONFLICT(dev_eui) DO UPDATE SET
+       updated_by=excluded.updated_by,
+       updated_at=CURRENT_TIMESTAMP,
+       manual_lat=excluded.manual_lat,
+       manual_lng=excluded.manual_lng,
+       manual_location_by=excluded.manual_location_by,
+       manual_location_at=CURRENT_TIMESTAMP`,
+    [devEui, req.user?.id || null, lat, lng, req.user?.id || null]
+  );
+  await run(
+    `INSERT INTO iot_audit_logs(event_type,dev_eui,payload,source)
+     VALUES(?,?,?,?)`,
+    ["iot_manual_location_changed", devEui, jsonText({
+      devEui,
+      deviceName: latest.device_name || null,
+      lat,
+      lng,
+      user: req.user?.id || null,
+      role: req.user?.role || null,
+      timestamp: new Date().toISOString(),
+    }), "erp_backend"]
+  );
+  res.json({ ok: true, devEui, deviceName: latest.device_name || null, manualLat: lat, manualLng: lng });
 });
 
 router.get("/iot/diagnostics", auth, async (_req, res) => {

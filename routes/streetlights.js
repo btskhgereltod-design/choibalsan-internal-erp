@@ -1835,6 +1835,8 @@ router.post("/sl-network/feed-point-devices", auth, requirePermission("lighting_
     const feedPointId = Number(b.feed_point_id);
     const devEui = String(b.dev_eui || "").trim().toUpperCase();
     if (!feedPointId || !devEui) return res.status(400).json({ error: "feed_point_id болон dev_eui шаардлагатай" });
+    const feedPoint = await get("SELECT id,gps_lat,gps_lng FROM sl_feed_point WHERE id=?", [feedPointId]);
+    if (!feedPoint) return res.status(404).json({ error: "Feed point not found" });
     const role = b.role || "controller";
     if (role === "controller") {
       await run("DELETE FROM sl_feed_point_device WHERE feed_point_id=? AND role='controller'", [feedPointId]);
@@ -1843,6 +1845,22 @@ router.post("/sl-network/feed-point-devices", auth, requirePermission("lighting_
       `INSERT INTO sl_feed_point_device(feed_point_id,dev_eui,role,notes) VALUES(?,?,?,?)`,
       [feedPointId, devEui, role, b.notes || null]
     );
+    const lat = Number(feedPoint.gps_lat);
+    const lng = Number(feedPoint.gps_lng);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      await run(
+        `INSERT INTO iot_device_settings(dev_eui,updated_by,updated_at,manual_lat,manual_lng,manual_location_by,manual_location_at)
+         VALUES(?,?,CURRENT_TIMESTAMP,?,?,?,CURRENT_TIMESTAMP)
+         ON CONFLICT(dev_eui) DO UPDATE SET
+           updated_by=excluded.updated_by,
+           updated_at=CURRENT_TIMESTAMP,
+           manual_lat=excluded.manual_lat,
+           manual_lng=excluded.manual_lng,
+           manual_location_by=excluded.manual_location_by,
+           manual_location_at=CURRENT_TIMESTAMP`,
+        [devEui, req.user?.id || null, lat, lng, req.user?.id || null]
+      );
+    }
     await audit(req.user.id, "CREATE", "sl_feed_point_device", r.id || feedPointId, `FP${feedPointId} -> ${devEui}`);
     res.json({ ok: true, id: r.id });
   } catch(e) { res.status(500).json({ error: e.message }); }

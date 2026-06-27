@@ -1291,7 +1291,11 @@ async function initDb() {
     maintenance_mode    INTEGER NOT NULL DEFAULT 0,
     maintenance_reason  TEXT,
     maintenance_by      INTEGER,
-    maintenance_at      TEXT
+    maintenance_at      TEXT,
+    manual_lat          REAL,
+    manual_lng          REAL,
+    manual_location_by  INTEGER,
+    manual_location_at  TEXT
   )`);
   await run(`ALTER TABLE iot_device_settings ADD COLUMN updated_by INTEGER`).catch(() => {});
   await run(`ALTER TABLE iot_device_settings ADD COLUMN updated_at TEXT DEFAULT CURRENT_TIMESTAMP`).catch(() => {});
@@ -1303,6 +1307,10 @@ async function initDb() {
   await run(`ALTER TABLE iot_device_settings ADD COLUMN maintenance_reason TEXT`).catch(() => {});
   await run(`ALTER TABLE iot_device_settings ADD COLUMN maintenance_by INTEGER`).catch(() => {});
   await run(`ALTER TABLE iot_device_settings ADD COLUMN maintenance_at TEXT`).catch(() => {});
+  await run(`ALTER TABLE iot_device_settings ADD COLUMN manual_lat REAL`).catch(() => {});
+  await run(`ALTER TABLE iot_device_settings ADD COLUMN manual_lng REAL`).catch(() => {});
+  await run(`ALTER TABLE iot_device_settings ADD COLUMN manual_location_by INTEGER`).catch(() => {});
+  await run(`ALTER TABLE iot_device_settings ADD COLUMN manual_location_at TEXT`).catch(() => {});
 
   // ── Гэрэлтүүлгийн цагийн тохируулгын түүх ───────────────────
   await run(`CREATE TABLE IF NOT EXISTS light_schedule_logs (
