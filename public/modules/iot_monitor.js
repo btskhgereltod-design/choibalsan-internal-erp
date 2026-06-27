@@ -54,7 +54,11 @@ function fmtText(value) {
 
 function fmtDate(value) {
   if (!value) return "-";
-  const d = new Date(value);
+  const raw = String(value);
+  const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?$/.test(raw)
+    ? `${raw.replace(" ", "T")}Z`
+    : raw;
+  const d = new Date(normalized);
   if (Number.isNaN(d.getTime())) return escapeHtml(String(value).slice(0, 19));
   return d.toLocaleString("mn-MN", {
     year: "numeric",
@@ -210,12 +214,79 @@ function hasActiveLoad(row) {
   return null;
 }
 
+function isAutoMode(row) {
+  return !(row?.autoMode === 0 || row?.autoMode === false || row?.autoMode === "0");
+}
+
+function autoModeBadge(row) {
+  return isAutoMode(row)
+    ? `<div class="iot-command-badge iot-auto-badge-on">Сонголт: AUTO</div>`
+    : `<div class="iot-command-badge iot-auto-badge-off">Сонголт: ${controlMode(row)}</div>`;
+}
+
+function controlMode(row) {
+  if (isAutoMode(row)) return "AUTO";
+  const action = String(row?.command_action || "").toUpperCase();
+  if (action === "ON" || action === "OFF") return action;
+  const relay = relayState(row);
+  if (relay === "on") return "ON";
+  if (relay === "off") return "OFF";
+  return "MANUAL";
+}
+
+function isManualOff(row) {
+  return !isAutoMode(row) && controlMode(row) === "OFF";
+}
+
+function isMaintenanceMode(row) {
+  return row?.maintenanceMode === 1 || row?.maintenanceMode === true || row?.maintenanceMode === "1";
+}
+
+function manualOffAgeHours(row) {
+  if (!row?.manualOffAt) return 0;
+  const t = new Date(row.manualOffAt).getTime();
+  if (!Number.isFinite(t)) return 0;
+  return Math.max(0, (Date.now() - t) / 3600000);
+}
+
+function maintenanceBadge(row) {
+  if (!isMaintenanceMode(row)) return "";
+  const operator = row.maintenanceOperatorName || row.maintenanceOperatorUsername || row.maintenanceBy || "-";
+  const reason = row.maintenanceReason || row.manualOffReason || "Засвар";
+  return `<div class="iot-maintenance-badge">
+    <b>ЗАСВАР ГОРИМ</b>
+    <span>Auto-recovery бүрэн хориглогдсон</span>
+    <span>Шалтгаан: ${fmtText(reason)}</span>
+    <span>Оператор: ${fmtText(operator)}</span>
+    <span>${fmtDate(row.maintenanceAt || row.manualOffAt || row.autoModeUpdatedAt)}</span>
+  </div>`;
+}
+
+function manualOffBadge(row) {
+  if (!isManualOff(row)) return "";
+  const operator = row.manualOffOperatorName || row.manualOffOperatorUsername || row.manualOffBy || "-";
+  const reason = row.manualOffReason || "Шалтгаан бүртгээгүй";
+  const note = row.manualOffNote ? `<div class="iot-manual-off-line">${fmtText(row.manualOffNote)}</div>` : "";
+  const overdue = manualOffAgeHours(row) >= 24;
+  return `<div class="iot-manual-off-badge${overdue ? " is-overdue" : ""}">
+    <b>MANUAL OFF</b>
+    <span>Schedule идэвхгүй</span>
+    <span>Шалтгаан: ${fmtText(reason)}</span>
+    <span>Оператор: ${fmtText(operator)}</span>
+    <span>${fmtDate(row.manualOffAt || row.autoModeUpdatedAt)}</span>
+    ${overdue ? `<strong>24 цагаас дээш manual OFF байна</strong>` : ""}
+    ${note}
+  </div>`;
+}
+
 function commandButtonClass(row, action) {
-  const loadOn = hasActiveLoad(row);
-  const active =
-    (action === "ON" && loadOn === true) ||
-    (action === "OFF" && loadOn === false);
+  const active = controlMode(row) === action;
   return `iot-command-btn iot-${action.toLowerCase()}${active ? " is-active" : ""}`;
+}
+
+function commandButtonDisabled(row, action) {
+  if (action === "ON" && isMaintenanceMode(row)) return " disabled title=\"Засвар горим идэвхтэй\"";
+  return controlMode(row) === action ? " disabled" : "";
 }
 
 function relayState(row) {
@@ -224,8 +295,8 @@ function relayState(row) {
   if (loadOn === true) return "on";
   if (loadOn === false) return "off";
   const stateValue = doStateValue(row);
-  if (stateValue === "0") return "on";
-  if (stateValue === "1") return "off";
+  if (stateValue === "1") return "on";
+  if (stateValue === "0") return "off";
   return "unknown";
 }
 
@@ -257,6 +328,8 @@ commandBadge = function(row) {
     pending_confirmation: ["#e0f2fe", "#075985", "Команд хүлээгдэж байна"],
     txack_received: ["#ede9fe", "#5b21b6", "LoRa дамжуулалт баталгаажсан"],
     ack_received: ["#dcfce7", "#166534", "Төхөөрөмж хүлээн авсан"],
+    ack_failed: ["#fee2e2", "#991b1b", "Төхөөрөмж баталгаажуулаагүй"],
+    failed: ["#fee2e2", "#991b1b", "Команд амжилтгүй"],
     uplink_received: ["#fef3c7", "#92400e", "Дохио ирсэн"],
     sent_not_confirmed: ["#fee2e2", "#991b1b", "Реле баталгаажаагүй"],
     on_confirmed: ["#dcfce7", "#166534", "Асалт баталгаажсан"],
@@ -277,9 +350,11 @@ function renderSummary() {
   const total = _iotRows.length;
   const online = _iotRows.filter(r => isDeviceOnline(r)).length;
   const offline = total - online;
+  const manualOffLong = _iotRows.filter(r => isManualOff(r) && manualOffAgeHours(r) >= 24).length;
   const energy = _iotRows.reduce((sum, r) => sum + (Number(iotNumericValue(r, "energy")) || 0), 0);
   const power = _iotRows.reduce((sum, r) => sum + (Number(iotNumericValue(r, "power")) || 0), 0);
   const cards = [
+    ["Manual OFF >24ц", manualOffLong, manualOffLong ? "#fee2e2" : "#f8fafc", manualOffLong ? "#b91c1c" : "#64748b"],
     ["Нийт төхөөрөмж", total, "#eff6ff", "#1d4ed8"],
     ["Дохио ирсэн", online, "#dcfce7", "#166534"],
     ["Дохио тасарсан", offline, "#fee2e2", "#991b1b"],
@@ -332,9 +407,13 @@ function renderTable() {
               <td class="iot-sticky-col iot-control-cell iot-relay-${relayState(row)}">
                 ${relayStateBadge(row)}
                 ${commandBadge(row)}
+                ${autoModeBadge(row)}
+                ${maintenanceBadge(row)}
+                ${manualOffBadge(row)}
                 <div class="iot-control-buttons">
-                  <button class="${commandButtonClass(row, "ON")}" onclick="iotSendDownlink('${escapeHtml(row.devEui)}','ON')">ON</button>
-                  <button class="${commandButtonClass(row, "OFF")}" onclick="iotSendDownlink('${escapeHtml(row.devEui)}','OFF')">OFF</button>
+                  <button class="${commandButtonClass(row, "ON")}"${commandButtonDisabled(row, "ON")} onclick="iotSendDownlink('${escapeHtml(row.devEui)}','ON')">ON</button>
+                  <button class="${commandButtonClass(row, "AUTO")}"${commandButtonDisabled(row, "AUTO")} onclick="iotSetAutoMode('${escapeHtml(row.devEui)}', true)">AUTO</button>
+                  <button class="${commandButtonClass(row, "OFF")}"${commandButtonDisabled(row, "OFF")} onclick="iotSendDownlink('${escapeHtml(row.devEui)}','OFF')">OFF</button>
                 </div>
               </td>
             </tr>
@@ -721,6 +800,17 @@ function renderOperatorGuide() {
     </summary>
     <div class="iot-guide-split">
       <section class="iot-guide-operator">
+        <div class="iot-safety-note">
+          <b>Аюулгүй ажиллагаа:</b> Өдрийн цагаар ажилчин гэрэл дээр засвар хийх үед оператор ON command зөвхөн шалгалтад хэрэглэнэ. "Унтраа" гэж хэлсэн даруйд OFF дарж, ажил дуусах хүртэл дахин ON бүү дар. ERP command нь газар дээрх физик салгалт, түгжээ/анхааруулах тэмдэглэгээг орлохгүй.
+        </div>
+        <p><b>Автомат асаалт</b>: schedule recovery нь ON цагийг тухайн өдрийн Чойбалсан хотын "Асаах тохиромжтой" нарны тооцоогоор авна. Унтрах цаг нь баталсан тохиргооны OFF цаг хэвээр байна.</p>
+        <p><b>ON / AUTO / OFF</b>: энэ 3 товч нь операторын сонгосон удирдлагын горим. Гудамжинд очиж бодитоор харж чадахгүй тул идэвхтэй товчийг power/current хэмжилтээр автоматаар сольж болохгүй.</p>
+        <p><b>ON сонголт</b>: оператор шууд асаах command илгээнэ. Энэ үед node MANUAL горимд орж schedule түр идэвхгүй болно.</p>
+        <p><b>OFF сонголт</b>: оператор шалтгаан сонгоод унтраах command илгээнэ. OFF болсон node дээр MANUAL OFF badge харагдаж, AUTO дарахаас нааш schedule буцааж асаахгүй.</p>
+        <p><b>Засвар горим</b>: OFF шалтгаанаас "Засвар" сонговол ЗАСВАР ГОРИМ идэвхжинэ. Энэ үед auto-recovery тухайн node-г огт хөндөхгүй, ON command хаагдана.</p>
+        <p><b>AUTO сонголт</b>: node-г schedule горимд буцаана. AUTO дарсны дараа тухайн цагийн schedule-тай тааруулж сервер ON эсвэл OFF command явуулж болно.</p>
+        <p><b>ГЭРЭЛ АССАН/АСААГҮЙ</b>: энэ бол бодит хэмжилтийн badge. Харин <b>Сонголт: ON/AUTO/OFF</b> бол операторын удирдлагын горим. Энэ хоёрыг андуурч болохгүй.</p>
+        <p><b>Команд баталгаажаагүй</b>: LoRa/төхөөрөмж ACK ирээгүй гэсэн үг. Энэ үед сонгосон горим хэвээр үлдэнэ, оператор дахин шалгаж command илгээх эсэхээ шийднэ.</p>
         <h3>Операторын зөвлөмж</h3>
         <p><b>Node</b> бол шитэнд суусан ADW300/310 төхөөрөмжийн бүртгэл.</p>
         <p><b>ADW оноох</b> товчоор тухайн шитэнд физикээр суусан төхөөрөмжийг сонгоно.</p>
@@ -733,6 +823,17 @@ function renderOperatorGuide() {
         <p><b>Анхаарах</b>: шитэнд хүчдэл байна гэдэг нь гудамж ассан гэсэн үг биш. Гудамж ассан эсэхийг тухайн шитнээс гарах гэрэлтүүлгийн хэрэглээгээр ойлгоно.</p>
       </section>
       <section class="iot-guide-ai">
+        <div class="iot-safety-note">
+          <b>Safety rule for AI:</b> Schedule recovery ignores manual ON/OFF hold decisions. It sends ON during the schedule ON window and sends OFF only near the registered OFF boundary; daytime maintenance commands remain under operator/engineer control.
+        </div>
+        <p><b>Auto schedule rule</b>: recovery uses Choibalsan daily suitable sunlight ON time for the ON boundary, while OFF comes from the registered schedule off_time boundary only.</p>
+        <p><b>Control mode source</b>: <code>iot_device_settings.auto_mode</code> is the source of truth for AUTO vs MANUAL. When <code>auto_mode=0</code>, the active ON/OFF selection comes from the latest operator command, not from measured load.</p>
+        <p><b>Manual OFF hold</b>: manual OFF stores <code>manual_off_reason</code>, <code>manual_off_by</code>, and <code>manual_off_at</code>. Recovery must skip schedule commands while <code>auto_mode=0</code>; only the AUTO endpoint clears manual OFF fields.</p>
+        <p><b>Maintenance hard lock</b>: when OFF reason is <code>maintenance</code>, set <code>maintenance_mode=1</code>. Recovery must skip it even if <code>auto_mode</code> is accidentally wrong, and the downlink endpoint must reject ON while this flag is active.</p>
+        <p><b>Measured relay state</b>: <code>relayState()</code> and report <code>isReadingOn()</code> must prioritize <code>power/totalP</code> and <code>current/Ia</code>. Use <code>DO_State</code> only when numeric load values are missing.</p>
+        <p><b>DO_State fallback</b>: current ADW data is interpreted as <code>DO_State=1</code> ON and <code>DO_State=0</code> OFF. Do not invert this, otherwise OFF samples appear as false ON/OFF transitions in the report.</p>
+        <p><b>Command ACK rule</b>: <code>ack_failed</code> and <code>failed</code> are warning states only. They must not automatically change <code>auto_mode</code>, clear manual OFF, or switch the operator's selected button.</p>
+        <p><b>Report event rule</b>: ON/OFF timeline events are generated from measured state changes. Operator commands are separate command events; do not merge command intent with physical measured state.</p>
         <h3>AI техникийн зөвлөмж</h3>
         <p><b>Энэ хэсгийн файл</b>: <code>public/modules/iot_monitor.js</code>. Гол функцүүд: <code>isDeviceOnline</code>, <code>hasLinePower</code>, <code>relayState</code>, <code>iotStats</code>, <code>iotSegmentVisualStatus</code>, <code>poleSegmentStatus</code>, <code>iotControllerForSegment</code>.</p>
         <p><b>Backend эх сурвалж</b>: <code>/api/iot/devices</code> нь <code>routes/iot.js</code>-ийн <code>latestDeviceSelect()</code>-оос ирнэ. <code>last_seen</code> нь latest <code>iot_meter_readings.received_at</code>.</p>
@@ -3381,7 +3482,7 @@ function renderIotPage() {
     <style>
       .iot-page{padding:24px;max-width:100%;box-sizing:border-box}
       .iot-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px}
-      .iot-summary-grid{display:grid;grid-template-columns:repeat(5,minmax(120px,1fr));gap:12px;margin-bottom:18px}
+      .iot-summary-grid{display:grid;grid-template-columns:repeat(6,minmax(120px,1fr));gap:12px;margin-bottom:18px}
       .iot-summary-card{border:1px solid;border-radius:8px;padding:14px;min-width:0}
       .iot-table-wrap{overflow-x:auto;border:1px solid #e5e7eb;border-radius:8px;background:#fff;max-width:100%}
       .iot-tabs{display:flex;gap:6px;margin:0 0 12px}
@@ -3409,13 +3510,27 @@ function renderIotPage() {
       .iot-relay-off{background:#dc2626;color:#fff;border-color:#b91c1c;box-shadow:0 4px 12px rgba(220,38,38,.24)}
       .iot-relay-unknown{background:#e2e8f0;color:#475569;border-color:#cbd5e1}
       .iot-command-badge{display:block;width:max-content;max-width:108px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-radius:999px;font-size:10px;font-weight:800;padding:2px 7px;margin-bottom:5px}
-      .iot-control-buttons{display:flex;gap:6px}
-      .iot-command-btn{border:1px solid #cbd5e1;border-radius:9px;background:#f8fafc;color:#64748b;font-size:12px;font-weight:900;padding:7px 11px;min-width:44px;cursor:pointer;opacity:.48;filter:grayscale(1);transition:background .15s,border-color .15s,box-shadow .15s,color .15s,transform .15s,opacity .15s}
+      .iot-maintenance-badge{display:grid;gap:2px;max-width:170px;margin:0 0 6px;padding:7px 8px;border-radius:8px;background:#111827;color:#fef3c7;border:1px solid #f59e0b;box-shadow:0 0 0 2px rgba(245,158,11,.16),0 8px 18px rgba(17,24,39,.22);white-space:normal}
+      .iot-maintenance-badge b{font-size:11px;color:#fef08a;letter-spacing:0}
+      .iot-maintenance-badge span{font-size:10px;line-height:1.25}
+      .iot-manual-off-badge{display:grid;gap:2px;max-width:170px;margin:0 0 6px;padding:7px 8px;border-radius:8px;background:#7f1d1d;color:#fee2e2;border:1px solid #ef4444;box-shadow:0 6px 16px rgba(127,29,29,.18);white-space:normal}
+      .iot-manual-off-badge b{font-size:11px;color:#fff;letter-spacing:0}
+      .iot-manual-off-badge span,.iot-manual-off-badge strong,.iot-manual-off-line{font-size:10px;line-height:1.25}
+      .iot-manual-off-badge strong{color:#fef08a}
+      .iot-manual-off-badge.is-overdue{background:#991b1b;box-shadow:0 0 0 2px rgba(239,68,68,.18),0 8px 18px rgba(127,29,29,.24)}
+      .iot-control-buttons{display:inline-flex;gap:0;border:1px solid #cbd5e1;border-radius:10px;overflow:hidden;background:#f8fafc;box-shadow:0 6px 16px rgba(15,23,42,.08)}
+      .iot-command-btn{border:0;border-right:1px solid #cbd5e1;border-radius:0;background:#f8fafc;color:#64748b;font-size:12px;font-weight:900;padding:9px 12px;min-width:52px;cursor:pointer;opacity:.72;filter:none;transition:background .15s,border-color .15s,box-shadow .15s,color .15s,transform .15s,opacity .15s}
+      .iot-command-btn:last-child{border-right:0}
+      .iot-command-btn:disabled{cursor:default}
       .iot-command-btn.iot-on:not(.is-active):hover{color:#15803d;border-color:#86efac;background:#f0fdf4;opacity:1;filter:none}
       .iot-command-btn.iot-off:not(.is-active):hover{color:#b91c1c;border-color:#fecaca;background:#fef2f2;opacity:1;filter:none}
-      .iot-command-btn.iot-on.is-active{color:#fff;border-color:#047857;background:#16a34a;box-shadow:0 0 0 4px rgba(34,197,94,.28),0 8px 20px rgba(22,163,74,.32);opacity:1;filter:none}
-      .iot-command-btn.iot-off.is-active{color:#fff;border-color:#b91c1c;background:#dc2626;box-shadow:0 0 0 4px rgba(239,68,68,.28),0 8px 20px rgba(220,38,38,.32);opacity:1;filter:none}
-      .iot-command-btn.is-active{transform:translateY(-1px) scale(1.08)}
+      .iot-command-btn.iot-auto:not(.is-active):hover{color:#1d4ed8;border-color:#93c5fd;background:#eff6ff;opacity:1;filter:none}
+      .iot-command-btn.iot-on.is-active{color:#fff;background:#16a34a;box-shadow:inset 0 0 0 1px #047857;opacity:1;filter:none}
+      .iot-command-btn.iot-off.is-active{color:#fff;background:#dc2626;box-shadow:inset 0 0 0 1px #b91c1c;opacity:1;filter:none}
+      .iot-command-btn.iot-auto.is-active{color:#fff;background:#2563eb;box-shadow:inset 0 0 0 1px #1d4ed8;opacity:1;filter:none}
+      .iot-auto-badge-on{background:#dbeafe!important;color:#1d4ed8!important}
+      .iot-auto-badge-off{background:#f1f5f9!important;color:#475569!important}
+      .iot-command-btn.is-active{transform:none}
       .iot-map-shell{border:1px solid #e5e7eb;border-radius:8px;background:#fff;overflow:hidden}
       .iot-map-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-bottom:1px solid #e5e7eb;background:#f8fafc}
       .iot-map-canvas{height:560px;width:100%;background:#e2e8f0}
@@ -3514,6 +3629,8 @@ renderIotPage = function() {
       .iot-guide p{margin:6px 0;color:#1d2f44;font-size:12px;line-height:1.45}
       .iot-guide b{font-weight:950;color:#102033}
       .iot-guide code{font-family:Consolas,Menlo,monospace;font-size:11px;background:#eef5fb;border:1px solid #cfe0ee;border-radius:5px;padding:1px 4px;color:#0f3b63}
+      .iot-safety-note{margin:0 0 10px;border:1px solid #fca5a5;border-left:5px solid #dc2626;background:#fff1f2;color:#7f1d1d;border-radius:8px;padding:10px 12px;font-size:12px;line-height:1.5}
+      .iot-safety-note b{color:#7f1d1d}
       .iot-command-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
       .iot-command-kpi,.iot-panel,.iot-category-card,.iot-map-shell{background:linear-gradient(180deg,#f8fbff,#edf4fa);border:1px solid #b8c7d6;border-radius:8px;box-shadow:0 10px 22px rgba(31,55,77,.08);min-width:0}
       .iot-command-kpi{display:flex;align-items:center;gap:12px;padding:14px}
@@ -3649,13 +3766,27 @@ renderIotPage = function() {
       .iot-relay-off{background:#dc2626;color:#fff;border-color:#b91c1c;box-shadow:0 4px 12px rgba(220,38,38,.24)}
       .iot-relay-unknown{background:#e2e8f0;color:#475569;border-color:#cbd5e1}
       .iot-command-badge{display:block;width:max-content;max-width:108px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-radius:999px;font-size:10px;font-weight:800;padding:2px 7px;margin-bottom:5px}
-      .iot-control-buttons{display:flex;gap:6px}
-      .iot-command-btn{border:1px solid #cbd5e1;border-radius:9px;background:#f8fafc;color:#64748b;font-size:12px;font-weight:900;padding:7px 11px;min-width:44px;cursor:pointer;opacity:.48;filter:grayscale(1);transition:background .15s,border-color .15s,box-shadow .15s,color .15s,transform .15s,opacity .15s}
+      .iot-maintenance-badge{display:grid;gap:2px;max-width:170px;margin:0 0 6px;padding:7px 8px;border-radius:8px;background:#111827;color:#fef3c7;border:1px solid #f59e0b;box-shadow:0 0 0 2px rgba(245,158,11,.16),0 8px 18px rgba(17,24,39,.22);white-space:normal}
+      .iot-maintenance-badge b{font-size:11px;color:#fef08a;letter-spacing:0}
+      .iot-maintenance-badge span{font-size:10px;line-height:1.25}
+      .iot-manual-off-badge{display:grid;gap:2px;max-width:170px;margin:0 0 6px;padding:7px 8px;border-radius:8px;background:#7f1d1d;color:#fee2e2;border:1px solid #ef4444;box-shadow:0 6px 16px rgba(127,29,29,.18);white-space:normal}
+      .iot-manual-off-badge b{font-size:11px;color:#fff;letter-spacing:0}
+      .iot-manual-off-badge span,.iot-manual-off-badge strong,.iot-manual-off-line{font-size:10px;line-height:1.25}
+      .iot-manual-off-badge strong{color:#fef08a}
+      .iot-manual-off-badge.is-overdue{background:#991b1b;box-shadow:0 0 0 2px rgba(239,68,68,.18),0 8px 18px rgba(127,29,29,.24)}
+      .iot-control-buttons{display:inline-flex;gap:0;border:1px solid #cbd5e1;border-radius:10px;overflow:hidden;background:#f8fafc;box-shadow:0 6px 16px rgba(15,23,42,.08)}
+      .iot-command-btn{border:0;border-right:1px solid #cbd5e1;border-radius:0;background:#f8fafc;color:#64748b;font-size:12px;font-weight:900;padding:9px 12px;min-width:52px;cursor:pointer;opacity:.72;filter:none;transition:background .15s,border-color .15s,box-shadow .15s,color .15s,transform .15s,opacity .15s}
+      .iot-command-btn:last-child{border-right:0}
+      .iot-command-btn:disabled{cursor:default}
       .iot-command-btn.iot-on:not(.is-active):hover{color:#15803d;border-color:#86efac;background:#f0fdf4;opacity:1;filter:none}
       .iot-command-btn.iot-off:not(.is-active):hover{color:#b91c1c;border-color:#fecaca;background:#fef2f2;opacity:1;filter:none}
-      .iot-command-btn.iot-on.is-active{color:#fff;border-color:#047857;background:#16a34a;box-shadow:0 0 0 4px rgba(34,197,94,.28),0 8px 20px rgba(22,163,74,.32);opacity:1;filter:none}
-      .iot-command-btn.iot-off.is-active{color:#fff;border-color:#b91c1c;background:#dc2626;box-shadow:0 0 0 4px rgba(239,68,68,.28),0 8px 20px rgba(220,38,38,.32);opacity:1;filter:none}
-      .iot-command-btn.is-active{transform:translateY(-1px) scale(1.08)}
+      .iot-command-btn.iot-auto:not(.is-active):hover{color:#1d4ed8;border-color:#93c5fd;background:#eff6ff;opacity:1;filter:none}
+      .iot-command-btn.iot-on.is-active{color:#fff;background:#16a34a;box-shadow:inset 0 0 0 1px #047857;opacity:1;filter:none}
+      .iot-command-btn.iot-off.is-active{color:#fff;background:#dc2626;box-shadow:inset 0 0 0 1px #b91c1c;opacity:1;filter:none}
+      .iot-command-btn.iot-auto.is-active{color:#fff;background:#2563eb;box-shadow:inset 0 0 0 1px #1d4ed8;opacity:1;filter:none}
+      .iot-auto-badge-on{background:#dbeafe!important;color:#1d4ed8!important}
+      .iot-auto-badge-off{background:#f1f5f9!important;color:#475569!important}
+      .iot-command-btn.is-active{transform:none}
       @media (max-width:1200px){
         .iot-command-kpis{grid-template-columns:repeat(3,minmax(140px,1fr))}
         .iot-report-cards{grid-template-columns:repeat(3,minmax(140px,1fr))}
@@ -3784,8 +3915,47 @@ function iotSetChartBucket(value) {
 async function iotSendDownlink(devEui, action) {
   const row = _iotRows.find(r => r.devEui === devEui);
   const deviceName = row?.deviceName || devEui;
+  const body = { action };
+  if (action === "ON" && isMaintenanceMode(row)) {
+    toast("Засвар горим идэвхтэй байна. Ажил дууссаны дараа AUTO болгож байж ON илгээнэ.");
+    return;
+  }
+  if (action === "OFF") {
+    const menu = [
+      "1. Засвар",
+      "2. Аюултай нөхцөл",
+      "3. Түр унтраалт",
+      "4. Бусад",
+    ].join("\n");
+    const picked = prompt(`${deviceName}: OFF хийх шалтгаанаа сонгоно уу\n\n${menu}\n\n1-4 дугаар оруулна уу:`);
+    const reasonMap = { 1: "maintenance", 2: "hazard", 3: "temporary", 4: "other" };
+    const manualOffReason = reasonMap[String(picked || "").trim()];
+    if (!manualOffReason) return;
+    body.manualOffReason = manualOffReason;
+    body.manualOffNote = manualOffReason === "other" ? (prompt("Бусад шалтгааны тайлбар оруулна уу:") || "") : "";
+    const maintenanceLine = manualOffReason === "maintenance"
+      ? "\n\nЗАСВАР ГОРИМ идэвхжинэ. Auto-recovery энэ node-г огт хөндөхгүй, ON command хаагдана."
+      : "";
+    if (!confirm(`${deviceName}: OFF илгээх үү?\n\nManual OFF болно. Schedule идэвхгүй үлдэнэ. AUTO дарахаас нааш сервер schedule-аар буцааж асаахгүй.${maintenanceLine}`)) return;
+  } else if (!confirm(`${deviceName}: ON илгээх үү?\n\nManual ON болно. Газар дээр ажиллаж байгаа эсэхийг инженерийн хяналтаар нягтална уу.`)) {
+    return;
+  }
+  try {
+    const result = await api(`/api/iot/devices/${encodeURIComponent(devEui)}/downlink`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+    toast(result.status === "queued" ? "Команд дараалалд орлоо" : `Downlink ${action} дараалалд орлоо`);
+    await iotRefresh();
+  } catch (e) {
+    toast(e.message || "Downlink илгээхэд алдаа гарлаа");
+  }
+  return;
   const label = action === "ON" ? "асаах" : "унтраах";
-  if (!confirm(`${deviceName} төхөөрөмжийг ${label} downlink илгээх үү?`)) return;
+  const safety = action === "ON"
+    ? "\n\nАнхаар: газар дээр засварчин ажиллаж байгаа эсэхийг заавал нягтал. ERP command нь физик салгалтыг орлохгүй."
+    : "\n\nАнхаар: manual OFF нь дараагийн schedule ON асаалтыг хаахгүй. Өдрийн засварын асаалт/унтраалт инженерийн хяналтаар явна.";
+  if (!confirm(`${deviceName} төхөөрөмжийг ${label} downlink илгээх үү?${safety}`)) return;
   try {
     const result = await api(`/api/iot/devices/${encodeURIComponent(devEui)}/downlink`, {
       method: "POST",
@@ -3795,6 +3965,41 @@ async function iotSendDownlink(devEui, action) {
     await iotRefresh();
   } catch (e) {
     toast(e.message || "Downlink илгээхэд алдаа гарлаа");
+  }
+}
+
+async function iotSetAutoMode(devEui, autoMode) {
+  const row = _iotRows.find(r => r.devEui === devEui);
+  const deviceName = row?.deviceName || devEui;
+  const message = autoMode
+    ? `${deviceName}\n\nЭнэ node-г schedule горимд буцаах уу?\n\nAUTO болвол сервер тухайн цагийн schedule-аар шууд тааруулна.`
+    : `${deviceName}: MANUAL горимд шилжүүлэх үү?`;
+  if (!confirm(message)) return;
+  try {
+    const result = await api(`/api/iot/devices/${encodeURIComponent(devEui)}/auto-mode`, {
+      method: "POST",
+      body: JSON.stringify({ autoMode }),
+    });
+    toast(result.autoMode ? "AUTO горим идэвхжлээ" : "MANUAL горим идэвхжлээ");
+    await iotRefresh();
+  } catch (e) {
+    toast(e.message || "AUTO горим солиход алдаа гарлаа");
+  }
+  return;
+  const label = autoMode ? "AUTO горим асаах" : "AUTO горим унтраах";
+  const note = autoMode
+    ? "\n\nAuto идэвхжвэл schedule-ийн асаах/унтраах цагаар сервер удирдана."
+    : "\n\nAuto унтарвал сервер schedule command явуулахгүй, зөвхөн операторын ON/OFF ажиллана.";
+  if (!confirm(`${deviceName}: ${label} уу?${note}`)) return;
+  try {
+    const result = await api(`/api/iot/devices/${encodeURIComponent(devEui)}/auto-mode`, {
+      method: "POST",
+      body: JSON.stringify({ autoMode }),
+    });
+    toast(result.autoMode ? "AUTO горим идэвхжлээ" : "MANUAL горим идэвхжлээ");
+    await iotRefresh();
+  } catch (e) {
+    toast(e.message || "AUTO горим солиход алдаа гарлаа");
   }
 }
 
@@ -3837,6 +4042,7 @@ Object.assign(window, {
   iot_monitor,
   iotRefresh,
   iotSendDownlink,
+  iotSetAutoMode,
   iotSetView,
   iotToggleMaximize,
   iotSetReportPeriod,

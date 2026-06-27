@@ -1,6 +1,7 @@
 const express = require("express");
 const { run, all, get, auth } = require("../db");
 const { requirePermission } = require("../middleware/roles");
+const { reconcileIotLighting } = require("../services/iot_recovery");
 
 const router = express.Router();
 
@@ -58,6 +59,22 @@ function jsonText(value) {
   }
 }
 
+const MANUAL_OFF_REASONS = {
+  maintenance: "Засвар",
+  hazard: "Аюултай нөхцөл",
+  temporary: "Түр унтраалт",
+  other: "Бусад",
+};
+
+function normalizeManualOffReason(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const key = raw.toLowerCase();
+  if (MANUAL_OFF_REASONS[key]) return key;
+  const found = Object.entries(MANUAL_OFF_REASONS).find(([, label]) => label === raw);
+  return found ? found[0] : "";
+}
+
 function mnLocalParts(date = new Date()) {
   const local = new Date(date.getTime() + 8 * 60 * 60 * 1000);
   return {
@@ -100,7 +117,15 @@ function iotReportRange(period = "night") {
 }
 
 function isReadingOn(row) {
-  return Number(row?.power || 0) > 0.01 || Number(row?.current || 0) > 0.02 || String(row?.do_state || "").trim() === "0";
+  const power = iotLatestNumber(row, ["totalP", "total_power", "power"]);
+  const current = iotLatestNumber(row, ["Ia", "ia", "current"]);
+  if (power !== null && power > 0.01) return true;
+  if (current !== null && current > 0.02) return true;
+  if (power !== null || current !== null) return false;
+  const doState = String(row?.DO_State ?? row?.do_state ?? "").trim();
+  if (doState === "1") return true;
+  if (doState === "0") return false;
+  return false;
 }
 
 function iotLatestNumber(row, keys) {
@@ -132,8 +157,8 @@ function iotRelayState(row) {
   if (loadOn === true) return "on";
   if (loadOn === false) return "off";
   const doState = String(row?.DO_State ?? row?.do_state ?? "").trim();
-  if (doState === "0") return "on";
-  if (doState === "1") return "off";
+  if (doState === "1") return "on";
+  if (doState === "0") return "off";
   return "unknown";
 }
 
@@ -484,10 +509,60 @@ function minutesFromTime(value) {
   return Number(m[1]) * 60 + Number(m[2]);
 }
 
+const CHOIBALSAN_LAT = 48.0714;
+const CHOIBALSAN_LNG = 114.5357;
+const MN_UTC_OFFSET = 8;
+
+function sunCrossingTimes(year, month1, day, angleDeg) {
+  const toR = d => d * Math.PI / 180;
+  const toD = r => r * 180 / Math.PI;
+  const date = new Date(Date.UTC(year, month1 - 1, day));
+  const dayOfYear = Math.round((date - new Date(Date.UTC(year, 0, 1))) / 86400000) + 1;
+  const gamma = 2 * Math.PI / 365 * (dayOfYear - 1);
+  const eot = 229.18 * (
+    0.000075 + 0.001868 * Math.cos(gamma) - 0.032077 * Math.sin(gamma)
+    - 0.014615 * Math.cos(2 * gamma) - 0.040849 * Math.sin(2 * gamma)
+  );
+  const decl =
+    0.006918 - 0.399912 * Math.cos(gamma) + 0.070257 * Math.sin(gamma)
+    - 0.006758 * Math.cos(2 * gamma) + 0.000907 * Math.sin(2 * gamma)
+    - 0.002697 * Math.cos(3 * gamma) + 0.00148 * Math.sin(3 * gamma);
+  const lat = toR(CHOIBALSAN_LAT);
+  const zenith = toR(90 - angleDeg);
+  const cosH = (Math.cos(zenith) / (Math.cos(lat) * Math.cos(decl)))
+             - Math.tan(lat) * Math.tan(decl);
+  if (Math.abs(cosH) > 1) return null;
+  const halfDayMinutes = toD(Math.acos(cosH)) * 4;
+  const solarNoonMinutes = 720 - 4 * CHOIBALSAN_LNG - eot + MN_UTC_OFFSET * 60;
+  return {
+    evening: solarNoonMinutes + halfDayMinutes,
+    morning: solarNoonMinutes - halfDayMinutes,
+  };
+}
+
+function suitableOnMinutes(dateKey) {
+  const m = String(dateKey || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  const sunset = sunCrossingTimes(year, month, day, -0.833);
+  const civil = sunCrossingTimes(year, month, day, -6);
+  if (!sunset || !civil) return null;
+  return Math.round((sunset.evening + civil.evening) / 2);
+}
+
+function timeFromMinutes(minutes) {
+  if (minutes === null || minutes === undefined || !Number.isFinite(Number(minutes))) return null;
+  const t = Math.round((((Number(minutes) % 1440) + 1440) % 1440));
+  return `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
+}
+
 function scheduledOnAt(log, iso) {
   if (!log) return null;
   if (Number(log.is_always_off || 0)) return false;
-  const on = minutesFromTime(log.on_time);
+  const dateKey = localDateKeyFromIso(iso);
+  const on = suitableOnMinutes(dateKey) ?? minutesFromTime(log.on_time);
   const off = minutesFromTime(log.off_time);
   const cur = localMinutesFromIso(iso);
   if (on === null || off === null || cur === null) return null;
@@ -609,7 +684,7 @@ function latestDeviceSelect(whereClause = "") {
       JOIN (
         SELECT dev_eui, MAX(id) AS max_id
         FROM iot_device_commands
-        WHERE status IN ('queued','txack_received','ack_received','uplink_received')
+        WHERE status IN ('queued','txack_received','ack_received','uplink_received','ack_failed','failed')
         GROUP BY dev_eui
       ) x ON x.max_id = c.id
     )
@@ -654,17 +729,40 @@ function latestDeviceSelect(whereClause = "") {
       c.requested_at AS command_requested_at,
       c.f_port AS command_f_port,
       c.payload_hex AS command_payload_hex,
+      COALESCE(s.auto_mode, 1) AS autoMode,
+      s.updated_at AS autoModeUpdatedAt,
+      s.manual_off_reason AS manualOffReason,
+      s.manual_off_note AS manualOffNote,
+      s.manual_off_by AS manualOffBy,
+      s.manual_off_at AS manualOffAt,
+      COALESCE(s.maintenance_mode, 0) AS maintenanceMode,
+      s.maintenance_reason AS maintenanceReason,
+      s.maintenance_by AS maintenanceBy,
+      s.maintenance_at AS maintenanceAt,
+      u.full_name AS manualOffOperatorName,
+      u.username AS manualOffOperatorUsername,
+      mu.full_name AS maintenanceOperatorName,
+      mu.username AS maintenanceOperatorUsername,
       CASE
         WHEN c.id IS NULL THEN NULL
+        WHEN c.status='ack_failed' THEN 'ack_failed'
+        WHEN c.status='failed' THEN 'failed'
         WHEN EXISTS (
           SELECT 1 FROM iot_meter_readings m
           WHERE m.dev_eui=l.dev_eui
             AND datetime(m.received_at) >= datetime(c.requested_at)
             AND (m.power IS NOT NULL OR m.current IS NOT NULL OR m.do_state IS NOT NULL)
             AND (
-              (c.action='ON' AND (COALESCE(m.power, 0) > 0.01 OR COALESCE(m.current, 0) > 0.02 OR TRIM(COALESCE(m.do_state, ''))='0'))
+              (c.action='ON' AND (
+                COALESCE(m.power, 0) > 0.01
+                OR COALESCE(m.current, 0) > 0.02
+                OR (m.power IS NULL AND m.current IS NULL AND TRIM(COALESCE(m.do_state, ''))='1')
+              ))
               OR
-              (c.action='OFF' AND (COALESCE(m.power, 0) <= 0.01 AND COALESCE(m.current, 0) <= 0.02 OR TRIM(COALESCE(m.do_state, ''))='1'))
+              (c.action='OFF' AND (
+                ((m.power IS NOT NULL OR m.current IS NOT NULL) AND COALESCE(m.power, 0) <= 0.01 AND COALESCE(m.current, 0) <= 0.02)
+                OR (m.power IS NULL AND m.current IS NULL AND TRIM(COALESCE(m.do_state, ''))='0')
+              ))
             )
         ) THEN LOWER(c.action) || '_confirmed'
         WHEN EXISTS (
@@ -691,6 +789,9 @@ function latestDeviceSelect(whereClause = "") {
       ) AS command_uplinks_seen
     FROM latest l
     LEFT JOIN latest_command c ON c.dev_eui=l.dev_eui
+    LEFT JOIN iot_device_settings s ON s.dev_eui=l.dev_eui
+    LEFT JOIN users u ON u.id=s.manual_off_by
+    LEFT JOIN users mu ON mu.id=s.maintenance_by
   `;
 }
 
@@ -785,17 +886,33 @@ router.post("/iot/chirpstack/uplink", requireIotSecret, async (req, res) => {
     ]
   );
 
-  await run(
-    `UPDATE iot_device_commands
-     SET status='uplink_received'
-     WHERE id=(
-       SELECT id FROM iot_device_commands
-       WHERE dev_eui=? AND status IN ('queued','txack_received','ack_received')
-       ORDER BY datetime(requested_at) DESC, id DESC
-       LIMIT 1
-     )`,
-    [devEui]
-  ).catch(() => {});
+  const isCommandAck = body.queueItemId && Object.prototype.hasOwnProperty.call(body, "acknowledged");
+  if (isCommandAck) {
+    const acknowledged = body.acknowledged === true || body.acknowledged === 1 || body.acknowledged === "true";
+    await run(
+      `UPDATE iot_device_commands
+       SET status=?, ack_response=?
+       WHERE id=(
+         SELECT id FROM iot_device_commands
+         WHERE dev_eui=? AND status IN ('queued','txack_received','ack_received','uplink_received')
+         ORDER BY datetime(requested_at) DESC, id DESC
+         LIMIT 1
+       )`,
+      [acknowledged ? "ack_received" : "ack_failed", rawPayload, devEui]
+    ).catch(() => {});
+  } else {
+    await run(
+      `UPDATE iot_device_commands
+       SET status='uplink_received'
+       WHERE id=(
+         SELECT id FROM iot_device_commands
+         WHERE dev_eui=? AND status IN ('queued','txack_received','ack_received')
+         ORDER BY datetime(requested_at) DESC, id DESC
+         LIMIT 1
+       )`,
+      [devEui]
+    ).catch(() => {});
+  }
 
   res.json({ ok: true, id: result.id, devEui, received_at: receivedAt });
 });
@@ -812,7 +929,7 @@ async function recordCommandEvent({ body, eventType, status, responseColumn }) {
        FROM iot_meter_readings
        GROUP BY dev_eui
      ) r ON r.dev_eui=c.dev_eui
-     WHERE c.dev_eui=? AND c.status IN ('queued','txack_received','ack_received','uplink_received')
+     WHERE c.dev_eui=? AND c.status IN ('queued','txack_received','ack_received','uplink_received','ack_failed','failed')
      ORDER BY datetime(c.requested_at) DESC, c.id DESC
      LIMIT 1`,
     [devEui]
@@ -841,7 +958,7 @@ async function recordCommandEvent({ body, eventType, status, responseColumn }) {
      SET status=?, ${column}=?
      WHERE id=(
        SELECT id FROM iot_device_commands
-       WHERE dev_eui=? AND status IN ('queued','txack_received','ack_received','uplink_received')
+      WHERE dev_eui=? AND status IN ('queued','txack_received','ack_received','uplink_received','ack_failed','failed')
        ORDER BY datetime(requested_at) DESC, id DESC
        LIMIT 1
      )`,
@@ -1042,7 +1159,9 @@ router.get("/iot/report", auth, async (req, res) => {
     }
     const energyDelta = Number(last.energy) - Number(first.energy);
     const avgPowerKw = avgOf("power");
-    const latestSchedule = activeScheduleFor(scheduleLogs, config.category, localDateKeyFromIso(last.received_at || new Date().toISOString()));
+    const latestDateKey = localDateKeyFromIso(last.received_at || new Date().toISOString());
+    const latestSchedule = activeScheduleFor(scheduleLogs, config.category, latestDateKey);
+    const latestSuitableOnTime = timeFromMinutes(suitableOnMinutes(latestDateKey));
     const sortedOperatorEvents = operatorEvents
       .filter(e => e.at)
       .map(e => ({ ...e, severity: operatorEventSeverity(e.type) }))
@@ -1056,7 +1175,9 @@ router.get("/iot/report", auth, async (req, res) => {
       onPct: rows.length ? round((onSamples / rows.length) * 100, 1) : 0,
       avgPowerKw: round(avgPowerKw, 3),
       scheduleCategory: config.category || null,
-      scheduleOnTime: latestSchedule?.on_time || null,
+      scheduleOnTime: latestSuitableOnTime || latestSchedule?.on_time || null,
+      scheduleRegisteredOnTime: latestSchedule?.on_time || null,
+      scheduleOnSource: latestSuitableOnTime ? "suitable_sunlight" : "registered",
       scheduleOffTime: latestSchedule?.off_time || null,
       expectedOnSamples: scheduleOnSamples,
       expectedOnPct: scheduleKnownSamples ? round((scheduleOnSamples / scheduleKnownSamples) * 100, 1) : null,
@@ -1213,9 +1334,67 @@ router.get("/iot/timeseries", auth, async (req, res) => {
   });
 });
 
+router.post("/iot/devices/:devEui/auto-mode", auth, requirePermission("lighting_edit"), async (req, res) => {
+  const devEui = normalizeDevEui(req.params.devEui);
+  const autoMode = req.body?.autoMode === false || req.body?.autoMode === 0 || req.body?.autoMode === "0" ? 0 : 1;
+  const latest = await get(
+    `SELECT dev_eui, device_name FROM iot_meter_readings WHERE dev_eui=? ORDER BY datetime(received_at) DESC, id DESC LIMIT 1`,
+    [devEui]
+  );
+  if (!latest) return res.status(404).json({ error: "Device not found" });
+
+  await run(
+    `INSERT INTO iot_device_settings(dev_eui,auto_mode,updated_by,updated_at)
+     VALUES(?,?,?,CURRENT_TIMESTAMP)
+     ON CONFLICT(dev_eui) DO UPDATE SET
+       auto_mode=excluded.auto_mode,
+       updated_by=excluded.updated_by,
+       updated_at=CURRENT_TIMESTAMP,
+       manual_off_reason=CASE WHEN excluded.auto_mode=1 THEN NULL ELSE manual_off_reason END,
+       manual_off_note=CASE WHEN excluded.auto_mode=1 THEN NULL ELSE manual_off_note END,
+       manual_off_by=CASE WHEN excluded.auto_mode=1 THEN NULL ELSE manual_off_by END,
+       manual_off_at=CASE WHEN excluded.auto_mode=1 THEN NULL ELSE manual_off_at END,
+       maintenance_mode=CASE WHEN excluded.auto_mode=1 THEN 0 ELSE maintenance_mode END,
+       maintenance_reason=CASE WHEN excluded.auto_mode=1 THEN NULL ELSE maintenance_reason END,
+       maintenance_by=CASE WHEN excluded.auto_mode=1 THEN NULL ELSE maintenance_by END,
+       maintenance_at=CASE WHEN excluded.auto_mode=1 THEN NULL ELSE maintenance_at END`,
+    [devEui, autoMode, req.user?.id || null]
+  );
+  await run(
+    `INSERT INTO iot_audit_logs(event_type,dev_eui,payload,source)
+     VALUES(?,?,?,?)`,
+    ["iot_auto_mode_changed", devEui, jsonText({
+      devEui,
+      deviceName: latest.device_name || null,
+      autoMode: Boolean(autoMode),
+      user: req.user?.id || null,
+      role: req.user?.role || null,
+      timestamp: new Date().toISOString(),
+    }), "erp_backend"]
+  );
+
+  let recovery = null;
+  if (autoMode) {
+    try {
+      recovery = await reconcileIotLighting({ source: "auto_mode_enabled" });
+    } catch (e) {
+      recovery = { error: e.message };
+    }
+  }
+
+  res.json({
+    devEui,
+    deviceName: latest.device_name || null,
+    autoMode: Boolean(autoMode),
+    recovery,
+  });
+});
+
 router.post("/iot/devices/:devEui/downlink", auth, requirePermission("lighting_edit"), async (req, res) => {
   const devEui = normalizeDevEui(req.params.devEui);
   const action = String(req.body?.action || req.body?.command || "").trim().toUpperCase();
+  const manualOffReason = normalizeManualOffReason(req.body?.manualOffReason || req.body?.reason);
+  const manualOffNote = String(req.body?.manualOffNote || req.body?.note || "").trim().slice(0, 500);
   const rawRequest = {
     params: { devEui: req.params.devEui },
     body: req.body || {},
@@ -1228,6 +1407,16 @@ router.post("/iot/devices/:devEui/downlink", auth, requirePermission("lighting_e
     [devEui]
   );
   if (!latest) return res.status(404).json({ error: "Device not found" });
+  if (action === "OFF" && !manualOffReason) {
+    return res.status(400).json({ error: "Manual OFF reason is required" });
+  }
+  const settings = await get("SELECT maintenance_mode FROM iot_device_settings WHERE dev_eui=?", [devEui]);
+  if (action === "ON" && Number(settings?.maintenance_mode || 0)) {
+    return res.status(409).json({
+      error: "Maintenance mode is active. Return this node to AUTO after the work is finished before sending ON.",
+      code: "maintenance_mode_active",
+    });
+  }
 
   const model = detectDeviceModel({ devEui, deviceName: latest.device_name });
   let config;
@@ -1274,7 +1463,54 @@ router.post("/iot/devices/:devEui/downlink", auth, requirePermission("lighting_e
        VALUES(?,?,?,?,?,?,?,?,?)`,
       [devEui, model, action, result.fPort, result.payloadHex, "queued", jsonText(chirpstackQueueResult), req.user?.id || null, req.user?.role || null]
     );
-    auditPayload = { ...auditPayload, ok: true, chirpstackQueueResult };
+    await run(
+      `INSERT INTO iot_device_settings(dev_eui,auto_mode,updated_by,updated_at)
+       VALUES(?,0,?,CURRENT_TIMESTAMP)
+       ON CONFLICT(dev_eui) DO UPDATE SET
+         auto_mode=0,
+         updated_by=excluded.updated_by,
+         updated_at=CURRENT_TIMESTAMP,
+         manual_off_reason=CASE WHEN ?='OFF' THEN ? ELSE NULL END,
+         manual_off_note=CASE WHEN ?='OFF' THEN ? ELSE NULL END,
+         manual_off_by=CASE WHEN ?='OFF' THEN ? ELSE NULL END,
+         manual_off_at=CASE WHEN ?='OFF' THEN CURRENT_TIMESTAMP ELSE NULL END,
+         maintenance_mode=CASE WHEN ?='OFF' AND ?='maintenance' THEN 1 WHEN ?='ON' THEN 0 ELSE maintenance_mode END,
+         maintenance_reason=CASE WHEN ?='OFF' AND ?='maintenance' THEN ? WHEN ?='ON' THEN NULL ELSE maintenance_reason END,
+         maintenance_by=CASE WHEN ?='OFF' AND ?='maintenance' THEN ? WHEN ?='ON' THEN NULL ELSE maintenance_by END,
+         maintenance_at=CASE WHEN ?='OFF' AND ?='maintenance' THEN CURRENT_TIMESTAMP WHEN ?='ON' THEN NULL ELSE maintenance_at END`,
+      [
+        devEui,
+        req.user?.id || null,
+        action,
+        manualOffReason ? MANUAL_OFF_REASONS[manualOffReason] : null,
+        action,
+        manualOffNote || null,
+        action,
+        req.user?.id || null,
+        action,
+        action,
+        manualOffReason,
+        action,
+        action,
+        manualOffReason,
+        manualOffReason ? MANUAL_OFF_REASONS[manualOffReason] : null,
+        action,
+        action,
+        manualOffReason,
+        req.user?.id || null,
+        action,
+        action,
+        manualOffReason,
+        action,
+      ]
+    );
+    auditPayload = {
+      ...auditPayload,
+      ok: true,
+      chirpstackQueueResult,
+      manualOffReason: action === "OFF" ? MANUAL_OFF_REASONS[manualOffReason] : null,
+      manualOffNote: action === "OFF" ? manualOffNote || null : null,
+    };
     await run(
       `INSERT INTO iot_audit_logs(event_type,dev_eui,payload,source)
        VALUES(?,?,?,?)`,
@@ -1289,6 +1525,8 @@ router.post("/iot/devices/:devEui/downlink", auth, requirePermission("lighting_e
       payloadHex: result.payloadHex,
       chirpstackQueueResult,
       status: "queued",
+      autoMode: false,
+      manualOffReason: action === "OFF" ? MANUAL_OFF_REASONS[manualOffReason] : null,
     });
   } catch (e) {
     await run(

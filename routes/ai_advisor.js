@@ -2052,6 +2052,8 @@ router.get("/ai/code-export", auth, aiRateLimit, async (req, res) => {
   md.push(`\n## IoT гэрэлтүүлгийн ажлын талбарын логик\n`);
   md.push(`Энэ хэсэг нь \`IoT Гэрэлтүүлгийн хяналт\` ажлын талбарыг гаднын ChatGPT/Claude/Codex зөвлөхүүд буруу ойлгохоос хамгаалах үндсэн дүрэм юм.`);
   md.push(`\n### Operator-facing нэр томьёо`);
+  md.push(`- **Аюулгүй ажиллагаа / засварын удирдлага** = өдрийн цагийн засварын үед manual ON/OFF нь оператор, инженерийн хяналтаар явагдана. ERP schedule recovery нь manual command-ыг hold гэж тооцож дараагийн хуваарьт асаалт/унтраалтад нөлөөлүүлэхгүй. ERP command нь газар дээрх физик салгалт, түгжээ/анхааруулах тэмдэглэгээг орлохгүй.`);
+  md.push(`- **Автомат асаалт** = IoT recovery ON boundary-г тухайн өдрийн Чойбалсан хотын "Асаах тохиромжтой" нарны тооцоогоор авна. OFF boundary нь баталсан schedule-ийн \`off_time\` бөгөөд өдрийн турш тасралтгүй OFF шахахгүй.`);
   md.push(`- **Node** = LoRaWAN-аар өгөгдөл илгээдэг ADW300/310 төхөөрөмжийн ERP дээрх бүртгэл.`);
   md.push(`- **ADW оноох** = шит/тэжээлийн цэг дээр физикээр суусан ADW300/310 node-г ERP дээр тухайн цэгт оноох ажиллагаа. Энэ нь online/offline сүлжээний холболт биш.`);
   md.push(`- **Сонсогдсон node** = ChirpStack-аас ERP backend-д сүүлийн 10 минутанд uplink ирсэн node.`);
@@ -2061,6 +2063,8 @@ router.get("/ai/code-export", auth, aiRateLimit, async (req, res) => {
   md.push(`- **Нэг гудамж олон шиттэй байж болно** = жишээ нь нэг гудамж 1-44, 45-76 гэх мэт өөр өөр segment/тэжээлийн цэгтэй байж болох тул бүх гудамжийг нэг төлөвөөр будаж болохгүй.`);
 
   md.push(`\n### AI-д зориулсан техникийн дүрэм`);
+  md.push(`- Safety rule: schedule recovery ignores manual ON/OFF hold decisions. Daytime maintenance commands remain under operator/engineer control; require physical isolation/lockout for field safety.`);
+  md.push(`- Auto schedule rule: recovery uses Choibalsan daily suitable sunlight ON time instead of registered \`on_time\`; registered \`off_time\` is enforced only near the shutdown boundary.`);
   md.push(`- Frontend үндсэн файл: \`public/modules/iot_monitor.js\`.`);
   md.push(`- Backend IoT API: \`routes/iot.js\`; ChirpStack uplink endpoint: \`POST /api/iot/chirpstack/uplink\`, хамгаалалт: \`X-IOT-SECRET\`.`);
   md.push(`- Device list: \`GET /api/iot/devices\`; хамгийн сүүлийн дохио нь \`iot_meter_readings.received_at\` дээр суурилна.`);

@@ -7,7 +7,6 @@ const RETRY_MINUTES = Number(process.env.IOT_RECOVERY_RETRY_MINUTES || 5);
 const LINE_POWER_VOLTAGE_MIN = Number(process.env.IOT_RECOVERY_LINE_POWER_VOLTAGE_MIN || 1);
 const LOAD_POWER_KW_MIN = Number(process.env.IOT_RECOVERY_LOAD_POWER_KW_MIN || 0.01);
 const LOAD_CURRENT_A_MIN = Number(process.env.IOT_RECOVERY_LOAD_CURRENT_A_MIN || 0.02);
-const MANUAL_ON_HOLD_MINUTES = Number(process.env.IOT_MANUAL_ON_HOLD_MINUTES || 60);
 
 const ADW300_DO1_ON_HEX = "4D6F646275733A30303130303143323030303130323030303136413232";
 const ADW300_DO1_OFF_HEX = "4D6F646275733A30303130303143323030303130323030303041424532";
@@ -16,6 +15,10 @@ const IOT_NODE_CONFIG = {
   "00956906000AA9F1": { category: "\u0410\u0432\u0442\u043e \u0437\u0430\u043c\u044b\u043d \u0433\u044d\u0440\u044d\u043b", lampCount: 20, wattageW: 100 },
   "00956906000AE4EA": { category: "\u0413\u044d\u0440 \u0445\u043e\u0440\u043e\u043e\u043b\u043b\u044b\u043d \u0433\u044d\u0440\u044d\u043b", lampCount: 20, wattageW: 100 },
 };
+
+const CHOIBALSAN_LAT = 48.0714;
+const CHOIBALSAN_LNG = 114.5357;
+const MN_UTC_OFFSET = 8;
 
 function normalizeDevEui(value) {
   return String(value || "").trim().toUpperCase();
@@ -54,15 +57,67 @@ function minutesFromTime(value) {
   return Number(m[1]) * 60 + Number(m[2]);
 }
 
+function sunCrossingTimes(year, month1, day, angleDeg) {
+  const toR = d => d * Math.PI / 180;
+  const toD = r => r * 180 / Math.PI;
+  const date = new Date(Date.UTC(year, month1 - 1, day));
+  const dayOfYear = Math.round((date - new Date(Date.UTC(year, 0, 1))) / 86400000) + 1;
+  const gamma = 2 * Math.PI / 365 * (dayOfYear - 1);
+  const eot = 229.18 * (
+    0.000075 + 0.001868 * Math.cos(gamma) - 0.032077 * Math.sin(gamma)
+    - 0.014615 * Math.cos(2 * gamma) - 0.040849 * Math.sin(2 * gamma)
+  );
+  const decl =
+    0.006918 - 0.399912 * Math.cos(gamma) + 0.070257 * Math.sin(gamma)
+    - 0.006758 * Math.cos(2 * gamma) + 0.000907 * Math.sin(2 * gamma)
+    - 0.002697 * Math.cos(3 * gamma) + 0.00148 * Math.sin(3 * gamma);
+  const lat = toR(CHOIBALSAN_LAT);
+  const zenith = toR(90 - angleDeg);
+  const cosH = (Math.cos(zenith) / (Math.cos(lat) * Math.cos(decl)))
+             - Math.tan(lat) * Math.tan(decl);
+  if (Math.abs(cosH) > 1) return null;
+  const halfDayMinutes = toD(Math.acos(cosH)) * 4;
+  const solarNoonMinutes = 720 - 4 * CHOIBALSAN_LNG - eot + MN_UTC_OFFSET * 60;
+  return {
+    evening: solarNoonMinutes + halfDayMinutes,
+    morning: solarNoonMinutes - halfDayMinutes,
+  };
+}
+
+function suitableOnMinutes(dateKey) {
+  const m = String(dateKey || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  const sunset = sunCrossingTimes(year, month, day, -0.833);
+  const civil = sunCrossingTimes(year, month, day, -6);
+  if (!sunset || !civil) return null;
+  return Math.round((sunset.evening + civil.evening) / 2);
+}
+
 function scheduledOnAt(log, date = new Date()) {
   if (!log) return null;
   if (Number(log.is_always_off || 0)) return false;
-  const on = minutesFromTime(log.on_time);
+  const dateKey = mnLocalDateKey(date);
+  const on = suitableOnMinutes(dateKey) ?? minutesFromTime(log.on_time);
   const off = minutesFromTime(log.off_time);
   const cur = mnLocalMinutes(date);
   if (on === null || off === null) return null;
   if (off <= on) return cur >= on || cur < off;
   return cur >= on && cur < off;
+}
+
+function scheduledDesiredAction(log, date = new Date()) {
+  if (!log) return null;
+  if (Number(log.is_always_off || 0)) return "OFF";
+  const dateKey = mnLocalDateKey(date);
+  const on = suitableOnMinutes(dateKey) ?? minutesFromTime(log.on_time);
+  const off = minutesFromTime(log.off_time);
+  const cur = mnLocalMinutes(date);
+  if (on === null || off === null) return null;
+  const isOnWindow = off <= on ? (cur >= on || cur < off) : (cur >= on && cur < off);
+  return isOnWindow ? "ON" : "OFF";
 }
 
 function activeScheduleFor(logs, category, dateKey) {
@@ -91,8 +146,8 @@ function hasActiveLoad(row) {
   if (current !== null && current > LOAD_CURRENT_A_MIN) return true;
   if (power !== null || current !== null) return false;
   const doState = String(row?.DO_State ?? row?.do_state ?? "").trim();
-  if (doState === "0") return true;
-  if (doState === "1") return false;
+  if (doState === "1") return true;
+  if (doState === "0") return false;
   return null;
 }
 
@@ -197,12 +252,12 @@ async function latestDevices() {
       (SELECT status FROM iot_device_commands c WHERE c.dev_eui=l.dev_eui ORDER BY c.id DESC LIMIT 1) AS lastCommandStatus,
       (SELECT requested_by_role FROM iot_device_commands c WHERE c.dev_eui=l.dev_eui ORDER BY c.id DESC LIMIT 1) AS lastCommandRole,
       (SELECT requested_at FROM iot_device_commands c WHERE c.dev_eui=l.dev_eui ORDER BY c.id DESC LIMIT 1) AS lastCommandAt,
-      (SELECT requested_at FROM iot_device_commands c
-        WHERE c.dev_eui=l.dev_eui
-          AND c.action='ON'
-          AND COALESCE(c.requested_by_role,'') <> 'system'
-        ORDER BY c.id DESC LIMIT 1) AS lastManualOnAt
+      COALESCE(s.auto_mode, 1) AS autoMode,
+      COALESCE(s.maintenance_mode, 0) AS maintenanceMode,
+      NULL AS lastManualOnAt,
+      NULL AS lastManualOffAt
     FROM latest l
+    LEFT JOIN iot_device_settings s ON s.dev_eui=l.dev_eui
   `);
 }
 
@@ -283,19 +338,9 @@ async function upsertRecoveryState({ devEui, scheduleCategory, desiredAction, de
 function canRetry(state, desiredAction) {
   if (!state) return true;
   if (desiredAction && state.desired_action !== desiredAction) return true;
-  if (Number(state.attempt_count || 0) >= MAX_ATTEMPTS_PER_ON_WINDOW) return false;
   if (!state.last_attempt_at) return true;
   const last = new Date(state.last_attempt_at).getTime();
   return !Number.isFinite(last) || Date.now() - last >= RETRY_MINUTES * 60 * 1000;
-}
-
-function commandAgeMinutes(value) {
-  if (!value) return Infinity;
-  const normalized = String(value).includes("T")
-    ? String(value)
-    : String(value).replace(" ", "T") + "Z";
-  const t = new Date(normalized).getTime();
-  return Number.isFinite(t) ? (Date.now() - t) / 60000 : Infinity;
 }
 
 let recoveryRunning = false;
@@ -321,16 +366,19 @@ async function reconcileIotLighting({ source = "cron" } = {}) {
         summary.skipped += 1;
         continue;
       }
+      if (Number(row.maintenanceMode || 0)) {
+        await upsertRecoveryState({ devEui, scheduleCategory: config.category, desiredAction: "MAINTENANCE", desiredMet: true, attempted: false });
+        summary.skipped += 1;
+        continue;
+      }
+      if (!Number(row.autoMode ?? 1)) {
+        await upsertRecoveryState({ devEui, scheduleCategory: config.category, desiredAction: "MANUAL", desiredMet: true, attempted: false });
+        summary.skipped += 1;
+        continue;
+      }
 
       const schedule = activeScheduleFor(schedules, config.category, dateKey);
-      const scheduledOn = scheduledOnAt(schedule);
-      const scheduleKnown = scheduledOn !== null;
-      const manualDesiredOn = commandAgeMinutes(row.lastManualOnAt) <= MANUAL_ON_HOLD_MINUTES;
-      const desiredAction = manualDesiredOn || scheduledOn === true
-        ? "ON"
-        : scheduleKnown
-        ? "OFF"
-        : null;
+      const desiredAction = scheduledDesiredAction(schedule);
       const linePower = hasLinePower(row);
       const loadOn = hasActiveLoad(row);
       const state = await get("SELECT * FROM iot_recovery_state WHERE dev_eui=?", [devEui]);
@@ -346,9 +394,7 @@ async function reconcileIotLighting({ source = "cron" } = {}) {
 
       const model = detectDeviceModel({ devEui, deviceName: row.deviceName });
       const reason = desiredAction === "OFF"
-        ? `${source}: schedule_off_line_power_load_on`
-        : manualDesiredOn && !scheduleKnown
-        ? `${source}: manual_on_line_power_no_load`
+        ? `${source}: schedule_off_boundary_line_power_load_on`
         : `${source}: schedule_on_line_power_no_load`;
       try {
         const result = await enqueueChirpStackDownlink({ devEui, action: desiredAction, model });

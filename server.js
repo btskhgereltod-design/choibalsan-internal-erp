@@ -44,6 +44,7 @@ const { run, all, get, auth, upload } = require("./db");
 const { saveLightingDailySnapshot } = require("./services/lighting_snapshots");
 const { saveCameraDailySnapshot } = require("./services/camera_snapshots");
 const { startCronJobs } = require("./services/cron");
+const { reconcileIotLighting } = require("./services/iot_recovery");
 
 // ── Email / SMTP setup (optional — configure via .env) ───────
 let _nm = null; try { _nm = require("nodemailer"); } catch(e) {}
@@ -1281,6 +1282,27 @@ async function initDb() {
   await run(`ALTER TABLE iot_device_commands ADD COLUMN requested_by_role TEXT`).catch(() => {});
   await run(`CREATE INDEX IF NOT EXISTS idx_iot_device_commands_dev_requested
              ON iot_device_commands(dev_eui, requested_at DESC, id DESC)`).catch(() => {});
+
+  await run(`CREATE TABLE IF NOT EXISTS iot_device_settings (
+    dev_eui             TEXT PRIMARY KEY,
+    auto_mode           INTEGER NOT NULL DEFAULT 1,
+    updated_by          INTEGER,
+    updated_at          TEXT DEFAULT CURRENT_TIMESTAMP,
+    maintenance_mode    INTEGER NOT NULL DEFAULT 0,
+    maintenance_reason  TEXT,
+    maintenance_by      INTEGER,
+    maintenance_at      TEXT
+  )`);
+  await run(`ALTER TABLE iot_device_settings ADD COLUMN updated_by INTEGER`).catch(() => {});
+  await run(`ALTER TABLE iot_device_settings ADD COLUMN updated_at TEXT DEFAULT CURRENT_TIMESTAMP`).catch(() => {});
+  await run(`ALTER TABLE iot_device_settings ADD COLUMN manual_off_reason TEXT`).catch(() => {});
+  await run(`ALTER TABLE iot_device_settings ADD COLUMN manual_off_note TEXT`).catch(() => {});
+  await run(`ALTER TABLE iot_device_settings ADD COLUMN manual_off_by INTEGER`).catch(() => {});
+  await run(`ALTER TABLE iot_device_settings ADD COLUMN manual_off_at TEXT`).catch(() => {});
+  await run(`ALTER TABLE iot_device_settings ADD COLUMN maintenance_mode INTEGER NOT NULL DEFAULT 0`).catch(() => {});
+  await run(`ALTER TABLE iot_device_settings ADD COLUMN maintenance_reason TEXT`).catch(() => {});
+  await run(`ALTER TABLE iot_device_settings ADD COLUMN maintenance_by INTEGER`).catch(() => {});
+  await run(`ALTER TABLE iot_device_settings ADD COLUMN maintenance_at TEXT`).catch(() => {});
 
   // ── Гэрэлтүүлгийн цагийн тохируулгын түүх ───────────────────
   await run(`CREATE TABLE IF NOT EXISTS light_schedule_logs (
@@ -2779,11 +2801,19 @@ process.on("unhandledRejection", (reason) => {
   console.error("[unhandledRejection]", reason);
 });
 
-initDb().then(() => {
+initDb().then(async () => {
   cleanupAssistantLogs();
   startDailySnapshotScheduler();
   startCronJobs();
   setInterval(cleanupAssistantLogs, 24 * 60 * 60 * 1000).unref();
+  try {
+    const result = await reconcileIotLighting({ source: "startup" });
+    if (result.attempted || result.failed) {
+      console.log(`[startup] IoT recovery: checked=${result.checked} attempted=${result.attempted} failed=${result.failed}`);
+    }
+  } catch (e) {
+    console.error("[startup] IoT recovery error:", e.message);
+  }
   app.listen(APP_PORT, "0.0.0.0", () => {
     console.log(`Choibalsan internal app running: http://0.0.0.0:${APP_PORT}`);
   });

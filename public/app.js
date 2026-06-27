@@ -14,7 +14,7 @@ import './modules/admin_hub.js';
 import './modules/streetlights.js?v=20260618noloratab';
 import './modules/lighting_schedule.js?v=20260527engineeredit';
 import './modules/lora_monitor.js?v=20260618redirect';
-import './modules/iot_monitor.js?v=20260622segmentloadcolor';
+import './modules/iot_monitor.js?v=20260626safetyhold';
 import './modules/citizen_reports.js?v=20260622portal';
 import './modules/settings.js?v=20260527loginrights';
 import './modules/eng_hub.js?v=20260529monthfilter';
