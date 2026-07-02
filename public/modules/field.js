@@ -3,14 +3,18 @@ import { api, state, today, escapeHtml, toast } from './common.js';
 let _fieldWorks = [];
 let _fieldTrainings = [];
 let _fieldInstructions = [];
+let _fieldTodos = [];
+let _fieldMyLocations = [];
 
 async function field() {
   main.innerHTML = `<div style="text-align:center;padding:40px;color:#667085">⏳ Ачааллаж байна...</div>`;
   try {
-    const [all, trainings, instructions] = await Promise.all([
+    const [all, trainings, instructions, todos, myLocations] = await Promise.all([
       api("/api/work-logs").catch(() => []),
       api("/api/safety-trainings").catch(() => []),
       api("/api/safety-instructions").catch(() => []),
+      api(`/api/nyarav/todos?module=personal&month=${today().slice(0, 7)}`).catch(() => []),
+      api("/api/employee-locations/mine?limit=1").catch(() => []),
     ]);
     _fieldWorks = all.filter(w => w.status !== 'Хаагдсан');
     _fieldTrainings = trainings
@@ -21,7 +25,13 @@ async function field() {
       .filter(i => (i.status || 'Идэвхтэй') === 'Идэвхтэй')
       .filter(i => Number(i.my_targeted || 0) > 0 || Number(i.target_count || 0) === 0)
       .slice(0, 6);
-  } catch(e) { _fieldWorks = []; }
+    const todayStr = today();
+    const weekEnd = _fieldAddDays(todayStr, 6);
+    _fieldTodos = (Array.isArray(todos) ? todos : [])
+      .filter(t => (t.work_date || '') >= todayStr && (t.work_date || '') <= weekEnd)
+      .sort(_fieldTodoSort);
+    _fieldMyLocations = Array.isArray(myLocations) ? myLocations : [];
+  } catch(e) { _fieldWorks = []; _fieldTodos = []; _fieldMyLocations = []; }
   _renderField();
 }
 
@@ -54,6 +64,8 @@ function _renderField() {
       </div>
       <button class="btn" onclick="field()" style="padding:6px 14px;font-size:12px">🔄</button>
     </div>
+    ${_fieldLocationBlock()}
+    ${_fieldTodoBlock()}
     ${_fieldHseBlock()}
     ${rejectedBanner}
     ${section('❌ Буцаагдсан — дахин илгээх', rejected, '#dc2626')}
@@ -67,6 +79,88 @@ function _renderField() {
       <div style="font-size:12px;margin-top:4px">Бүх ажил дууссан</div>
     </div>` : ''}
   </div>`;
+}
+
+function _fieldLocationBlock() {
+  const last = _fieldMyLocations[0];
+  const maps = last ? `https://maps.google.com/?q=${Number(last.gps_lat)},${Number(last.gps_lng)}` : "";
+  return `
+  <div style="background:#fff;border:1px solid #bfdbfe;border-radius:14px;margin-bottom:14px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.05)">
+    <div style="padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <div style="min-width:0">
+        <div style="font-size:13px;font-weight:900;color:#0f172a">📍 Миний байршил</div>
+        <div id="fieldLocStatus" style="font-size:10px;color:#64748b;margin-top:2px">
+          ${last ? `Сүүлд: ${(last.created_at || '').slice(0,16)} · ${Number(last.gps_lat).toFixed(5)}, ${Number(last.gps_lng).toFixed(5)}` : 'Байршил илгээгээгүй байна'}
+        </div>
+      </div>
+      <button id="fieldLocBtn" class="btn" onclick="fieldSendLocation()" style="padding:8px 12px;font-size:12px;white-space:nowrap">GPS илгээх</button>
+    </div>
+    ${last ? `<div style="padding:0 14px 12px"><a href="${maps}" target="_blank" rel="noopener" style="font-size:11px;font-weight:800;color:#2563eb;text-decoration:none">Google Maps дээр харах</a></div>` : ''}
+  </div>`;
+}
+
+function _fieldAddDays(dateStr, n) {
+  const d = new Date(`${dateStr}T12:00:00`);
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+function _fieldTodoSort(a, b) {
+  const ad = `${a.work_date || ''} ${a.work_time || '99:99'}`;
+  const bd = `${b.work_date || ''} ${b.work_time || '99:99'}`;
+  if (ad !== bd) return ad.localeCompare(bd);
+  return Number(a.id || 0) - Number(b.id || 0);
+}
+
+function _fieldTodoBlock() {
+  const todayStr = today();
+  const todays = _fieldTodos.filter(t => (t.work_date || '').slice(0, 10) === todayStr);
+  const upcoming = _fieldTodos.filter(t => (t.work_date || '').slice(0, 10) !== todayStr).slice(0, 5);
+  const activeCount = _fieldTodos.filter(t => t.status !== 'done').length;
+  return `
+  <div style="background:#fff;border:1px solid #dbe4f0;border-radius:14px;margin-bottom:14px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.05)">
+    <div style="padding:12px 14px;background:#f8fafc;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <div>
+        <div style="font-size:13px;font-weight:900;color:#0f172a">📅 Миний төлөвлөгөө</div>
+        <div style="font-size:10px;color:#64748b;margin-top:2px">Өнөөдөр ${todays.length} · 7 хоногт ${_fieldTodos.length}</div>
+      </div>
+      <span style="background:${activeCount ? '#dbeafe' : '#dcfce7'};color:${activeCount ? '#1d4ed8' : '#16a34a'};border-radius:999px;padding:3px 9px;font-size:10px;font-weight:900">${activeCount || 'OK'}</span>
+    </div>
+    <div style="padding:12px 14px">
+      ${todays.length
+        ? todays.map(t => _fieldTodoItem(t, true)).join('')
+        : `<div style="font-size:12px;color:#94a3b8;text-align:center;padding:12px 4px">Өнөөдрийн төлөвлөгөө хоосон байна</div>`}
+      ${upcoming.length ? `
+        <div style="font-size:10px;font-weight:900;color:#64748b;text-transform:uppercase;letter-spacing:.4px;margin:12px 0 7px">Ойрын өдрүүд</div>
+        ${upcoming.map(t => _fieldTodoItem(t, false)).join('')}` : ''}
+    </div>
+  </div>`;
+}
+
+function _fieldTodoItem(t, isToday) {
+  const done = t.status === 'done';
+  const typeLabels = {
+    work: 'Ажил',
+    personal: 'Хувийн',
+    reminder: 'Сануулах',
+    meeting: 'Уулзалт',
+    birthday: 'Төрсөн өдөр',
+    other: 'Бусад',
+  };
+  const type = typeLabels[t.todo_type || 'work'] || 'Ажил';
+  const dateLabel = isToday ? (t.work_time || 'Цаггүй') : `${(t.work_date || '').slice(5, 10)} ${t.work_time || ''}`.trim();
+  return `
+    <div style="display:flex;align-items:flex-start;gap:9px;border:1px solid ${done ? '#bbf7d0' : '#e2e8f0'};background:${done ? '#f0fdf4' : '#fff'};border-radius:11px;padding:10px 11px;margin-bottom:8px">
+      <div style="width:44px;flex-shrink:0;text-align:center;border-radius:9px;background:${isToday ? '#eff6ff' : '#f8fafc'};color:${isToday ? '#1d4ed8' : '#64748b'};padding:6px 4px;font-size:10px;font-weight:900">${escapeHtml(dateLabel)}</div>
+      <div style="min-width:0;flex:1">
+        <div style="font-size:12px;font-weight:900;color:${done ? '#16a34a' : '#111827'};line-height:1.35;${done ? 'text-decoration:line-through' : ''}">${escapeHtml(t.title || '')}</div>
+        ${t.note ? `<div style="font-size:11px;color:#64748b;line-height:1.4;margin-top:3px">${escapeHtml(String(t.note).slice(0, 120))}${String(t.note).length > 120 ? '...' : ''}</div>` : ''}
+        <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-top:6px">
+          <span style="font-size:10px;font-weight:800;border-radius:999px;padding:2px 7px;background:#f1f5f9;color:#475569">${escapeHtml(type)}</span>
+          ${done ? `<span style="font-size:10px;font-weight:800;color:#16a34a">✓ Дууссан</span>` : ''}
+        </div>
+      </div>
+    </div>`;
 }
 
 function _fieldHseBlock() {
@@ -285,22 +379,103 @@ function fieldToggleExec(id) {
   if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
 }
 
-function fieldGetGPS(workId) {
+async function fieldGetGPS(workId) {
   const btn = document.getElementById(`fe-gps-btn-${workId}`);
   if (btn) btn.textContent = '⏳';
   if (!navigator.geolocation) { toast('GPS дэмжигдэхгүй байна'); if (btn) btn.textContent = '📍 GPS'; return; }
-  navigator.geolocation.getCurrentPosition(
-    pos => {
-      const lat = pos.coords.latitude.toFixed(6);
-      const lng = pos.coords.longitude.toFixed(6);
-      document.getElementById(`fe-gps-${workId}`).value = `${lat}, ${lng}`;
-      document.getElementById(`fe-lat-${workId}`).value = lat;
-      document.getElementById(`fe-lng-${workId}`).value = lng;
-      if (btn) btn.textContent = '✅';
-    },
-    err => { toast(`GPS алдаа: ${err.message}`); if (btn) btn.textContent = '📍 GPS'; },
-    { timeout: 10000, enableHighAccuracy: true }
-  );
+  try {
+    const pos = await fieldBestGeoPosition();
+    const accuracy = Number(pos.coords.accuracy || 0);
+    if (accuracy > 300) {
+      toast('GPS нарийвчлал муу байна. Гадаа эсвэл цонхны ойролцоо дахин дарна уу.');
+      if (btn) btn.textContent = '📍 GPS';
+      return;
+    }
+    const lat = pos.coords.latitude.toFixed(6);
+    const lng = pos.coords.longitude.toFixed(6);
+    document.getElementById(`fe-gps-${workId}`).value = `${lat}, ${lng} (±${Math.round(accuracy)}м)`;
+    document.getElementById(`fe-lat-${workId}`).value = lat;
+    document.getElementById(`fe-lng-${workId}`).value = lng;
+    if (btn) btn.textContent = '✅';
+  } catch (err) {
+    toast(`GPS алдаа: ${err.message}`);
+    if (btn) btn.textContent = '📍 GPS';
+  }
+}
+
+function fieldBestGeoPosition(onProgress) {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) return reject(new Error("GPS дэмжигдэхгүй байна"));
+    let best = null;
+    let done = false;
+    let watchId = null;
+    let timer = null;
+    const cleanup = () => {
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+      if (timer) clearTimeout(timer);
+    };
+    const finish = () => {
+      if (done) return;
+      done = true;
+      cleanup();
+      if (best) resolve(best);
+      else reject(new Error("GPS координат авч чадсангүй"));
+    };
+    timer = setTimeout(finish, 15000);
+    watchId = navigator.geolocation.watchPosition(
+      pos => {
+        const accuracy = Number(pos.coords.accuracy || Infinity);
+        const bestAccuracy = best ? Number(best.coords.accuracy || Infinity) : Infinity;
+        if (!best || accuracy < bestAccuracy) best = pos;
+        if (typeof onProgress === "function") onProgress(best);
+        if (Number(best.coords.accuracy || Infinity) <= 80) finish();
+      },
+      err => {
+        if (done) return;
+        done = true;
+        cleanup();
+        reject(err);
+      },
+      { timeout: 15000, enableHighAccuracy: true, maximumAge: 0 }
+    );
+  });
+}
+
+async function fieldSendLocation() {
+  const btn = document.getElementById('fieldLocBtn');
+  const status = document.getElementById('fieldLocStatus');
+  if (!navigator.geolocation) {
+    toast('GPS дэмжигдэхгүй байна');
+    return;
+  }
+  if (btn) { btn.disabled = true; btn.textContent = 'GPS шалгаж байна...'; }
+  if (status) status.textContent = 'GPS асаалттай эсэхийг шалгаад 10-15 сек хамгийн зөв координат авч байна...';
+  try {
+    const pos = await fieldBestGeoPosition(best => {
+      if (!status || !best?.coords) return;
+      status.textContent = `GPS уншиж байна... одоогийн нарийвчлал ±${Math.round(Number(best.coords.accuracy || 0))}м`;
+    });
+    const lat = Number(pos.coords.latitude);
+    const lng = Number(pos.coords.longitude);
+    const accuracy = Number(pos.coords.accuracy || 0);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || accuracy > 300) {
+      toast('GPS нарийвчлал муу байна. Location/GPS асаагаад гадаа эсвэл цонхны ойролцоо дахин дарна уу.');
+      if (status) status.textContent = `Хадгалаагүй: GPS нарийвчлал муу байна (±${Math.round(accuracy || 0)}м).`;
+      return;
+    }
+    const saved = await api('/api/me/location', {
+      method: 'POST',
+      body: JSON.stringify({ lat, lng, accuracy, note: 'field_mobile' }),
+    });
+    toast('Байршил ERP-д хадгалагдлаа');
+    _fieldMyLocations = [saved];
+    if (status) status.textContent = `Сүүлд: ${(saved.created_at || '').slice(0,16)} · ${lat.toFixed(5)}, ${lng.toFixed(5)} · ±${Math.round(accuracy)}м`;
+  } catch (e) {
+    toast(e.message || 'GPS авахад алдаа гарлаа');
+    if (status) status.textContent = 'GPS permission зөвшөөрөгдөөгүй эсвэл нарийвчлалтай координат авч чадсангүй.';
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'GPS илгээх'; }
+  }
 }
 
 async function fieldSaveExec(workId) {
@@ -353,4 +528,4 @@ async function fieldMarkDone(workId) {
   } catch(e) { toast(e.message); }
 }
 
-Object.assign(window, { field, fieldAckInstruction, fieldAckTraining, fieldToggleExec, fieldGetGPS, fieldSaveExec, fieldUploadPhoto, fieldMarkDone });
+Object.assign(window, { field, fieldAckInstruction, fieldAckTraining, fieldToggleExec, fieldGetGPS, fieldSendLocation, fieldSaveExec, fieldUploadPhoto, fieldMarkDone });

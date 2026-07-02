@@ -155,6 +155,20 @@ async function initDb() {
     FOREIGN KEY(created_by) REFERENCES users(id)
   )`).catch(() => {});
 
+  await run(`CREATE TABLE IF NOT EXISTS employee_locations (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL,
+    gps_lat     REAL NOT NULL,
+    gps_lng     REAL NOT NULL,
+    accuracy    REAL,
+    note        TEXT DEFAULT '',
+    source      TEXT DEFAULT 'mobile',
+    created_at  TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id)
+  )`).catch(() => {});
+  await run(`CREATE INDEX IF NOT EXISTS idx_employee_locations_user_created
+             ON employee_locations(user_id, created_at DESC)`).catch(() => {});
+
   // ── Password reset tokens ─────────────────────────────────
   await run(`CREATE TABLE IF NOT EXISTS password_reset_tokens (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1303,6 +1317,10 @@ async function initDb() {
   await run(`ALTER TABLE iot_device_settings ADD COLUMN manual_off_note TEXT`).catch(() => {});
   await run(`ALTER TABLE iot_device_settings ADD COLUMN manual_off_by INTEGER`).catch(() => {});
   await run(`ALTER TABLE iot_device_settings ADD COLUMN manual_off_at TEXT`).catch(() => {});
+  await run(`ALTER TABLE iot_device_settings ADD COLUMN manual_on_reason TEXT`).catch(() => {});
+  await run(`ALTER TABLE iot_device_settings ADD COLUMN manual_on_note TEXT`).catch(() => {});
+  await run(`ALTER TABLE iot_device_settings ADD COLUMN manual_on_by INTEGER`).catch(() => {});
+  await run(`ALTER TABLE iot_device_settings ADD COLUMN manual_on_at TEXT`).catch(() => {});
   await run(`ALTER TABLE iot_device_settings ADD COLUMN maintenance_mode INTEGER NOT NULL DEFAULT 0`).catch(() => {});
   await run(`ALTER TABLE iot_device_settings ADD COLUMN maintenance_reason TEXT`).catch(() => {});
   await run(`ALTER TABLE iot_device_settings ADD COLUMN maintenance_by INTEGER`).catch(() => {});

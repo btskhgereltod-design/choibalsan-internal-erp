@@ -1,6 +1,7 @@
 "use strict";
 
 const { run, all, get } = require("../db");
+const { writeNotification } = require("./notifications");
 
 const MAX_ATTEMPTS_PER_ON_WINDOW = Number(process.env.IOT_RECOVERY_MAX_ATTEMPTS || 3);
 const RETRY_MINUTES = Number(process.env.IOT_RECOVERY_RETRY_MINUTES || 5);
@@ -252,6 +253,10 @@ async function latestDevices() {
       (SELECT status FROM iot_device_commands c WHERE c.dev_eui=l.dev_eui ORDER BY c.id DESC LIMIT 1) AS lastCommandStatus,
       (SELECT requested_by_role FROM iot_device_commands c WHERE c.dev_eui=l.dev_eui ORDER BY c.id DESC LIMIT 1) AS lastCommandRole,
       (SELECT requested_at FROM iot_device_commands c WHERE c.dev_eui=l.dev_eui ORDER BY c.id DESC LIMIT 1) AS lastCommandAt,
+      s.manual_on_reason AS manualOnReason,
+      s.manual_on_note AS manualOnNote,
+      s.manual_on_by AS manualOnBy,
+      s.manual_on_at AS manualOnAt,
       COALESCE(s.auto_mode, 1) AS autoMode,
       COALESCE(s.maintenance_mode, 0) AS maintenanceMode,
       NULL AS lastManualOnAt,
@@ -385,6 +390,32 @@ async function reconcileIotLighting({ source = "cron" } = {}) {
       const desiredMet =
         (desiredAction === "ON" && loadOn === true) ||
         (desiredAction === "OFF" && loadOn === false);
+
+      // Schedule зөрчил илрэхэд (OFF ёстой байтал гэрэл асаалттай) notification бичих
+      if (desiredAction === "OFF" && loadOn === true) {
+        const deviceLabel = row.deviceName || devEui;
+        const hourKey = new Date().toISOString().slice(0, 13);
+        const lastCmd = String(row.lastCommandAction || "").toUpperCase();
+        const lastRole = String(row.lastCommandRole || "");
+        const isOperator = lastRole && lastRole !== "system";
+        const manualOnReason = row.manualOnReason || "Шалтгаан бүртгээгүй";
+        const manualOnNote = row.manualOnNote ? ` Тайлбар: ${row.manualOnNote}` : "";
+        if (lastCmd === "ON" && isOperator) {
+          await writeNotification({
+            type: "iot_manual_on_violation",
+            title: `${deviceLabel}: Унтрах ёстой цагт гараар асаасан`,
+            body: `${deviceLabel} хуваарийн дагуу унтрах ёстой цагт оператор гараар асаасан байна. Шалтгаан: ${manualOnReason}.${manualOnNote}`,
+            dedupe_key: `iot_manual_on:${devEui}:${hourKey}`,
+          }).catch(() => {});
+        } else if (!lastCmd || lastCmd === "OFF") {
+          await writeNotification({
+            type: "iot_unexpected_power",
+            title: `${deviceLabel}: Сервер ON тушаал өгөөгүй — гэрэл асчээ`,
+            body: `${deviceLabel}-д хуваарийн бус цагт тог өгөгдөж гэрэл асчээ. Сервер ON тушаал илгээгээгүй. Физик эх үүсвэр шалгана уу.`,
+            dedupe_key: `iot_unexpected_power:${devEui}:${hourKey}`,
+          }).catch(() => {});
+        }
+      }
 
       if (!desiredAction || !linePower || desiredMet || !canRetry(state, desiredAction)) {
         await upsertRecoveryState({ devEui, scheduleCategory: config.category, desiredAction, desiredMet, attempted: false });

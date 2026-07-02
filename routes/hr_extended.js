@@ -272,6 +272,33 @@ router.get("/kpi-evaluations/:id/approver", auth, async (req, res) => {
 });
 
 // ── Surveys ───────────────────────────────────────────────────
+router.get("/public-surveys", async (req, res) => {
+  const today = new Date().toISOString().slice(0, 10);
+  const rows = await all(
+    `SELECT title,description,type,questions,deadline,public_token
+     FROM surveys
+     WHERE status='Идэвхтэй'
+       AND public_token IS NOT NULL
+       AND public_token<>''
+       AND (deadline IS NULL OR deadline='' OR deadline>=?)
+     ORDER BY created_at DESC`,
+    [today]
+  );
+  res.json(rows.map(s => {
+    let questions = [];
+    try { questions = typeof s.questions === "string" ? JSON.parse(s.questions || "[]") : (s.questions || []); }
+    catch { questions = []; }
+    return {
+      title: s.title,
+      description: s.description || "",
+      type: s.type || "",
+      deadline: s.deadline || "",
+      token: s.public_token,
+      question_count: questions.length,
+    };
+  }));
+});
+
 router.get("/public-surveys/:token", async (req, res) => {
   const token = String(req.params.token || "").trim();
   const s = await get(
@@ -304,6 +331,15 @@ router.post("/public-survey-responses", publicRateLimit, async (req, res) => {
 
 router.get("/surveys", auth, async (req, res) => {
   res.json(await all("SELECT * FROM surveys ORDER BY created_at DESC"));
+});
+
+router.post("/surveys/image", auth, requirePermission("hr_write"), upload.single("image"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "Зураг файл олдсонгүй" });
+  if (!String(req.file.mimetype || "").startsWith("image/")) {
+    fs.unlink(req.file.path, () => {});
+    return res.status(400).json({ error: "Зөвхөн зураг файл оруулна уу" });
+  }
+  res.json({ url: "/uploads/" + req.file.filename });
 });
 
 router.post("/surveys", auth, requirePermission("hr_write"), async (req, res) => {

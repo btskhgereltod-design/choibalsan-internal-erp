@@ -4,7 +4,7 @@ const crypto  = require("crypto");
 const fs   = require("fs");
 const path = require("path");
 const { run, all, get, auth, audit, upload, UPLOAD_DIR } = require("../db");
-const { requireRole, requirePermission, canAccessOwn } = require("../middleware/roles");
+const { PERMISSIONS, requireRole, requirePermission, canAccessOwn } = require("../middleware/roles");
 
 const router = express.Router();
 
@@ -19,6 +19,84 @@ router.get("/me", auth, async (req, res) => {
     "SELECT id,username,full_name,role,position,department,email,avatar_url FROM users WHERE id=?",
     [req.user.id]);
   res.json(user);
+});
+
+function canViewEmployeeLocations(user) {
+  return ["director", "chief_engineer", "hr", "safety"].includes(user?.role) ||
+    (PERMISSIONS.lighting_edit || []).includes(user?.role);
+}
+
+router.post("/me/location", auth, async (req, res) => {
+  const lat = Number(req.body?.lat ?? req.body?.gps_lat);
+  const lng = Number(req.body?.lng ?? req.body?.gps_lng ?? req.body?.lon);
+  const accuracy = req.body?.accuracy === undefined || req.body?.accuracy === null || req.body?.accuracy === ""
+    ? null
+    : Number(req.body.accuracy);
+  const note = String(req.body?.note || "").trim().slice(0, 240);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+    return res.status(400).json({ error: "GPS координат буруу байна" });
+  }
+  if (accuracy !== null && (!Number.isFinite(accuracy) || accuracy < 0)) {
+    return res.status(400).json({ error: "GPS нарийвчлал буруу байна" });
+  }
+  if (accuracy !== null && accuracy > 500) {
+    return res.status(400).json({ error: "GPS нарийвчлал хэт муу байна. Утасны Location/GPS асаагаад гадаа эсвэл цонхны ойролцоо дахин илгээнэ үү." });
+  }
+  const r = await run(
+    `INSERT INTO employee_locations(user_id,gps_lat,gps_lng,accuracy,note,source)
+     VALUES(?,?,?,?,?,?)`,
+    [req.user.id, lat, lng, accuracy, note, "mobile"]
+  );
+  await audit(req.user.id, "LOCATION", "employee_locations", r.id, `${lat},${lng}`);
+  res.json({ ok: true, id: r.id, gps_lat: lat, gps_lng: lng, accuracy, created_at: new Date().toISOString() });
+});
+
+router.get("/employee-locations/latest", auth, async (req, res) => {
+  if (!canViewEmployeeLocations(req.user)) {
+    return res.status(403).json({ error: "Ажилтны байршил харах эрхгүй байна" });
+  }
+  const hours = Math.max(1, Math.min(72, Number(req.query.hours || 12)));
+  const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+  const rows = await all(
+    `SELECT el.*, u.full_name, u.position, u.department, u.phone
+       FROM employee_locations el
+       JOIN (
+         SELECT user_id, MAX(id) id
+           FROM employee_locations
+          WHERE datetime(created_at) >= datetime(?)
+          GROUP BY user_id
+       ) latest ON latest.id=el.id
+       JOIN users u ON u.id=el.user_id
+      WHERE u.active=1
+      ORDER BY datetime(el.created_at) DESC`,
+    [since]
+  );
+  res.json(rows);
+});
+
+router.delete("/employee-locations/:id", auth, async (req, res) => {
+  if (!canViewEmployeeLocations(req.user)) {
+    return res.status(403).json({ error: "Ажилтны байршил устгах эрхгүй байна" });
+  }
+  const row = await get(
+    `SELECT el.*, u.full_name
+       FROM employee_locations el
+       LEFT JOIN users u ON u.id=el.user_id
+      WHERE el.id=?`,
+    [req.params.id]
+  );
+  if (!row) return res.status(404).json({ error: "Байршил олдсонгүй" });
+  await run("DELETE FROM employee_locations WHERE id=?", [req.params.id]);
+  await audit(req.user.id, "DELETE", "employee_locations", req.params.id, `${row.full_name || row.user_id}: ${row.gps_lat},${row.gps_lng}`);
+  res.json({ ok: true });
+});
+
+router.get("/employee-locations/mine", auth, async (req, res) => {
+  const limit = Math.max(1, Math.min(50, Number(req.query.limit || 10)));
+  res.json(await all(
+    `SELECT * FROM employee_locations WHERE user_id=? ORDER BY id DESC LIMIT ?`,
+    [req.user.id, limit]
+  ));
 });
 
 router.post("/me/avatar", auth, upload.single("avatar"), async (req, res) => {

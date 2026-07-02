@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="mn">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Ажилчдын судалгаа</title>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;background:#eef2f7;color:#0f172a;font-family:Arial,sans-serif}
+    .wrap{max-width:920px;margin:0 auto;padding:18px}
+    .head{background:#fff;border:1px solid #dbe3ef;border-radius:14px;padding:20px;box-shadow:0 8px 28px rgba(15,23,42,.08);margin-bottom:14px}
+    .brand{font-size:12px;font-weight:800;color:#2563eb;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px}
+    h1{margin:0 0 8px;font-size:24px}
+    .muted{color:#64748b;font-size:13px;line-height:1.5}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}
+    .card{background:#fff;border:1px solid #dbe3ef;border-radius:12px;padding:16px;box-shadow:0 4px 18px rgba(15,23,42,.06)}
+    .title{font-size:15px;font-weight:800;line-height:1.35;margin-bottom:8px}
+    .meta{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+    .pill{font-size:11px;font-weight:700;color:#1d4ed8;background:#eff6ff;border:1px solid #bfdbfe;border-radius:999px;padding:3px 8px}
+    .desc{font-size:12px;color:#475569;line-height:1.45;min-height:36px;margin-bottom:12px}
+    .btn{display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:10px;background:#2563eb;color:#fff;font-weight:800;padding:11px 14px;font-size:14px;cursor:pointer;text-decoration:none;width:100%}
+    .empty,.err{background:#fff;border:1px solid #dbe3ef;border-radius:12px;padding:22px;text-align:center;color:#64748b}
+    .err{color:#b91c1c;background:#fef2f2;border-color:#fecaca}
+    @media(max-width:560px){.wrap{padding:10px}h1{font-size:21px}.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="head">
+      <div class="brand">Чойбалсан хөгжил ОНӨҮГ</div>
+      <h1>Ажилчдын бөглөх судалгаа</h1>
+      <div class="muted">Идэвхтэй байгаа асуумжаас сонгоод бөглөнө үү. Хариулт нууцлалтай хадгалагдана.</div>
+    </div>
+    <div id="app" class="grid"></div>
+  </div>
+  <script>
+    const app = document.getElementById("app");
+    const esc = (s) => String(s ?? "").replace(/[&<>"']/g, m => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[m]));
+
+    function surveyUrl(token) {
+      return `/qr-survey.html?t=${encodeURIComponent(token)}`;
+    }
+
+    function render(rows) {
+      if (!rows.length) {
+        app.className = "";
+        app.innerHTML = `<div class="empty">Одоогоор бөглөх идэвхтэй судалгаа алга байна.</div>`;
+        return;
+      }
+      app.className = "grid";
+      app.innerHTML = rows.map(s => `
+        <div class="card">
+          <div class="title">${esc(s.title)}</div>
+          <div class="meta">
+            <span class="pill">${esc(s.type || "Судалгаа")}</span>
+            <span class="pill">${Number(s.question_count || 0)} асуулт</span>
+            ${s.deadline ? `<span class="pill">Дуусах: ${esc(s.deadline)}</span>` : ""}
+          </div>
+          <div class="desc">${esc(s.description || "").slice(0, 130)}${String(s.description || "").length > 130 ? "..." : ""}</div>
+          <a class="btn" href="${surveyUrl(s.token)}">Бөглөх</a>
+        </div>`).join("");
+    }
+
+    async function load() {
+      try {
+        app.innerHTML = `<div class="empty">Ачааллаж байна...</div>`;
+        const res = await fetch("/api/public-surveys");
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Судалгаа ачаалж чадсангүй");
+        render(Array.isArray(data) ? data : []);
+      } catch(e) {
+        app.className = "";
+        app.innerHTML = `<div class="err">${esc(e.message)}</div>`;
+      }
+    }
+
+    load();
+  </script>
+</body>
+</html>

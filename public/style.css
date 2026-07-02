@@ -497,7 +497,7 @@ body {
   display: none;
   min-width: 42px;
   height: 34px;
-  padding: 0 7px;
+  padding: 0 8px;
   border: 1px solid #fed7aa;
   border-radius: 10px;
   background: #fff7ed;
@@ -3743,8 +3743,13 @@ body.is-mobile .mobile-job-btn {
   display: inline-grid;
   place-items: center;
   flex: 0 0 auto;
+  height: 30px;
+  min-width: 0;
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: 10px;
 }
-body.is-mobile #topClock { font-size: 11px; white-space: nowrap; }
+body.is-mobile #topClock { display: none; }
 body.is-mobile .erp-ai-fab {
   right: 12px !important;
   bottom: 12px !important;

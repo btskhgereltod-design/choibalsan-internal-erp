@@ -15,15 +15,31 @@
     .body{padding:18px 20px;display:flex;flex-direction:column;gap:14px}
     .q{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:14px}
     .qt{font-weight:700;font-size:14px;margin-bottom:10px;line-height:1.45}
+    .qimg{margin:8px 0 12px;background:#fff;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden}
+    .qimg img{width:100%;max-height:280px;object-fit:contain;display:block;background:#f8fafc}
     label{display:flex;gap:8px;align-items:flex-start;margin:8px 0;font-size:14px;line-height:1.4}
     input[type=radio],input[type=checkbox]{margin-top:2px;width:17px;height:17px;accent-color:#2563eb}
     textarea,input[type=text]{width:100%;border:1px solid #cbd5e1;border-radius:10px;padding:10px 12px;font-size:14px;background:#fff;outline:none}
     textarea:focus,input[type=text]:focus{border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+    .matrix-wrap{overflow-x:auto;border:1px solid #dbeafe;border-radius:10px;background:#fff}
+    .matrix{width:100%;min-width:560px;border-collapse:collapse;font-size:12px}
+    .matrix th{background:#2563eb;color:#fff;padding:8px;text-align:center}
+    .matrix th:nth-child(2){text-align:left}
+    .matrix td{border-top:1px solid #e2e8f0;padding:8px;text-align:center}
+    .matrix td:nth-child(1){font-weight:800;color:#2563eb;width:42px}
+    .matrix td:nth-child(2){text-align:left;line-height:1.35}
+    .matrix input{width:16px;height:16px;accent-color:#2563eb}
+    .scale-note{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-top:8px;font-size:10px;color:#64748b}
     .btn{border:0;border-radius:10px;background:#2563eb;color:#fff;font-weight:800;padding:13px 18px;font-size:15px;cursor:pointer}
     .btn:disabled{opacity:.6;cursor:not-allowed}
     .ok{padding:28px;text-align:center}
     .ok h2{margin:0 0 8px;color:#15803d}
     .err{padding:18px;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:12px}
+    @media (max-width:560px){
+      .wrap{padding:10px}
+      .body{padding:14px}
+      .scale-note{grid-template-columns:1fr 1fr}
+    }
   </style>
 </head>
 <body>
@@ -39,17 +55,71 @@
     let survey = null;
     let questions = [];
 
+    function isMatrix(q) {
+      return q && q.type === "Матриц (1-5)";
+    }
+
+    function matrixRows(q) {
+      return (q.options || []).filter(Boolean);
+    }
+
+    function matrixHtml(q, i) {
+      const scale = [
+        [1, "Маш хангалтгүй"],
+        [2, "Хангалтгүй"],
+        [3, "Дунд"],
+        [4, "Хангалттай"],
+        [5, "Маш сайн"],
+      ];
+      return `<div class="q"><div class="qt">${i + 1}. ${esc(q.text)}</div>${questionImageHtml(q)}
+        <div class="matrix-wrap">
+          <table class="matrix">
+            <thead>
+              <tr>
+                <th>№</th>
+                <th>Асуулт</th>
+                ${scale.map(([n]) => `<th>${n}</th>`).join("")}
+              </tr>
+            </thead>
+            <tbody>
+              ${matrixRows(q).map((row, ri) => `<tr>
+                <td>${ri + 1}</td>
+                <td>${esc(row)}</td>
+                ${scale.map(([n, label]) => `<td><input type="radio" name="q_${i}_${ri}" value="${n}" title="${label}"></td>`).join("")}
+              </tr>`).join("")}
+            </tbody>
+          </table>
+        </div>
+        <div class="scale-note">${scale.map(([n, label]) => `<span><b>${n}</b> ${label}</span>`).join("")}</div>
+      </div>`;
+    }
+
+    function matrixAnswer(q, i) {
+      const out = {};
+      matrixRows(q).forEach((row, ri) => {
+        const checked = document.querySelector(`input[name="q_${i}_${ri}"]:checked`);
+        if (checked) out[row] = checked.value;
+      });
+      return out;
+    }
+
+    function questionImageHtml(q) {
+      const url = String(q.image_url || "").trim();
+      return url ? `<div class="qimg"><img src="${esc(url)}" alt="Асуултын зураг"></div>` : "";
+    }
+
     function questionHtml(q, i) {
       const type = q.type || "Нэг сонголт";
+      if (isMatrix(q)) return matrixHtml(q, i);
       if (type === "Текст") {
-        return `<div class="q"><div class="qt">${i + 1}. ${esc(q.text)}</div><textarea id="q_${i}" rows="3" placeholder="Хариултаа бичнэ үү"></textarea></div>`;
+        return `<div class="q"><div class="qt">${i + 1}. ${esc(q.text)}</div>${questionImageHtml(q)}<textarea id="q_${i}" rows="3" placeholder="Хариултаа бичнэ үү"></textarea></div>`;
       }
       if (type === "Оноо (1-5)") {
-        return `<div class="q"><div class="qt">${i + 1}. ${esc(q.text)}</div>${[1,2,3,4,5].map(n =>
+        return `<div class="q"><div class="qt">${i + 1}. ${esc(q.text)}</div>${questionImageHtml(q)}${[1,2,3,4,5].map(n =>
           `<label><input type="radio" name="q_${i}" value="${n}"><span>${n}</span></label>`).join("")}</div>`;
       }
       const inputType = type === "Олон сонголт" ? "checkbox" : "radio";
-      return `<div class="q"><div class="qt">${i + 1}. ${esc(q.text)}</div>${(q.options || []).map(opt =>
+      return `<div class="q"><div class="qt">${i + 1}. ${esc(q.text)}</div>${questionImageHtml(q)}${(q.options || []).map(opt =>
         `<label><input type="${inputType}" name="q_${i}" value="${esc(opt)}"><span>${esc(opt)}</span></label>`).join("")}</div>`;
     }
 
@@ -83,6 +153,7 @@
     async function submitSurvey() {
       const answers = {};
       questions.forEach((q, i) => {
+        if (isMatrix(q)) { answers[i] = matrixAnswer(q, i); return; }
         const ta = document.getElementById(`q_${i}`);
         if (ta) { answers[i] = ta.value.trim(); return; }
         const vals = [...document.querySelectorAll(`input[name="q_${i}"]:checked`)].map(x => x.value);

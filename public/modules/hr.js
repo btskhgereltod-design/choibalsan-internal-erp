@@ -9,6 +9,18 @@ let currentProfileUserId = null;
 
 const ATTENDANCE_DAY_HOURS = 8;
 
+function attParseYmd(value) {
+  const [y, m, d] = String(value || "").slice(0, 10).split("-").map(Number);
+  if (!y || !m || !d) return new Date(NaN);
+  return new Date(y, m - 1, d, 12, 0, 0, 0);
+}
+
+function attYmd(date = new Date()) {
+  const d = date instanceof Date ? date : attParseYmd(date);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function attendanceHourValue(value) {
   const n = Number(value || 0);
   return Number.isFinite(n) ? n : 0;
@@ -116,10 +128,10 @@ async function attendance() {
   rows.forEach(r => {
     if (!byUser[r.user_id] || !r.start_date) return;
 
-    const start = new Date(r.start_date.slice(0, 10));
-    const end = new Date((r.end_date || r.start_date).slice(0, 10));
-    const monthStart = new Date(year, month - 1, 1);
-    const monthEnd = new Date(year, month - 1, days);
+    const start = attParseYmd(r.start_date);
+    const end = attParseYmd(r.end_date || r.start_date);
+    const monthStart = new Date(year, month - 1, 1, 12);
+    const monthEnd = new Date(year, month - 1, days, 12);
 
     const rangeStart = start > monthStart ? start : monthStart;
     const rangeEnd = end < monthEnd ? end : monthEnd;
@@ -151,7 +163,7 @@ async function attendance() {
     if (offType === "Ээлжийн амралт") byUser[r.user_id].summary.vacation += hours.leave / ATTENDANCE_DAY_HOURS;
     byUser[r.user_id].summary.overtime += hours.overtime;
 
-    if (d.toISOString().slice(0, 10) === todayDate) {
+    if (attYmd(d) === todayDate) {
       if (hours.work > 0) todaySummary.worked++;
       if (offType === "Ажил тасалсан" && hours.leave > 0) todaySummary.absent++;
       if (offType === "Чөлөө" && hours.leave > 0) todaySummary.leave++;
@@ -469,9 +481,9 @@ function _attPrintMonthForm(yr, mo) {
   const latest = {};
   rows.forEach(r => {
     if (!byU[r.user_id] || !r.start_date) return;
-    const s = new Date(r.start_date.slice(0,10));
-    const e = new Date((r.end_date||r.start_date).slice(0,10));
-    const mS = new Date(yr, mo-1, 1), mE = new Date(yr, mo-1, daysInMonth);
+    const s = attParseYmd(r.start_date);
+    const e = attParseYmd(r.end_date || r.start_date);
+    const mS = new Date(yr, mo-1, 1, 12), mE = new Date(yr, mo-1, daysInMonth, 12);
     const rS = s > mS ? s : mS, rE = e < mE ? e : mE;
     if (rS > rE) return;
     for (let c = new Date(rS); c <= rE; c.setDate(c.getDate()+1)) {
@@ -746,10 +758,10 @@ function renderAttMonth(year, month) {
 
   rows.forEach(r => {
     if (!byUserM[r.user_id] || !r.start_date) return;
-    const start = new Date(r.start_date.slice(0,10));
-    const end   = new Date((r.end_date||r.start_date).slice(0,10));
-    const mS    = new Date(year, month-1, 1);
-    const mE    = new Date(year, month-1, daysInMonth);
+    const start = attParseYmd(r.start_date);
+    const end   = attParseYmd(r.end_date || r.start_date);
+    const mS    = new Date(year, month-1, 1, 12);
+    const mE    = new Date(year, month-1, daysInMonth, 12);
     const rS    = start > mS ? start : mS;
     const rE    = end   < mE ? end   : mE;
     if (rS > rE) return;
@@ -781,7 +793,7 @@ function renderAttMonth(year, month) {
       ${Array.from({length:daysInMonth},(_,i)=>{
         const dt=new Date(year,month-1,i+1);
         const iW=dt.getDay()===0||dt.getDay()===6;
-        const iT=dt.toISOString().slice(0,10)===today();
+        const iT=attYmd(dt)===today();
         return `<th style="background:${iT?'#eff6ff':iW?'#fff5f5':''};color:${iT?'#2563eb':iW?'#dc2626':'#667085'};font-weight:${iT||iW?700:400}">${i+1}</th>`;
       }).join("")}
       <th>А цаг</th><th>Т цаг</th><th>Ч цаг</th><th>Ө цаг</th><th>Э цаг</th><th>ИЦ</th>
@@ -828,10 +840,10 @@ function renderAttYear(year) {
   const latestByDay = {};
   rows.forEach(r => {
     if (!byUserYear[r.user_id] || !r.start_date) return;
-    const start = new Date(r.start_date.slice(0,10));
-    const end   = new Date((r.end_date||r.start_date).slice(0,10));
+    const start = attParseYmd(r.start_date);
+    const end   = attParseYmd(r.end_date || r.start_date);
     if (start.getFullYear() !== year && end.getFullYear() !== year) return;
-    const yS = new Date(year,0,1), yE = new Date(year,11,31);
+    const yS = new Date(year,0,1,12), yE = new Date(year,11,31,12);
     const rS = start > yS ? start : yS;
     const rE = end   < yE ? end   : yE;
     if (rS > rE) return;
@@ -923,8 +935,8 @@ function renderAttRange(startStr, endStr) {
   window._attRangeStart = startStr;
   window._attRangeEnd   = endStr;
 
-  const startD = new Date(startStr);
-  const endD   = new Date(endStr);
+  const startD = attParseYmd(startStr);
+  const endD   = attParseYmd(endStr);
   if (isNaN(startD) || isNaN(endD) || startD > endD) {
     tc.innerHTML = `<div style="padding:24px;color:#dc2626">Буруу огноо сонгосон байна</div>`;
     return;
@@ -944,13 +956,13 @@ function renderAttRange(startStr, endStr) {
   const latestByDay = {};
   rows.forEach(r => {
     if (!byU[r.user_id] || !r.start_date) return;
-    const rs = new Date(r.start_date.slice(0,10));
-    const re = new Date((r.end_date||r.start_date).slice(0,10));
+    const rs = attParseYmd(r.start_date);
+    const re = attParseYmd(r.end_date || r.start_date);
     const rS = rs > startD ? rs : startD;
     const rE = re < endD   ? re : endD;
     if (rS > rE) return;
     for (let c = new Date(rS); c <= rE; c.setDate(c.getDate()+1)) {
-      const key = `${r.user_id}|${c.toISOString().slice(0,10)}`;
+      const key = `${r.user_id}|${attYmd(c)}`;
       if (!latestByDay[key] || r.id > latestByDay[key].id) latestByDay[key] = r;
     }
   });
@@ -975,7 +987,7 @@ function renderAttRange(startStr, endStr) {
     <thead><tr>
       <th class="stickyName">Ажилтан</th>
       ${days.map(d => {
-        const ds  = d.toISOString().slice(0,10);
+        const ds  = attYmd(d);
         const dw  = d.getDay();
         const iW  = dw===0||dw===6;
         const iT  = ds===todayStr;
@@ -989,7 +1001,7 @@ function renderAttRange(startStr, endStr) {
         <tr>
           <td class="stickyName"><b>${x.user.full_name}</b><div class="small muted">${x.user.position||""}</div></td>
           ${days.map(d => {
-            const ds  = d.toISOString().slice(0,10);
+            const ds  = attYmd(d);
             const dw  = d.getDay();
             const iW  = dw===0||dw===6;
             const code  = x.days[ds] || "";
@@ -1082,8 +1094,8 @@ window.confirmCellEditDate = async (userId, recId, dateStr) => {
 };
 
 function _attPrintRangeForm(startStr, endStr) {
-  const startD = new Date(startStr);
-  const endD   = new Date(endStr);
+  const startD = attParseYmd(startStr);
+  const endD   = attParseYmd(endStr);
   const days   = [];
   for (let c = new Date(startD); c <= endD; c.setDate(c.getDate()+1)) {
     days.push(new Date(c));
@@ -1103,13 +1115,13 @@ function _attPrintRangeForm(startStr, endStr) {
   const latestByDay = {};
   rows.forEach(r => {
     if (!byU[r.user_id] || !r.start_date) return;
-    const rs = new Date(r.start_date.slice(0,10));
-    const re = new Date((r.end_date||r.start_date).slice(0,10));
+    const rs = attParseYmd(r.start_date);
+    const re = attParseYmd(r.end_date || r.start_date);
     const rS = rs > startD ? rs : startD;
     const rE = re < endD   ? re : endD;
     if (rS > rE) return;
     for (let c = new Date(rS); c <= rE; c.setDate(c.getDate()+1)) {
-      const key = `${r.user_id}|${c.toISOString().slice(0,10)}`;
+      const key = `${r.user_id}|${attYmd(c)}`;
       if (!latestByDay[key] || r.id > latestByDay[key].id) latestByDay[key] = r;
     }
   });
@@ -1136,7 +1148,7 @@ function _attPrintRangeForm(startStr, endStr) {
 
   const tableRows = usersArr.map((x, ri) => {
     const cells = days.map(d => {
-      const ds  = d.toISOString().slice(0,10);
+      const ds  = attYmd(d);
       const dw  = d.getDay();
       const iW  = dw===0||dw===6;
       const code = x.days[ds]||"";
@@ -4016,8 +4028,290 @@ function surveyTemplateAbbd() {
   };
 }
 
+function surveyTemplateEngagementMatrix() {
+  return {
+    title: "Ажилтны санал, сэтгэл ханамжийн асуумж",
+    type: "Үнэлгээний судалгаа",
+    status: "Идэвхтэй",
+    anonymous: 1,
+    description: "Байгууллагын дотоод орчин, хамтын ажиллагаа, удирдлага, ажлын нөхцөлийн талаар нууцлалтай санал авч байна.",
+    questions: [
+      {
+        text: "Та дараах үзүүлэлтүүдэд 1-5 оноогоор үнэлгээ өгнө үү.",
+        type: "Матриц (1-5)",
+        options: [
+          "Би өөрийн ажлын байрны нөхцөлд сэтгэл хангалуун байдаг.",
+          "Байгууллагаас ажил үүргээ гүйцэтгэхэд шаардлагатай тоног төхөөрөмж, хэрэгслээр хангадаг.",
+          "Миний ажлын үнэлгээ шударга, урамшуулал нь ажлын гүйцэтгэлтэй нийцдэг гэж үздэг.",
+          "Миний хөдөлмөрийг удирдлага үнэлж, дэмждэг.",
+          "Хамт олны харилцаа, уур амьсгал эерэг байдаг.",
+          "Байгууллагын дотоод мэдээлэл, харилцаа ойлгомжтой байдаг.",
+          "Байгууллагын соёл, ёс зүйн орчин надад таатай санагддаг.",
+          "Мэргэжлийн ур чадвараа хөгжүүлэх боломж хангалттай байдаг.",
+          "Би байгууллагынхаа ирээдүйн хөгжилд итгэлтэй байдаг.",
+          "Ерөнхийдөө би өөрийн ажил болон байгууллагадаа сэтгэл хангалуун байдаг."
+        ]
+      },
+      { text: "Нэмэлт санал хүсэлт байвал бичнэ үү.", type: "Текст", options: [] }
+    ]
+  };
+}
+
+function surveyTemplateImageEngagement(imageUrl="") {
+  const data = surveyTemplateEngagementMatrix();
+  data.title = "Ажлын байрны сэтгэл ханамжийн судалгаа";
+  data.type = "Сэтгэл ханамж";
+  data.description = "Ажилчдын сэтгэл ханамж, ажлын орчин, удирдлага, хамт олон, хөгжлийн боломжийн талаарх нууцлалтай асуумж.";
+  data.questions = [
+    {
+      ...data.questions[0],
+      text: "Доорх зураг болон үзүүлэлтүүдийн дагуу 1-5 оноогоор үнэлгээ өгнө үү.",
+      image_url: imageUrl || ""
+    },
+    { text: "Байгууллагын үйл ажиллагаанд хамгийн түрүүнд сайжруулах шаардлагатай зүйл юу вэ?", type: "Текст", options: [], image_url: "" },
+    { text: "Таны сэтгэл ханамжийг нэмэгдүүлэх хамгийн чухал санал юу вэ?", type: "Текст", options: [], image_url: "" },
+    { text: "Удирдлага болон байгууллагад өгөх нэмэлт санал байвал бичнэ үү.", type: "Текст", options: [], image_url: "" }
+  ];
+  return data;
+}
+
+function surveyTemplateTrainingNeeds() {
+  return {
+    title: "Сургалтын хэрэгцээ тодорхойлох асуумж",
+    type: "Дотоод санал асуулга",
+    status: "Идэвхтэй",
+    anonymous: 1,
+    description: "Ажилтнуудын мэдлэг, ур чадвар хөгжүүлэх хэрэгцээг тодорхойлох зорилготой асуумж.",
+    questions: [
+      { text: "Танд ойрын 6 сард ямар чиглэлийн сургалт хамгийн хэрэгтэй вэ?", type: "Олон сонголт", options: ["Мэргэжлийн ур чадвар", "ХАБЭА", "Компьютер / программ", "Харилцаа, багаар ажиллах", "Удирдлага, манлайлал", "Бусад"] },
+      { text: "Сургалтын хэлбэрийн хувьд аль нь тохиромжтой вэ?", type: "Нэг сонголт", options: ["Танхим", "Онлайн", "Ажлын байран дээр", "Хосолсон"] },
+      { text: "Сургалтад хамрагдахад тохиромжтой хугацаа?", type: "Нэг сонголт", options: ["Ажлын өдөр", "Амралтын өдөр", "Өглөө", "Өдөр", "Орой"] },
+      { text: "Нэмэлт санал, хэрэгцээ байвал бичнэ үү.", type: "Текст", options: [] }
+    ]
+  };
+}
+
+function surveyTemplateWorkEnvironment() {
+  return {
+    title: "Ажлын орчин, аюулгүй байдлын үнэлгээ",
+    type: "Ажлын орчны судалгаа",
+    status: "Идэвхтэй",
+    anonymous: 1,
+    description: "Ажлын байрны орчин, аюулгүй ажиллагаа, тоног төхөөрөмжийн хүрэлцээг үнэлэх асуумж.",
+    questions: [
+      {
+        text: "Дараах үзүүлэлтүүдийг 1-5 оноогоор үнэлнэ үү.",
+        type: "Матриц (1-5)",
+        options: [
+          "Ажлын байрны гэрэлтүүлэг хангалттай.",
+          "Ажлын байрны цэвэрлэгээ, эмх цэгц сайн.",
+          "Аюулгүй ажиллагааны зааварчилгаа ойлгомжтой.",
+          "Хамгаалах хэрэгсэл хүртээмжтэй.",
+          "Ажил үүргээ гүйцэтгэх тоног төхөөрөмж хангалттай.",
+          "Ажлын байрны эрсдэлийг мэдээлэх боломж нээлттэй."
+        ]
+      },
+      { text: "Сайжруулах шаардлагатай хамгийн чухал зүйл юу вэ?", type: "Текст", options: [] }
+    ]
+  };
+}
+
 function surveyUseTemplate(key) {
   if (key === "abbd") surveyAdd(surveyTemplateAbbd());
+  if (key === "engagement") surveyAdd(surveyTemplateEngagementMatrix());
+  if (key === "training") surveyAdd(surveyTemplateTrainingNeeds());
+  if (key === "environment") surveyAdd(surveyTemplateWorkEnvironment());
+}
+
+function surveyIsMatrix(q) {
+  return q?.type === "Матриц (1-5)";
+}
+
+function surveyMatrixRows(q) {
+  return (q?.options || []).filter(Boolean);
+}
+
+function surveyMatrixFillHtml(q, i, prefix="sfq") {
+  const rows = surveyMatrixRows(q);
+  const scale = [
+    [1, "Маш хангалтгүй"],
+    [2, "Хангалтгүй"],
+    [3, "Дунд"],
+    [4, "Хангалттай"],
+    [5, "Маш сайн"],
+  ];
+  return `
+    <div style="overflow-x:auto;border:1px solid #dbeafe;border-radius:10px;background:#fff">
+      <table style="width:100%;border-collapse:collapse;min-width:560px;font-size:12px">
+        <thead>
+          <tr style="background:#2563eb;color:#fff">
+            <th style="padding:8px;text-align:center;width:42px">№</th>
+            <th style="padding:8px;text-align:left">Асуулт</th>
+            ${scale.map(([n])=>`<th style="padding:8px;text-align:center;width:54px">${n}</th>`).join("")}
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map((row, ri)=>`
+            <tr style="border-top:1px solid #e2e8f0">
+              <td style="padding:8px;text-align:center;font-weight:700;color:#2563eb">${ri+1}</td>
+              <td style="padding:8px;line-height:1.35">${escapeHtml(row)}</td>
+              ${scale.map(([n, label])=>`
+                <td style="padding:8px;text-align:center">
+                  <input type="radio" name="${prefix}_${i}_${ri}" value="${n}" title="${label}" style="width:16px;height:16px;accent-color:#2563eb">
+                </td>`).join("")}
+            </tr>`).join("")}
+        </tbody>
+      </table>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-top:8px;font-size:10px;color:#64748b">
+      ${scale.map(([n, label])=>`<div><b>${n}</b> ${label}</div>`).join("")}
+    </div>`;
+}
+
+function surveyMatrixAnswer(i, q, prefix="sfq") {
+  const out = {};
+  surveyMatrixRows(q).forEach((row, ri) => {
+    const checked = document.querySelector(`input[name="${prefix}_${i}_${ri}"]:checked`);
+    if (checked) out[row] = checked.value;
+  });
+  return out;
+}
+
+function surveyFormatAnswer(value) {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return Object.entries(value).map(([k,v]) => `${k}: ${v}`).join("; ");
+  }
+  return Array.isArray(value) ? value.join("; ") : (value ?? "");
+}
+
+function surveyConclusionLevel(avg) {
+  if (avg >= 4) return { label: "Сайн", color: "#16a34a", note: "давуу тал болгон хадгалах боломжтой" };
+  if (avg >= 3) return { label: "Дунд", color: "#d97706", note: "сайжруулах төлөвлөгөө хэрэгтэй" };
+  if (avg >= 2) return { label: "Анхаарах", color: "#ea580c", note: "ойрын хугацаанд арга хэмжээ шаардлагатай" };
+  return { label: "Эрсдэлтэй", color: "#dc2626", note: "яаралтай арга хэмжээ авах шаардлагатай" };
+}
+
+function surveyBuildConclusion(qs, responses) {
+  const parsedRows = responses.map(r => {
+    try { return typeof r.answers === "string" ? JSON.parse(r.answers || "{}") : (r.answers || {}); }
+    catch { return {}; }
+  });
+  const metrics = [];
+  const choices = [];
+  const texts = [];
+
+  qs.forEach((q, i) => {
+    const ans = parsedRows.map(a => a[i]).filter(v => v != null && v !== "");
+    if (surveyIsMatrix(q)) {
+      surveyMatrixRows(q).forEach(row => {
+        const vals = ans.map(a => Number(a?.[row])).filter(Number.isFinite);
+        if (!vals.length) return;
+        metrics.push({
+          label: row,
+          question: q.text,
+          avg: vals.reduce((s,v)=>s+v,0) / vals.length,
+          count: vals.length,
+        });
+      });
+      return;
+    }
+    if (q.type === "Оноо (1-5)") {
+      const vals = ans.map(Number).filter(Number.isFinite);
+      if (vals.length) metrics.push({
+        label: q.text,
+        question: q.text,
+        avg: vals.reduce((s,v)=>s+v,0) / vals.length,
+        count: vals.length,
+      });
+      return;
+    }
+    if (q.type === "Текст") {
+      const vals = ans.map(v => String(v || "").trim()).filter(Boolean);
+      if (vals.length) texts.push({ question: q.text, answers: vals });
+      return;
+    }
+    const counts = {};
+    ans.forEach(a => {
+      const vals = Array.isArray(a) ? a : [a];
+      vals.map(v => String(v || "").trim()).filter(Boolean).forEach(v => { counts[v] = (counts[v] || 0) + 1; });
+    });
+    const sorted = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+    if (sorted.length) choices.push({ question: q.text, top: sorted[0], total: ans.length });
+  });
+
+  const overall = metrics.length ? metrics.reduce((s,m)=>s+m.avg,0) / metrics.length : 0;
+  const strongest = [...metrics].sort((a,b)=>b.avg-a.avg).slice(0,3);
+  const weakest = [...metrics].sort((a,b)=>a.avg-b.avg).slice(0,3);
+  const level = metrics.length ? surveyConclusionLevel(overall) : null;
+  return { total: responses.length, overall, level, metrics, strongest, weakest, choices, texts };
+}
+
+function surveyConclusionHtml(qs, responses) {
+  const c = surveyBuildConclusion(qs, responses);
+  if (!c.total) {
+    return `<div id="surveyConclusionPanel" style="display:none;background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:14px;margin-bottom:14px;color:#92400e;font-size:13px">Одоогоор хариулт ирээгүй байна.</div>`;
+  }
+  const levelHtml = c.level ? `<span style="color:${c.level.color};font-weight:900">${c.level.label}</span>` : `<span style="color:#64748b;font-weight:900">Тоон үнэлгээ алга</span>`;
+  const recommendation = c.weakest.length
+    ? `Нэн түрүүнд "${escapeHtml(c.weakest[0].label)}" үзүүлэлтийг сайжруулах арга хэмжээ төлөвлөх нь зүйтэй.`
+    : `Текст санал болон сонголтын давамгай хариултад үндэслэн сайжруулах чиглэл тодорхойлно.`;
+  return `
+  <div id="surveyConclusionPanel" style="display:none;background:#f8fafc;border:1px solid #dbeafe;border-radius:12px;padding:14px;margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+      <div style="font-weight:900;color:#0f172a">🧠 Автомат дүгнэлт</div>
+      <div style="font-size:12px;color:#64748b">Нийт ${c.total} хариулт</div>
+    </div>
+    ${c.metrics.length ? `
+      <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-bottom:10px">
+        <div style="font-size:12px;color:#64748b;margin-bottom:4px">Нийт дундаж</div>
+        <div style="font-size:24px;font-weight:900;color:#1d4ed8">${c.overall.toFixed(1)} <span style="font-size:13px;color:#64748b">/ 5</span> · ${levelHtml}</div>
+        <div style="font-size:12px;color:#64748b;margin-top:4px">${escapeHtml(c.level?.note || "")}</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div style="background:#fff;border:1px solid #bbf7d0;border-radius:10px;padding:10px">
+          <div style="font-size:12px;font-weight:900;color:#15803d;margin-bottom:6px">Давуу үзүүлэлт</div>
+          ${c.strongest.map(x=>`<div style="font-size:12px;color:#334155;margin-bottom:5px">${escapeHtml(x.label)} <b>${x.avg.toFixed(1)}</b></div>`).join("")}
+        </div>
+        <div style="background:#fff;border:1px solid #fed7aa;border-radius:10px;padding:10px">
+          <div style="font-size:12px;font-weight:900;color:#c2410c;margin-bottom:6px">Сайжруулах үзүүлэлт</div>
+          ${c.weakest.map(x=>`<div style="font-size:12px;color:#334155;margin-bottom:5px">${escapeHtml(x.label)} <b>${x.avg.toFixed(1)}</b></div>`).join("")}
+        </div>
+      </div>` : ""}
+    ${c.choices.length ? `<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px;margin-bottom:10px">
+      <div style="font-size:12px;font-weight:900;color:#334155;margin-bottom:6px">Сонголтын давамгай хариулт</div>
+      ${c.choices.slice(0,4).map(x=>`<div style="font-size:12px;color:#475569;margin-bottom:5px">${escapeHtml(x.question)}: <b>${escapeHtml(x.top[0])}</b> (${x.top[1]})</div>`).join("")}
+    </div>` : ""}
+    ${c.texts.length ? `<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px;margin-bottom:10px">
+      <div style="font-size:12px;font-weight:900;color:#334155;margin-bottom:6px">Текст саналын жишээ</div>
+      ${c.texts.slice(0,3).map(x=>`<div style="font-size:12px;color:#475569;margin-bottom:6px"><b>${escapeHtml(x.question)}</b><br>${x.answers.slice(0,2).map(a=>`<span style="display:block;border-left:3px solid #2563eb;padding-left:7px;margin-top:4px">${escapeHtml(a).slice(0,180)}</span>`).join("")}</div>`).join("")}
+    </div>` : ""}
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px;font-size:12px;color:#1e3a8a">
+      <b>Зөвлөмж:</b> ${recommendation}
+    </div>
+  </div>`;
+}
+
+function surveyToggleConclusion() {
+  const panel = document.getElementById("surveyConclusionPanel");
+  if (!panel) return;
+  panel.style.display = panel.style.display === "none" ? "block" : "none";
+}
+
+function surveyQuestionImageHtml(q) {
+  const url = String(q?.image_url || "").trim();
+  if (!url) return "";
+  return `<div style="margin:8px 0 12px;background:#fff;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden">
+    <img src="${escapeHtml(url)}" alt="Асуултын зураг" style="width:100%;max-height:260px;object-fit:contain;display:block;background:#f8fafc">
+  </div>`;
+}
+
+function surveyUploadErrorMessage(res, data, fallback="Зураг upload хийхэд алдаа гарлаа") {
+  if (data?.error) return data.error;
+  if (res.status === 404) return "Зураг upload API олдсонгүй. Server restart хийгээд дахин оролдоно уу.";
+  if (res.status === 401) return "Нэвтрэх token дууссан байна. Дахин нэвтэрнэ үү.";
+  if (res.status === 403) return "Зураг upload хийх эрх хүрэхгүй байна.";
+  if (res.status === 413) return "Зургийн хэмжээ хэтэрсэн байна. 10MB-аас бага зураг сонгоно уу.";
+  return `${fallback} (${res.status})`;
 }
 
 async function hrRenderSurvey(tc) {
@@ -4041,7 +4335,12 @@ async function hrRenderSurvey(tc) {
         </div>`).join("")}
     </div>
     ${canEdit?`<div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+      <button class="btn secondary" onclick="surveyEmployeePortalQr()">👥 Ажилчдын QR/линк</button>
+      <button class="btn" onclick="surveyQuickImageEngagement()">🖼 Зурагтай асуумж</button>
       <button class="btn secondary" onclick="surveyUseTemplate('abbd')">📋 АББД загвараас үүсгэх</button>
+      <button class="btn secondary" onclick="surveyUseTemplate('engagement')">📊 Матриц загвараас үүсгэх</button>
+      <button class="btn secondary" onclick="surveyUseTemplate('training')">🎓 Сургалтын хэрэгцээ</button>
+      <button class="btn secondary" onclick="surveyUseTemplate('environment')">🦺 Ажлын орчин</button>
       <button class="btn" onclick="surveyAdd()">+ Судалгаа үүсгэх</button>
     </div>`:""}
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px">
@@ -4114,11 +4413,11 @@ function surveyAdd(data={}) {
 }
 
 function surveyQuestionHtml(q, idx) {
-  const needsOptions = q.type === "Нэг сонголт" || q.type === "Олон сонголт";
+  const needsOptions = q.type === "Нэг сонголт" || q.type === "Олон сонголт" || surveyIsMatrix(q);
   const options = (q.options && q.options.length ? q.options : [""]).map((opt, oi) => `
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-      <span style="font-size:13px;color:#64748b">${q.type==="Олон сонголт" ? "☑" : "○"}</span>
-      <input class="input svq-option" data-q="${idx}" value="${escapeHtml(opt)}" placeholder="Сонголт..." style="font-size:12px;flex:1">
+      <span style="font-size:13px;color:#64748b">${surveyIsMatrix(q) ? "№" : (q.type==="Олон сонголт" ? "☑" : "○")}</span>
+      <input class="input svq-option" data-q="${idx}" value="${escapeHtml(opt)}" placeholder="${surveyIsMatrix(q) ? "Matrix мөрийн асуулт..." : "Сонголт..."}" style="font-size:12px;flex:1">
       <button type="button" onclick="surveyRemoveOption(${idx},${oi})" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:14px">✕</button>
     </div>`).join("");
   return `
@@ -4126,15 +4425,22 @@ function surveyQuestionHtml(q, idx) {
     <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
       <span style="font-size:11px;font-weight:700;color:#64748b;min-width:20px">${idx+1}.</span>
       <input class="input" id="svq_text_${idx}" value="${escapeHtml(q.text||"")}" placeholder="Асуултын текст..." style="flex:1;font-size:12px">
-      <select class="input" id="svq_type_${idx}" onchange="surveyRefreshQuestions()" style="width:120px;font-size:12px">
-        ${["Нэг сонголт","Олон сонголт","Текст","Оноо (1-5)"].map(t=>`<option ${(q.type||"Нэг сонголт")===t?"selected":""}>${t}</option>`).join("")}
+      <select class="input" id="svq_type_${idx}" onchange="surveyRefreshQuestions()" style="width:140px;font-size:12px">
+        ${["Нэг сонголт","Олон сонголт","Текст","Оноо (1-5)","Матриц (1-5)"].map(t=>`<option ${(q.type||"Нэг сонголт")===t?"selected":""}>${t}</option>`).join("")}
       </select>
       <button onclick="surveyRemoveQuestion(${idx})" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:16px">✕</button>
     </div>
+    <div style="display:grid;grid-template-columns:1fr auto auto;gap:6px;align-items:center;margin:8px 0">
+      <input class="input" id="svq_image_${idx}" value="${escapeHtml(q.image_url||"")}" placeholder="Зургийн URL эсвэл upload хийнэ..." style="font-size:12px">
+      <input type="file" id="svq_image_file_${idx}" accept="image/*" style="display:none" onchange="surveyUploadQuestionImage(${idx},this)">
+      <button type="button" class="btn secondary sm" onclick="document.getElementById('svq_image_file_${idx}')?.click()">🖼 Зураг</button>
+      <button type="button" class="btn secondary sm" onclick="surveyClearQuestionImage(${idx})">Арилгах</button>
+    </div>
+    ${q.image_url ? surveyQuestionImageHtml(q) : ""}
     ${needsOptions ? `
-    <div style="font-size:11px;color:#64748b;margin-bottom:6px">Сонголтууд</div>
+    <div style="font-size:11px;color:#64748b;margin-bottom:6px">${surveyIsMatrix(q) ? "Matrix мөрүүд" : "Сонголтууд"}</div>
     <div id="svq_opts_${idx}">${options}</div>
-    <button type="button" class="btn secondary sm" onclick="surveyAddOption(${idx})">+ Сонголт нэмэх</button>`:""}
+    <button type="button" class="btn secondary sm" onclick="surveyAddOption(${idx})">+ ${surveyIsMatrix(q) ? "Мөр нэмэх" : "Сонголт нэмэх"}</button>`:""}
   </div>`;
 }
 
@@ -4184,11 +4490,121 @@ function surveyGatherQuestions() {
   return _surveyQuestions.map((_,i)=>{
     const text = document.getElementById("svq_text_"+i)?.value.trim()||"";
     const type = document.getElementById("svq_type_"+i)?.value||"Нэг сонголт";
+    const image_url = document.getElementById("svq_image_"+i)?.value.trim()||"";
     const options = [...document.querySelectorAll(`.svq-option[data-q="${i}"]`)]
       .map(el => el.value.trim())
       .filter(Boolean);
-    return { text, type, options };
+    return { text, type, options, image_url };
   });
+}
+
+async function surveyUploadQuestionImage(idx, input) {
+  const file = input?.files?.[0];
+  if (!file) return;
+  if (!file.type.startsWith("image/")) { toast("Зөвхөн зураг файл сонгоно уу"); input.value = ""; return; }
+  if (file.size > 10 * 1024 * 1024) { toast("Зургийн хэмжээ 10MB-аас бага байна"); input.value = ""; return; }
+  const fd = new FormData();
+  fd.append("image", file);
+  try {
+    const res = await fetch("/api/surveys/image", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + (state.token || localStorage.getItem("token") || "") },
+      body: fd
+    });
+    const data = await res.json().catch(()=>({}));
+    if (!res.ok) throw new Error(surveyUploadErrorMessage(res, data));
+    const el = document.getElementById("svq_image_"+idx);
+    if (el) el.value = data.url || "";
+    surveyRefreshQuestions();
+    toast("Зураг нэмэгдлээ");
+  } catch(e) {
+    toast("Алдаа: " + e.message);
+  } finally {
+    input.value = "";
+  }
+}
+
+function surveyClearQuestionImage(idx) {
+  const el = document.getElementById("svq_image_"+idx);
+  if (el) el.value = "";
+  surveyRefreshQuestions();
+}
+
+function surveyQuickImageEngagement() {
+  document.getElementById("surveyQuickImageModal")?.remove();
+  document.body.insertAdjacentHTML("beforeend", `
+    <div id="surveyQuickImageModal" style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1003;display:flex;align-items:center;justify-content:center;padding:18px">
+      <div style="background:#fff;border-radius:16px;padding:24px;width:min(520px,96vw);box-shadow:0 20px 60px rgba(0,0,0,.25)">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:16px">
+          <div>
+            <div style="font-weight:800;font-size:17px">🖼 Зурагтай сэтгэл ханамжийн асуумж</div>
+            <div style="font-size:12px;color:#64748b;margin-top:5px">Зургаа оруулаад шууд ажилчид бөглөх QR/линк гаргана.</div>
+          </div>
+          <button onclick="document.getElementById('surveyQuickImageModal').remove()" style="background:none;border:none;font-size:20px;color:#94a3b8;cursor:pointer">✕</button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div>
+            <div class="small muted">Судалгааны нэр</div>
+            <input class="input" id="sq_title" value="Ажлын байрны сэтгэл ханамжийн судалгаа">
+          </div>
+          <div>
+            <div class="small muted">Дуусах огноо /заавал биш/</div>
+            <input class="input" id="sq_deadline" type="date">
+          </div>
+          <div>
+            <div class="small muted">Зураг</div>
+            <input class="input" id="sq_image" type="file" accept="image/*">
+            <div style="font-size:11px;color:#64748b;margin-top:6px">JPG, PNG, WEBP зураг. 10MB-аас бага байна.</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:18px;justify-content:flex-end;flex-wrap:wrap">
+          <button class="btn secondary" onclick="document.getElementById('surveyQuickImageModal').remove()">Болих</button>
+          <button class="btn" id="sqCreateBtn" onclick="surveyCreateQuickImageEngagement()">Үүсгээд QR гаргах</button>
+        </div>
+      </div>
+    </div>`);
+}
+
+async function surveyUploadStandaloneImage(file) {
+  if (!file) throw new Error("Зураг сонгоно уу");
+  if (!file.type.startsWith("image/")) throw new Error("Зөвхөн зураг файл сонгоно уу");
+  if (file.size > 10 * 1024 * 1024) throw new Error("Зургийн хэмжээ 10MB-аас бага байна");
+  const fd = new FormData();
+  fd.append("image", file);
+  const res = await fetch("/api/surveys/image", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + (state.token || localStorage.getItem("token") || "") },
+    body: fd
+  });
+  const data = await res.json().catch(()=>({}));
+  if (!res.ok) throw new Error(surveyUploadErrorMessage(res, data));
+  return data.url || "";
+}
+
+async function surveyCreateQuickImageEngagement() {
+  const btn = document.getElementById("sqCreateBtn");
+  const oldText = btn?.textContent || "Үүсгээд QR гаргах";
+  try {
+    if (btn) { btn.disabled = true; btn.textContent = "Үүсгэж байна..."; }
+    const title = document.getElementById("sq_title")?.value.trim() || "Ажлын байрны сэтгэл ханамжийн судалгаа";
+    const deadline = document.getElementById("sq_deadline")?.value || "";
+    const file = document.getElementById("sq_image")?.files?.[0];
+    const imageUrl = await surveyUploadStandaloneImage(file);
+    const body = surveyTemplateImageEngagement(imageUrl);
+    body.title = title;
+    body.deadline = deadline;
+    const created = await api("/api/surveys", { method:"POST", body:JSON.stringify(body) }).catch(e => {
+      throw new Error("Судалгаа үүсгэхэд алдаа гарлаа: " + e.message);
+    });
+    document.getElementById("surveyQuickImageModal")?.remove();
+    toast("Зурагтай асуумж үүслээ");
+    await hrRenderSurvey(document.getElementById("hrSubContent"));
+    if (created?.id) surveyQr(created.id);
+  } catch(e) {
+    toast("Алдаа: " + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = oldText; }
+  }
 }
 
 async function surveySave(id) {
@@ -4261,6 +4677,34 @@ async function surveyQr(id) {
     </div>`);
 }
 
+async function surveyEmployeePortalQr() {
+  const cfg = await fetch("/api/public-base-url").then(r => r.json()).catch(()=>({ baseUrl: location.origin }));
+  const link = `${(cfg.baseUrl || location.origin).replace(/\/+$/,"")}/employee-surveys.html`;
+  document.getElementById("surveyQrModal")?.remove();
+  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(link)}`;
+  document.body.insertAdjacentHTML("beforeend", `
+    <div id="surveyQrModal" style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1002;display:flex;align-items:center;justify-content:center;padding:18px">
+      <div style="background:#fff;border-radius:16px;padding:24px;width:min(460px,96vw);box-shadow:0 20px 60px rgba(0,0,0,.25)">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:14px">
+          <div>
+            <div style="font-weight:800;font-size:16px">👥 Ажилчдын судалгааны QR</div>
+            <div style="font-size:12px;color:#64748b;margin-top:4px">Ажилчид энэ QR-аар ороод идэвхтэй асуумжаа сонгож бөглөнө.</div>
+          </div>
+          <button onclick="document.getElementById('surveyQrModal').remove()" style="background:none;border:none;font-size:20px;color:#94a3b8;cursor:pointer">✕</button>
+        </div>
+        <div style="text-align:center;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px;margin-bottom:12px">
+          <img src="${qrSrc}" alt="QR" style="width:240px;height:240px;max-width:100%">
+          <div style="font-size:11px;color:#94a3b8;margin-top:8px">QR харагдахгүй бол доорх холбоосыг ашиглана.</div>
+        </div>
+        <input class="input" id="surveyPublicLink" readonly value="${escapeHtml(link)}" onclick="this.select()" style="font-size:12px;margin-bottom:12px">
+        <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+          <button class="btn secondary" onclick="navigator.clipboard?.writeText(document.getElementById('surveyPublicLink').value);toast('Холбоос хууллаа')">Холбоос хуулах</button>
+          <button class="btn" onclick="window.open(document.getElementById('surveyPublicLink').value,'_blank')">Нээж шалгах</button>
+        </div>
+      </div>
+    </div>`);
+}
+
 async function surveyDownloadCsv(id) {
   const [survey, responses] = await Promise.all([
     api("/api/surveys").then(s => s.find(x => x.id === id)),
@@ -4272,7 +4716,7 @@ async function surveyDownloadCsv(id) {
   const header = ["Огноо", ...qs.map((q,i) => `${i+1}. ${q.text}`)];
   const rows = responses.map(r => {
     const answers = typeof r.answers === "string" ? JSON.parse(r.answers || "{}") : r.answers || {};
-    return [r.submitted_at || "", ...qs.map((_, i) => Array.isArray(answers[i]) ? answers[i].join("; ") : (answers[i] ?? ""))];
+    return [r.submitted_at || "", ...qs.map((_, i) => surveyFormatAnswer(answers[i]))];
   });
   const csv = "\uFEFF" + [header, ...rows].map(row => row.map(csvCell).join(",")).join("\r\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
@@ -4292,6 +4736,7 @@ async function surveyFill(id, title) {
   const mine = await api(`/api/survey-responses/${id}/mine`).catch(()=>null);
   if (mine) { toast("Та аль хэдийн бөглөсөн байна"); return; }
   const qs = typeof survey.questions==="string"?JSON.parse(survey.questions||"[]"):survey.questions||[];
+  window._surveyFillQuestions = qs;
   document.getElementById("surveyFillModal")?.remove();
   const html = `
   <div id="surveyFillModal" style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1001;display:flex;align-items:center;justify-content:center;overflow-y:auto">
@@ -4302,7 +4747,9 @@ async function surveyFill(id, title) {
         ${qs.map((q,i)=>`
         <div style="background:#f8fafc;border-radius:10px;padding:14px">
           <div style="font-weight:600;font-size:13px;margin-bottom:10px">${i+1}. ${escapeHtml(q.text)}</div>
+          ${surveyQuestionImageHtml(q)}
           ${q.type==="Текст"?`<textarea class="input" id="sfq_${i}" rows="2" placeholder="Хариулт..."></textarea>`:
+            surveyIsMatrix(q)?surveyMatrixFillHtml(q,i):
             q.type==="Оноо (1-5)"?`<div style="display:flex;gap:8px">${[1,2,3,4,5].map(n=>`
               <label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer">
                 <input type="radio" name="sfq_${i}" value="${n}">
@@ -4326,7 +4773,9 @@ async function surveyFill(id, title) {
 
 async function surveySubmit(surveyId, qCount) {
   const answers = {};
+  const qs = window._surveyFillQuestions || [];
   for (let i=0;i<qCount;i++) {
+    if (surveyIsMatrix(qs[i])) { answers[i] = surveyMatrixAnswer(i, qs[i]); continue; }
     const ta = document.getElementById("sfq_"+i);
     if (ta) { answers[i] = ta.value; continue; }
     const radios = document.querySelectorAll(`input[name="sfq_${i}"]:checked`);
@@ -4352,13 +4801,17 @@ async function surveyViewResults(id, title) {
   const html = `
   <div id="surveyResultModal" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1001;display:flex;align-items:center;justify-content:center;overflow-y:auto">
     <div style="background:#fff;border-radius:16px;padding:28px 32px;width:640px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25)">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:12px">
         <div>
           <div style="font-weight:800;font-size:16px">📊 ${escapeHtml(title)} — Үр дүн</div>
           <div style="font-size:12px;color:#64748b">Нийт ${responses.length} хариулт</div>
         </div>
-        <button onclick="document.getElementById('surveyResultModal').remove()" style="background:none;border:none;font-size:20px;color:#94a3b8;cursor:pointer">✕</button>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button class="btn secondary sm" onclick="surveyToggleConclusion()">🧠 Дүгнэлт гаргах</button>
+          <button onclick="document.getElementById('surveyResultModal').remove()" style="background:none;border:none;font-size:20px;color:#94a3b8;cursor:pointer">✕</button>
+        </div>
       </div>
+      ${surveyConclusionHtml(qs, responses)}
       ${qs.map((q,i)=>{
         const ans = responses.map(r=>{
           const parsed = typeof r.answers==="string"?JSON.parse(r.answers||"{}"):r.answers||{};
@@ -4367,6 +4820,7 @@ async function surveyViewResults(id, title) {
         if (q.type==="Текст") {
           return `<div style="background:#f8fafc;border-radius:10px;padding:14px;margin-bottom:12px">
             <div style="font-weight:600;margin-bottom:8px">${i+1}. ${escapeHtml(q.text)}</div>
+            ${surveyQuestionImageHtml(q)}
             ${ans.slice(0,5).map(a=>`<div style="padding:4px 8px;font-size:12px;color:#475569;border-left:3px solid #2563eb;margin-bottom:4px">${escapeHtml(String(a))}</div>`).join("")}
             ${ans.length>5?`<div style="font-size:11px;color:#94a3b8">болон ${ans.length-5} хариулт...</div>`:""}
           </div>`;
@@ -4375,14 +4829,37 @@ async function surveyViewResults(id, title) {
           const avg = ans.length?ans.reduce((s,v)=>s+Number(v),0)/ans.length:0;
           return `<div style="background:#f8fafc;border-radius:10px;padding:14px;margin-bottom:12px">
             <div style="font-weight:600;margin-bottom:8px">${i+1}. ${escapeHtml(q.text)}</div>
+            ${surveyQuestionImageHtml(q)}
             <div style="font-size:28px;font-weight:800;color:#1d4ed8">${avg.toFixed(1)} <span style="font-size:14px;color:#64748b">/ 5</span></div>
             <div style="font-size:11px;color:#64748b">${ans.length} хариулт</div>
+          </div>`;
+        }
+        if (surveyIsMatrix(q)) {
+          const rows = surveyMatrixRows(q);
+          const totals = rows.map(row => {
+            const vals = ans.map(a => Number(a?.[row])).filter(Boolean);
+            const avg = vals.length ? vals.reduce((s,v)=>s+v,0)/vals.length : 0;
+            return { row, avg, count: vals.length };
+          });
+          return `<div style="background:#f8fafc;border-radius:10px;padding:14px;margin-bottom:12px">
+            <div style="font-weight:600;margin-bottom:10px">${i+1}. ${escapeHtml(q.text)}</div>
+            ${surveyQuestionImageHtml(q)}
+            ${totals.map(t=>`
+              <div style="margin-bottom:8px">
+                <div style="display:flex;justify-content:space-between;gap:10px;font-size:12px;margin-bottom:3px">
+                  <span>${escapeHtml(t.row)}</span><span style="font-weight:700;color:#1d4ed8">${t.avg.toFixed(1)} / 5</span>
+                </div>
+                <div style="height:7px;background:#e2e8f0;border-radius:10px;overflow:hidden">
+                  <div style="height:100%;width:${Math.round(t.avg/5*100)}%;background:#2563eb;border-radius:10px"></div>
+                </div>
+              </div>`).join("")}
           </div>`;
         }
         const counts = {};
         ans.forEach(a=>{const vals=Array.isArray(a)?a:[a];vals.forEach(v=>{counts[v]=(counts[v]||0)+1;});});
         return `<div style="background:#f8fafc;border-radius:10px;padding:14px;margin-bottom:12px">
           <div style="font-weight:600;margin-bottom:10px">${i+1}. ${escapeHtml(q.text)}</div>
+          ${surveyQuestionImageHtml(q)}
           ${Object.entries(counts).sort((a,b)=>b[1]-a[1]).map(([opt,cnt])=>{
             const pct = ans.length?Math.round(cnt/ans.length*100):0;
             return `<div style="margin-bottom:6px">
@@ -4403,7 +4880,10 @@ async function surveyViewResults(id, title) {
 
 Object.assign(window, { hrRenderSurvey, surveyAdd, surveyEdit, surveySave, surveyDel,
   surveyUseTemplate, surveyQr, surveyDownloadCsv,
-  surveyAddQuestion, surveyRemoveQuestion, surveyAddOption, surveyRemoveOption, surveyRefreshQuestions, surveyFill, surveySubmit, surveyViewResults });
+  surveyAddQuestion, surveyRemoveQuestion, surveyAddOption, surveyRemoveOption, surveyRefreshQuestions,
+  surveyUploadQuestionImage, surveyClearQuestionImage, surveyQuickImageEngagement,
+  surveyCreateQuickImageEngagement, surveyEmployeePortalQr, surveyToggleConclusion,
+  surveyFill, surveySubmit, surveyViewResults });
 
 // ── Tab: Албан бичгийн хяналт ─────────────────────────────────
 
@@ -5784,8 +6264,8 @@ function hrNdPayrollRange(year, month) {
   const prevMonth = month === 1 ? 12 : month - 1;
   const prevYear = month === 1 ? year - 1 : year;
   return {
-    start: new Date(prevYear, prevMonth - 1, 21),
-    end: new Date(year, month - 1, 20),
+    start: new Date(prevYear, prevMonth - 1, 21, 12),
+    end: new Date(year, month - 1, 20, 12),
   };
 }
 
@@ -5794,13 +6274,13 @@ function hrNdWorkedDays(records, userId, year, month) {
   const { start: rangeStartDate, end: rangeEndDate } = hrNdPayrollRange(year, month);
   records.forEach(r => {
     if (r.user_id !== userId || !r.start_date) return;
-    const start = new Date(r.start_date.slice(0, 10));
-    const end = new Date((r.end_date || r.start_date).slice(0, 10));
+    const start = attParseYmd(r.start_date);
+    const end = attParseYmd(r.end_date || r.start_date);
     const rangeStart = start > rangeStartDate ? start : rangeStartDate;
     const rangeEnd = end < rangeEndDate ? end : rangeEndDate;
     if (rangeStart > rangeEnd) return;
     for (let d = new Date(rangeStart); d <= rangeEnd; d.setDate(d.getDate() + 1)) {
-      const key = d.toISOString().slice(0, 10);
+      const key = attYmd(d);
       const prev = days.get(key);
       if (!prev || r.id > prev.id) days.set(key, r);
     }
@@ -6156,13 +6636,13 @@ function hrGenderChart(counts) {
 
 function hrAttendanceSummary(records = [], year = new Date().getFullYear(), month = new Date().getMonth() + 1) {
   const daysInMonth = new Date(year, month, 0).getDate();
-  const start = new Date(year, month - 1, 1);
-  const end = new Date(year, month - 1, daysInMonth);
+  const start = new Date(year, month - 1, 1, 12);
+  const end = new Date(year, month - 1, daysInMonth, 12);
   const latestByUserDay = new Map();
   records.forEach(r => {
     if (!r.user_id || !r.start_date) return;
-    const rs = new Date(String(r.start_date).slice(0, 10));
-    const re = new Date(String(r.end_date || r.start_date).slice(0, 10));
+    const rs = attParseYmd(r.start_date);
+    const re = attParseYmd(r.end_date || r.start_date);
     const from = rs > start ? rs : start;
     const to = re < end ? re : end;
     if (from > to) return;
@@ -6482,7 +6962,7 @@ async function hrLoadLetterReportCounts() {
 function hrPrintReports() {
   const src = document.getElementById("hrReportPrintable");
   if (!src) { toast("Хэвлэх тайлан олдсонгүй"); return; }
-  const date = new Date().toISOString().slice(0, 10);
+  const date = attYmd();
   const win = window.open("", "_blank", "width=1100,height=800");
   if (!win) { toast("Pop-up хориглогдсон байна"); return; }
   win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">

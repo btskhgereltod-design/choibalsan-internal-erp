@@ -66,12 +66,28 @@ const MANUAL_OFF_REASONS = {
   other: "Бусад",
 };
 
+const MANUAL_ON_REASONS = {
+  test: "Туршилт / шалгалт",
+  emergency: "Аюулгүй байдал",
+  temporary: "Түр асаалт",
+  other: "Бусад",
+};
+
 function normalizeManualOffReason(value) {
   const raw = String(value || "").trim();
   if (!raw) return "";
   const key = raw.toLowerCase();
   if (MANUAL_OFF_REASONS[key]) return key;
   const found = Object.entries(MANUAL_OFF_REASONS).find(([, label]) => label === raw);
+  return found ? found[0] : "";
+}
+
+function normalizeManualOnReason(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const key = raw.toLowerCase();
+  if (MANUAL_ON_REASONS[key]) return key;
+  const found = Object.entries(MANUAL_ON_REASONS).find(([, label]) => label === raw);
   return found ? found[0] : "";
 }
 
@@ -726,6 +742,7 @@ function latestDeviceSelect(whereClause = "") {
       c.device_model AS command_device_model,
       c.action AS command_action,
       c.status AS command_status,
+      c.requested_by_role AS command_requested_by_role,
       c.requested_at AS command_requested_at,
       c.f_port AS command_f_port,
       c.payload_hex AS command_payload_hex,
@@ -735,6 +752,10 @@ function latestDeviceSelect(whereClause = "") {
       s.manual_off_note AS manualOffNote,
       s.manual_off_by AS manualOffBy,
       s.manual_off_at AS manualOffAt,
+      s.manual_on_reason AS manualOnReason,
+      s.manual_on_note AS manualOnNote,
+      s.manual_on_by AS manualOnBy,
+      s.manual_on_at AS manualOnAt,
       COALESCE(s.maintenance_mode, 0) AS maintenanceMode,
       s.maintenance_reason AS maintenanceReason,
       s.maintenance_by AS maintenanceBy,
@@ -745,6 +766,8 @@ function latestDeviceSelect(whereClause = "") {
       s.manual_location_at AS manualLocationAt,
       u.full_name AS manualOffOperatorName,
       u.username AS manualOffOperatorUsername,
+      ou.full_name AS manualOnOperatorName,
+      ou.username AS manualOnOperatorUsername,
       mu.full_name AS maintenanceOperatorName,
       mu.username AS maintenanceOperatorUsername,
       CASE
@@ -795,6 +818,7 @@ function latestDeviceSelect(whereClause = "") {
     LEFT JOIN latest_command c ON c.dev_eui=l.dev_eui
     LEFT JOIN iot_device_settings s ON s.dev_eui=l.dev_eui
     LEFT JOIN users u ON u.id=s.manual_off_by
+    LEFT JOIN users ou ON ou.id=s.manual_on_by
     LEFT JOIN users mu ON mu.id=s.maintenance_by
   `;
 }
@@ -1444,6 +1468,10 @@ router.post("/iot/devices/:devEui/auto-mode", auth, requirePermission("lighting_
        manual_off_note=CASE WHEN excluded.auto_mode=1 THEN NULL ELSE manual_off_note END,
        manual_off_by=CASE WHEN excluded.auto_mode=1 THEN NULL ELSE manual_off_by END,
        manual_off_at=CASE WHEN excluded.auto_mode=1 THEN NULL ELSE manual_off_at END,
+       manual_on_reason=CASE WHEN excluded.auto_mode=1 THEN NULL ELSE manual_on_reason END,
+       manual_on_note=CASE WHEN excluded.auto_mode=1 THEN NULL ELSE manual_on_note END,
+       manual_on_by=CASE WHEN excluded.auto_mode=1 THEN NULL ELSE manual_on_by END,
+       manual_on_at=CASE WHEN excluded.auto_mode=1 THEN NULL ELSE manual_on_at END,
        maintenance_mode=CASE WHEN excluded.auto_mode=1 THEN 0 ELSE maintenance_mode END,
        maintenance_reason=CASE WHEN excluded.auto_mode=1 THEN NULL ELSE maintenance_reason END,
        maintenance_by=CASE WHEN excluded.auto_mode=1 THEN NULL ELSE maintenance_by END,
@@ -1485,6 +1513,8 @@ router.post("/iot/devices/:devEui/downlink", auth, requirePermission("lighting_e
   const action = String(req.body?.action || req.body?.command || "").trim().toUpperCase();
   const manualOffReason = normalizeManualOffReason(req.body?.manualOffReason || req.body?.reason);
   const manualOffNote = String(req.body?.manualOffNote || req.body?.note || "").trim().slice(0, 500);
+  const manualOnReason = normalizeManualOnReason(req.body?.manualOnReason || (action === "ON" ? req.body?.reason : ""));
+  const manualOnNote = String(req.body?.manualOnNote || (action === "ON" ? req.body?.note : "") || "").trim().slice(0, 500);
   const rawRequest = {
     params: { devEui: req.params.devEui },
     body: req.body || {},
@@ -1497,6 +1527,9 @@ router.post("/iot/devices/:devEui/downlink", auth, requirePermission("lighting_e
     [devEui]
   );
   if (!latest) return res.status(404).json({ error: "Device not found" });
+  if (action === "ON" && !manualOnReason) {
+    return res.status(400).json({ error: "Manual ON reason is required" });
+  }
   if (action === "OFF" && !manualOffReason) {
     return res.status(400).json({ error: "Manual OFF reason is required" });
   }
@@ -1564,6 +1597,10 @@ router.post("/iot/devices/:devEui/downlink", auth, requirePermission("lighting_e
          manual_off_note=CASE WHEN ?='OFF' THEN ? ELSE NULL END,
          manual_off_by=CASE WHEN ?='OFF' THEN ? ELSE NULL END,
          manual_off_at=CASE WHEN ?='OFF' THEN CURRENT_TIMESTAMP ELSE NULL END,
+         manual_on_reason=CASE WHEN ?='ON' THEN ? ELSE NULL END,
+         manual_on_note=CASE WHEN ?='ON' THEN ? ELSE NULL END,
+         manual_on_by=CASE WHEN ?='ON' THEN ? ELSE NULL END,
+         manual_on_at=CASE WHEN ?='ON' THEN CURRENT_TIMESTAMP ELSE NULL END,
          maintenance_mode=CASE WHEN ?='OFF' AND ?='maintenance' THEN 1 WHEN ?='ON' THEN 0 ELSE maintenance_mode END,
          maintenance_reason=CASE WHEN ?='OFF' AND ?='maintenance' THEN ? WHEN ?='ON' THEN NULL ELSE maintenance_reason END,
          maintenance_by=CASE WHEN ?='OFF' AND ?='maintenance' THEN ? WHEN ?='ON' THEN NULL ELSE maintenance_by END,
@@ -1575,6 +1612,13 @@ router.post("/iot/devices/:devEui/downlink", auth, requirePermission("lighting_e
         manualOffReason ? MANUAL_OFF_REASONS[manualOffReason] : null,
         action,
         manualOffNote || null,
+        action,
+        req.user?.id || null,
+        action,
+        action,
+        manualOnReason ? MANUAL_ON_REASONS[manualOnReason] : null,
+        action,
+        manualOnNote || null,
         action,
         req.user?.id || null,
         action,
@@ -1594,10 +1638,45 @@ router.post("/iot/devices/:devEui/downlink", auth, requirePermission("lighting_e
         action,
       ]
     );
+    if (action === "ON") {
+      await run(
+        `UPDATE iot_device_settings SET
+           manual_on_reason=?, manual_on_note=?, manual_on_by=?, manual_on_at=CURRENT_TIMESTAMP,
+           manual_off_reason=NULL, manual_off_note=NULL, manual_off_by=NULL, manual_off_at=NULL,
+           maintenance_mode=0, maintenance_reason=NULL, maintenance_by=NULL, maintenance_at=NULL
+         WHERE dev_eui=?`,
+        [
+          MANUAL_ON_REASONS[manualOnReason],
+          manualOnNote || null,
+          req.user?.id || null,
+          devEui,
+        ]
+      );
+    } else if (action === "OFF") {
+      await run(
+        `UPDATE iot_device_settings SET
+           manual_off_reason=?, manual_off_note=?, manual_off_by=?, manual_off_at=CURRENT_TIMESTAMP,
+           manual_on_reason=NULL, manual_on_note=NULL, manual_on_by=NULL, manual_on_at=NULL,
+           maintenance_mode=?, maintenance_reason=?, maintenance_by=?, maintenance_at=CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE NULL END
+         WHERE dev_eui=?`,
+        [
+          MANUAL_OFF_REASONS[manualOffReason],
+          manualOffNote || null,
+          req.user?.id || null,
+          manualOffReason === "maintenance" ? 1 : 0,
+          manualOffReason === "maintenance" ? MANUAL_OFF_REASONS[manualOffReason] : null,
+          manualOffReason === "maintenance" ? req.user?.id || null : null,
+          manualOffReason === "maintenance" ? 1 : 0,
+          devEui,
+        ]
+      );
+    }
     auditPayload = {
       ...auditPayload,
       ok: true,
       chirpstackQueueResult,
+      manualOnReason: action === "ON" ? MANUAL_ON_REASONS[manualOnReason] : null,
+      manualOnNote: action === "ON" ? manualOnNote || null : null,
       manualOffReason: action === "OFF" ? MANUAL_OFF_REASONS[manualOffReason] : null,
       manualOffNote: action === "OFF" ? manualOffNote || null : null,
     };
@@ -1616,6 +1695,7 @@ router.post("/iot/devices/:devEui/downlink", auth, requirePermission("lighting_e
       chirpstackQueueResult,
       status: "queued",
       autoMode: false,
+      manualOnReason: action === "ON" ? MANUAL_ON_REASONS[manualOnReason] : null,
       manualOffReason: action === "OFF" ? MANUAL_OFF_REASONS[manualOffReason] : null,
     });
   } catch (e) {

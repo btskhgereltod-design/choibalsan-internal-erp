@@ -41,6 +41,7 @@ let _iotDualSide = false;
 let _iotSelectedFeedPointId = null;
 let _iotRoadWidth = 14;
 let _iotScheduleInfo = [];
+let _iotEmployeeLocations = [];
 
 function fmtNum(value, digits = 2, suffix = "") {
   if (value === null || value === undefined || value === "") return "-";
@@ -709,8 +710,28 @@ function deviceScheduleAlert(row) {
     return { bad: false, msg: "Дохио ирсэн" };
   }
   if (sched.scheduled_action === "ON" && relay === "off") return { bad: true, msg: "Асах ёстой цагт гэрэл асаагүй" };
-  if (sched.scheduled_action === "OFF" && relay === "on") return { bad: true, msg: "Унтрах ёстой цагт гэрэл асчээ" };
   if (sched.scheduled_action === "ON" && relay === "on") return { bad: false, msg: "Хуваарийн дагуу ассан" };
+  if (sched.scheduled_action === "OFF" && relay === "on") {
+    const lastCmd = String(row.command_action || "").toUpperCase();
+    const lastRole = String(row.command_requested_by_role || "");
+    const isOperator = lastRole && lastRole !== "system";
+    if (lastCmd === "ON" && isOperator) {
+      const operator = row.manualOnOperatorName || row.manualOnOperatorUsername || row.manualOnBy || "-";
+      const reasonText = row.manualOnReason || "Шалтгаан бүртгээгүй";
+      const noteText = row.manualOnNote ? ` · ${row.manualOnNote}` : "";
+      return {
+        bad: true,
+        msg: "Унтрах ёстой цагт гэрэл асчээ — оператор гараар асаасан",
+        detail: `Шалтгаан: ${reasonText}${noteText} · Оператор: ${operator}`,
+        reason: "manual_on",
+      };
+    }
+    if (lastCmd === "ON" && lastRole === "system") {
+      return { bad: true, msg: "Унтрах ёстой цагт гэрэл асчээ — авт. тушаалаар асаасан", reason: "auto_on" };
+    }
+    // Сервер ON тушаал өгөөгүй байтал гэрэл асчээ → тогны эх
+    return { bad: true, msg: "Хуваарь бус цагт гэрэл асчээ — сервер ON тушаал өгөөгүй", reason: "unexpected_power" };
+  }
   return { bad: false, msg: "Хуваарийн дагуу унтарсан" };
 }
 
@@ -725,6 +746,7 @@ function renderAlerts() {
         <div>
           <b>${fmtText(row.deviceName)}</b>
           <span>${escapeHtml(alert.msg)}</span>
+          ${alert.detail ? `<small>${escapeHtml(alert.detail)}</small>` : ""}
         </div>
         <time>${fmtDate(row.last_seen)}</time>
       </div>`).join("") : `<div class="iot-empty-dark">Мэдээлэл алга</div>`}
@@ -1120,6 +1142,116 @@ function lightPointPopup(point, row) {
       <div style="font-size:12px">Тэжээл: <b style="color:${iotStateColor(row)}">${iotStateLabel(row)}</b></div>
     </div>
   `;
+}
+
+function employeeMapCoord(loc) {
+  const coord = coordForStoredPoint(loc);
+  if (!coord) return null;
+  const accuracy = Number(loc?.accuracy);
+  return { ...coord, accuracy: Number.isFinite(accuracy) ? accuracy : null };
+}
+
+function mapDistanceText(meters) {
+  const n = Number(meters);
+  if (!Number.isFinite(n)) return "-";
+  if (n >= 1000) return `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)} км`;
+  return `${Math.round(n)} м`;
+}
+
+function employeeNearbyTargets(coord, limit = 4) {
+  if (!_iotMap || !coord) return [];
+  const targets = [];
+  const addTarget = (type, name, coordLike, extra = "") => {
+    const c = coordForStoredPoint(coordLike);
+    if (!c) return;
+    targets.push({
+      type,
+      name: name || "-",
+      extra,
+      distance: _iotMap.distance([coord.lat, coord.lng], [c.lat, c.lng]),
+    });
+  };
+  _iotNetworkPoles.forEach(p => addTarget("Шон", p.display_code || p.name || `#${p.pole_no || p.id}`, p, p.status || ""));
+  _iotFeedPoints.forEach(fp => addTarget("Тэжээлийн цэг", fp.name || `#${fp.id}`, fp, fp.type || ""));
+  _iotMeterPoints.forEach(p => addTarget("Шит", p.name || p.meter_no || `#${p.id}`, p, p.location || ""));
+  _iotLightPoints.forEach(p => addTarget("Гэрэл", p.name || p.code || `#${p.id}`, p, p.location || ""));
+  _iotRows.forEach((row, index) => {
+    const c = coordForRow(row, index);
+    if (!c || c.estimated) return;
+    targets.push({
+      type: "IoT node",
+      name: row.deviceName || row.devEui || "-",
+      extra: iotStateLabel(row),
+      distance: _iotMap.distance([coord.lat, coord.lng], [c.lat, c.lng]),
+    });
+  });
+  return targets
+    .filter(t => Number.isFinite(t.distance))
+    .sort((a, b) => a.distance - b.distance)
+    .slice(0, limit);
+}
+
+function employeeLocationPopup(loc, coord) {
+  const nearby = employeeNearbyTargets(coord);
+  const mapsUrl = `https://maps.google.com/?q=${Number(coord.lat)},${Number(coord.lng)}`;
+  return `
+    <div class="iot-map-popup employee-location-popup" style="min-width:270px;max-width:360px">
+      <div style="font-size:10px;font-weight:900;color:#db2777;text-transform:uppercase;letter-spacing:.4px">Ажилтны GPS байршил</div>
+      <div style="font-size:14px;font-weight:950;color:#0f172a;margin:4px 0">${fmtText(loc.full_name || "Ажилтан")}</div>
+      <div style="font-size:11px;color:#64748b">${fmtText([loc.position, loc.department].filter(Boolean).join(" · "))}</div>
+      <div style="display:grid;grid-template-columns:82px 1fr;gap:4px 8px;margin-top:9px;font-size:12px">
+        <span style="color:#64748b">Илгээсэн</span><b>${fmtDate(loc.created_at)}</b>
+        <span style="color:#64748b">GPS</span><b style="font-family:Consolas,monospace">${fmtNum(coord.lat, 6)}, ${fmtNum(coord.lng, 6)}</b>
+        <span style="color:#64748b">Нарийвчлал</span><b>${coord.accuracy === null ? "-" : `±${Math.round(coord.accuracy)} м`}</b>
+      </div>
+      <div style="border-top:1px solid #e5e7eb;margin-top:10px;padding-top:8px">
+        <div style="font-size:10px;font-weight:900;color:#64748b;text-transform:uppercase;margin-bottom:5px">Ойролцоох гэрэлтүүлэг</div>
+        ${nearby.length ? nearby.map(t => `
+          <div style="display:grid;grid-template-columns:72px 1fr auto;gap:6px;align-items:center;font-size:11px;padding:4px 0;border-bottom:1px solid #f1f5f9">
+            <span style="color:#64748b">${escapeHtml(t.type)}</span>
+            <b style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#172033">${escapeHtml(t.name)}</b>
+            <strong style="color:#db2777">${mapDistanceText(t.distance)}</strong>
+            ${t.extra ? `<span></span><span style="grid-column:2 / 4;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(t.extra)}</span>` : ""}
+          </div>
+        `).join("") : `<div style="font-size:12px;color:#94a3b8">Ойролцоох бүртгэлтэй гэрэл/шон олдсонгүй.</div>`}
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;justify-content:space-between;margin-top:9px">
+        <a href="${mapsUrl}" target="_blank" rel="noopener" style="font-size:11px;font-weight:900;color:#2563eb;text-decoration:none">Google Maps дээр нээх</a>
+        <button type="button" onclick="iotClearEmployeeLocation(${Number(loc.id || 0)})" style="border:1px solid #f9a8d4;background:#fff1f2;color:#be185d;border-radius:7px;padding:5px 8px;font-size:11px;font-weight:900;cursor:pointer">Ашиглаад устгах</button>
+      </div>
+    </div>
+  `;
+}
+
+async function iotClearEmployeeLocation(id) {
+  if (!id) return;
+  const found = _iotEmployeeLocations.find(loc => Number(loc.id) === Number(id));
+  const name = found?.full_name || "Ажилтан";
+  if (!confirm(`${name || "Ажилтан"} GPS байршлыг map-аас устгах уу?\n\nОператор ашиглаж дууссан бол устгахад болно.`)) return;
+  try {
+    await api(`/api/employee-locations/${encodeURIComponent(id)}`, { method: "DELETE" });
+    toast("GPS байршил map-аас устлаа");
+    await iotRefresh();
+  } catch (e) {
+    toast(e.message || "GPS байршил устгахад алдаа гарлаа");
+  }
+}
+
+function employeeLocationIcon(loc) {
+  const initials = String(loc?.full_name || loc?.username || "A")
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map(part => part[0] || "")
+    .join("")
+    .toUpperCase() || "A";
+  return window.L.divIcon({
+    className: "",
+    html: `<div class="iot-employee-marker"><span>${escapeHtml(initials)}</span></div>`,
+    iconSize: [34, 34],
+    iconAnchor: [17, 17],
+    popupAnchor: [0, -18],
+  });
 }
 
 function routeGeometry(row) {
@@ -1751,15 +1883,16 @@ function renderMapPanel({ editable = true } = {}) {
   const lightsWithGps = _iotLightPoints.filter(p => coordForStoredPoint(p)).length;
   const routeCount = _iotNetworkRoutes.length;
   const poleCount = _iotNetworkPoles.length;
+  const employeeCount = _iotEmployeeLocations.filter(loc => employeeMapCoord(loc)).length;
   return `
     <div class="iot-map-shell">
       <div class="iot-map-toolbar">
         <div>
           <div class="iot-panel-title">${editable ? "Сүлжээний зураглал, тохиргоо" : "Map хяналт"}</div>
-          <div class="iot-map-sub">${points.length} ADW · ${online} дохио ирсэн · ${metersWithGps} шит · ${lightsWithGps} гэрэл · ${routeCount} трасс · ${poleCount} шон · ${estimated} түр байршил${editable ? " · зураглал засварлах хэсэг" : " · зөвхөн хяналт"}</div>
+          <div class="iot-map-sub">${points.length} ADW · ${online} дохио ирсэн · ${metersWithGps} шит · ${lightsWithGps} гэрэл · ${routeCount} трасс · ${poleCount} шон · ${employeeCount} ажилтан GPS · ${estimated} түр байршил${editable ? " · зураглал засварлах хэсэг" : " · зөвхөн хяналт"}</div>
         </div>
         <div style="display:flex;align-items:center;gap:10px">
-          <div class="iot-map-legend"><span><i class="ok"></i>Гэрэл ассан</span><span><i class="off"></i>Гэрэл унтарсан</span><span><i class="bad"></i>Дохио тасарсан</span><span><i class="est"></i>Түр байршил</span></div>
+          <div class="iot-map-legend"><span><i class="ok"></i>Гэрэл ассан</span><span><i class="off"></i>Гэрэл унтарсан</span><span><i class="bad"></i>Дохио тасарсан</span><span><i class="est"></i>Түр байршил</span><span><i class="employee"></i>Ажилтан GPS</span></div>
           <button type="button" class="iot-fullscreen-btn" onclick="iotToggleMaximize()" title="${_iotMaximized ? "Буцах" : "Дэлгэц дүүрэн харах"}">
             ${_iotMaximized
               ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg> Буцах`
@@ -1835,6 +1968,7 @@ async function initIotMap() {
   const networkRouteLayer = window.L.featureGroup().addTo(_iotMap);
   const poleLayer = window.L.featureGroup().addTo(_iotMap);
   const gatewayLayer = window.L.featureGroup().addTo(_iotMap);
+  const employeeLayer = window.L.featureGroup().addTo(_iotMap);
   const poleMarkerRefs = [];
   const feedLayer = window.L.featureGroup().addTo(_iotMap);
   _iotFeedHighlightLayer = window.L.featureGroup().addTo(_iotMap);
@@ -2080,11 +2214,31 @@ async function initIotMap() {
       .addTo(gatewayLayer);
   });
 
+  _iotEmployeeLocations.forEach(loc => {
+    const coord = employeeMapCoord(loc);
+    if (!coord) return;
+    if (coord.accuracy !== null && coord.accuracy > 0) {
+      window.L.circle([coord.lat, coord.lng], {
+        radius: Math.min(Math.max(coord.accuracy, 8), 500),
+        color: "#db2777",
+        weight: 1,
+        fillColor: "#f9a8d4",
+        fillOpacity: 0.14,
+        opacity: 0.35,
+      }).addTo(employeeLayer);
+    }
+    window.L.marker([coord.lat, coord.lng], { icon: employeeLocationIcon(loc), zIndexOffset: 950 })
+      .bindPopup(employeeLocationPopup(loc, coord), { maxWidth: 390 })
+      .bindTooltip(`${escapeHtml(loc.full_name || "Ажилтан")} · GPS`, { sticky: true })
+      .addTo(employeeLayer);
+  });
+
   window.L.control.layers({}, {
     "ADW төхөөрөмж": _iotMarkers,
     "Трасс / коридор": networkRouteLayer,
     "Шон / pole": poleLayer,
     "⚡ Тэжээлийн цэг": newFeedPointLayer,
+    "Ажилтан GPS": employeeLayer,
   }, { position: "topright", collapsed: false }).addTo(_iotMap);
   const fitLayer = window.L.featureGroup([
     ..._iotMarkers.getLayers(),
@@ -2092,6 +2246,7 @@ async function initIotMap() {
     ...lightLayer.getLayers(),
     ...networkRouteLayer.getLayers(),
     ...poleLayer.getLayers(),
+    ...employeeLayer.getLayers(),
   ]);
   if (shouldFitToData && fitLayer.getLayers().length) {
     _iotMap.fitBounds(fitLayer.getBounds().pad(0.18), { maxZoom: 15 });
@@ -3663,6 +3818,8 @@ function renderIotPage() {
       .iot-map-empty{height:100%;display:flex;align-items:center;justify-content:center;color:#64748b;font-weight:800}
       .iot-map-marker{width:38px;height:38px;border-radius:999px;border:3px solid #fff;box-shadow:0 8px 20px rgba(15,23,42,.26);display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:900}
       .iot-map-marker span{line-height:1}
+      .iot-employee-marker{width:34px;height:34px;border-radius:999px;background:#db2777;border:3px solid #fff;box-shadow:0 0 0 3px rgba(219,39,119,.28),0 8px 18px rgba(15,23,42,.25);display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:950}
+      .iot-employee-marker span{line-height:1}
       .iot-map-popup{min-width:190px}
       @media (max-width:1200px){
         .iot-page{padding:18px}
@@ -3881,7 +4038,7 @@ renderIotPage = function() {
       .iot-map-legend{display:grid;gap:7px;font-size:12px;color:#1d2f44;background:#f8fbff;border:1px solid #c5d2df;border-radius:8px;padding:10px 12px}
       .iot-map-legend span{display:flex;align-items:center;gap:8px}
       .iot-map-legend i{width:10px;height:10px;border-radius:999px;display:inline-block}
-      .iot-map-legend .ok{background:#fde047;border:1px solid #0f172a}.iot-map-legend .off{background:#6b7280}.iot-map-legend .bad{background:#dc2626}.iot-map-legend .est{background:#f59e0b}
+      .iot-map-legend .ok{background:#fde047;border:1px solid #0f172a}.iot-map-legend .off{background:#6b7280}.iot-map-legend .bad{background:#dc2626}.iot-map-legend .est{background:#f59e0b}.iot-map-legend .employee{background:#db2777}
       .iot-map-canvas{height:420px;width:100%;background:#d7e1eb}
       .iot-view-map .iot-map-canvas{height:calc(100vh - 200px);min-height:580px}
       .iot-view-map .iot-map-toolbar{padding:10px 14px}
@@ -3891,11 +4048,14 @@ renderIotPage = function() {
       .iot-map-empty{height:100%;display:flex;align-items:center;justify-content:center;color:#58728b;font-weight:800}
       .iot-map-marker{width:38px;height:38px;border-radius:999px;border:3px solid #fff;box-shadow:0 4px 14px rgba(31,55,77,.22);display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:900}
       .iot-map-marker span{line-height:1}
+      .iot-employee-marker{width:34px;height:34px;border-radius:999px;background:#db2777;border:3px solid #fff;box-shadow:0 0 0 3px rgba(219,39,119,.28),0 8px 18px rgba(31,55,77,.25);display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:950}
+      .iot-employee-marker span{line-height:1}
       .iot-map-popup{min-width:190px}
       .iot-draft-point{width:22px;height:22px;border-radius:999px;background:#2563eb;border:2px solid #fff;box-shadow:0 4px 10px rgba(15,23,42,.28);color:#fff;font-size:11px;font-weight:950;display:flex;align-items:center;justify-content:center;cursor:grab}
       .iot-alert-row{display:grid;grid-template-columns:34px 1fr auto;gap:10px;align-items:center;border-top:1px solid #d5e0ea;padding:10px 0}
       .iot-alert-row b{display:block;color:#172033;font-size:12px}
       .iot-alert-row span,.iot-alert-row time{font-size:11px;color:#58728b}
+      .iot-alert-row small{display:block;margin-top:3px;font-size:10px;color:#8aa0b5;line-height:1.35}
       .iot-alert-icon{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:950}
       .iot-alert-icon.is-bad{background:rgba(239,68,68,.18);color:#f87171}.iot-alert-icon.is-ok{background:rgba(34,197,94,.18);color:#4ade80}
       .iot-weather-main{display:flex;align-items:center;gap:12px;margin:18px 0;color:#172033}
@@ -4002,7 +4162,7 @@ renderIotPage = function() {
 
 async function iotRefresh() {
   try {
-    const [devices, meters, lights, gerInventory, routes, poles, feedPoints, feederCables, feedPointDeviceLinks, scheduleInfo] = await Promise.all([
+    const [devices, meters, lights, gerInventory, routes, poles, feedPoints, feederCables, feedPointDeviceLinks, scheduleInfo, employeeLocations] = await Promise.all([
       api("/api/iot/devices"),
       api("/api/mp").catch(() => []),
       api("/api/sl-points").catch(() => []),
@@ -4013,6 +4173,7 @@ async function iotRefresh() {
       api("/api/sl-network/feeder-cables").catch(() => []),
       api("/api/sl-network/feed-point-devices").catch(() => []),
       api("/api/iot/schedule-info").catch(() => []),
+      api("/api/employee-locations/latest?hours=2").catch(() => []),
     ]);
     _iotRows = devices;
     _iotMeterPoints = Array.isArray(meters) ? meters : [];
@@ -4024,6 +4185,7 @@ async function iotRefresh() {
     _iotFeederCables = Array.isArray(feederCables) ? feederCables : [];
     _iotFeedPointDeviceLinks = Array.isArray(feedPointDeviceLinks) ? feedPointDeviceLinks : [];
     _iotScheduleInfo = Array.isArray(scheduleInfo) ? scheduleInfo : [];
+    _iotEmployeeLocations = Array.isArray(employeeLocations) ? employeeLocations : [];
     if (_iotView === "report") _iotReport = await api(`/api/iot/report?period=${encodeURIComponent(_iotReportPeriod)}`);
     if (_iotMap) {
       _iotSavedCenter = _iotMap.getCenter();
@@ -4113,8 +4275,21 @@ async function iotSendDownlink(devEui, action) {
       ? "\n\nЗАСВАР ГОРИМ идэвхжинэ. Auto-recovery энэ node-г огт хөндөхгүй, ON command хаагдана."
       : "";
     if (!confirm(`${deviceName}: OFF илгээх үү?\n\nManual OFF болно. Schedule идэвхгүй үлдэнэ. AUTO дарахаас нааш сервер schedule-аар буцааж асаахгүй.${maintenanceLine}`)) return;
-  } else if (!confirm(`${deviceName}: ON илгээх үү?\n\nManual ON болно. Газар дээр ажиллаж байгаа эсэхийг инженерийн хяналтаар нягтална уу.`)) {
-    return;
+  } else if (action === "ON") {
+    const menu = [
+      "1. Туршилт / шалгалт",
+      "2. Аюулгүй байдал",
+      "3. Түр асаалт",
+      "4. Бусад",
+    ].join("\n");
+    const picked = prompt(`${deviceName}: ON хийх шалтгаанаа сонгоно уу\n\n${menu}\n\n1-4 дугаар оруулна уу:`);
+    const reasonMap = { 1: "test", 2: "emergency", 3: "temporary", 4: "other" };
+    const manualOnReason = reasonMap[String(picked || "").trim()];
+    if (!manualOnReason) return;
+    body.manualOnReason = manualOnReason;
+    body.manualOnNote = manualOnReason === "other" ? (prompt("Бусад шалтгааны тайлбар оруулна уу:") || "") : "";
+    const noteLine = body.manualOnNote ? `\nТайлбар: ${body.manualOnNote}` : "";
+    if (!confirm(`${deviceName}: ON илгээх үү?\n\nManual ON болно. Шалтгаан: ${menu.split("\n")[Number(picked)-1]?.replace(/^\d+\.\s*/, "") || ""}${noteLine}\n\nГазар дээр ажиллаж байгаа эсэхийг инженерийн хяналтаар нягтална уу.`)) return;
   }
   try {
     const result = await api(`/api/iot/devices/${encodeURIComponent(devEui)}/downlink`, {
@@ -4224,6 +4399,7 @@ Object.assign(window, {
   iotSetReportPeriod,
   iotSetChartDevice,
   iotSetChartBucket,
+  iotClearEmployeeLocation,
   iotSaveNodeLocation,
   iotUpdateRouteNameOptions,
   setIotDrawHint,

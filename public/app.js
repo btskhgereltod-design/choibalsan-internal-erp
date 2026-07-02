@@ -1,5 +1,5 @@
 import { state, api, toast, initFloatingScrollbar } from './modules/common.js';
-import './modules/dashboard.js?v=20260526dashboardorder';
+import './modules/dashboard.js?v=20260629gpsaccuracy';
 import './modules/assets.js?v=20260622fiberlengthsummary';
 import './modules/operations.js?v=20260609autoprogress';
 import './modules/warehouse.js';
@@ -14,11 +14,11 @@ import './modules/admin_hub.js';
 import './modules/streetlights.js?v=20260618noloratab';
 import './modules/lighting_schedule.js?v=20260527engineeredit';
 import './modules/lora_monitor.js?v=20260618redirect';
-import './modules/iot_monitor.js?v=20260626safetyhold';
+import './modules/iot_monitor.js?v=20260629manualonreason';
 import './modules/citizen_reports.js?v=20260622portal';
 import './modules/settings.js?v=20260527loginrights';
 import './modules/eng_hub.js?v=20260529monthfilter';
-import './modules/field.js?v=20260608hseacktarget';
+import './modules/field.js?v=20260629gpsaccuracy';
 import './modules/habea_hub.js';
 import './modules/my_job_description.js?v=20260610';
 import './modules/website.js?v=20260623';
@@ -44,20 +44,20 @@ window.addEventListener("resize", syncMobileClass);
 window.addEventListener("orientationchange", syncMobileClass);
 
 const roleMenus = {
-  director:       ["eng_hub","habea_hub","dashboard","personal_plan","my_job_description","assets","attendance","work","citizen_reports","hr","letters","plans","reports","report_schedule","reports_unified","audit","dev_requests","ai_test","code_export",
+  director:       ["eng_hub","habea_hub","dashboard","personal_plan","my_job_description","my_surveys","assets","attendance","work","citizen_reports","hr","letters","plans","reports","report_schedule","reports_unified","audit","dev_requests","ai_test","code_export",
                    ...FINANCE_MENUS, ...WAREHOUSE_MENUS, ...LIGHTING_MENUS, ...CAMERA_MENUS, "settings"],
-  chief_engineer: ["eng_hub","habea_hub","dashboard","personal_plan","my_job_description","assets","attendance","work","citizen_reports","letters","docs","plans","reports","reports_unified","dev_requests","code_export","settings",
+  chief_engineer: ["eng_hub","habea_hub","dashboard","personal_plan","my_job_description","my_surveys","assets","attendance","work","citizen_reports","letters","docs","plans","reports","reports_unified","dev_requests","code_export","settings",
                    ...WAREHOUSE_MENUS, ...LIGHTING_MENUS, ...CAMERA_MENUS],
-  engineer:       ["dashboard","personal_plan","my_job_description","attendance","work","field","citizen_reports","letters","docs","reports", ...LIGHTING_MENUS],
-  storekeeper:    ["dashboard","personal_plan","my_job_description","assets","attendance","reports",
+  engineer:       ["dashboard","personal_plan","my_job_description","my_surveys","attendance","work","field","citizen_reports","letters","docs","reports", ...LIGHTING_MENUS],
+  storekeeper:    ["dashboard","personal_plan","my_job_description","my_surveys","assets","attendance","reports",
                    "letters", ...WAREHOUSE_MENUS],
-  accountant:     ["dashboard","personal_plan","my_job_description","attendance","reports","report_schedule",
+  accountant:     ["dashboard","personal_plan","my_job_description","my_surveys","attendance","reports","report_schedule",
                    "letters","plans", ...FINANCE_MENUS, ...LIGHTING_MENUS],
-  hr:             ["dashboard","personal_plan","my_job_description","attendance","hr","citizen_reports","letters","reports","report_schedule","payroll","plans"],
-  safety:         ["habea_hub","dashboard","personal_plan","my_job_description","attendance","hr","letters","reports","plans","settings"],
-  electric:       ["dashboard","personal_plan","my_job_description","attendance","work","field","citizen_reports","letters","reports","plans", ...LIGHTING_MENUS],
-  camera_engineer:["dashboard","personal_plan","my_job_description","attendance","work","field","citizen_reports","letters","docs","reports","plans", ...CAMERA_MENUS],
-  worker:         ["dashboard","my_job_description","field"]
+  hr:             ["dashboard","personal_plan","my_job_description","my_surveys","attendance","hr","citizen_reports","letters","reports","report_schedule","payroll","plans"],
+  safety:         ["habea_hub","dashboard","personal_plan","my_job_description","my_surveys","attendance","hr","letters","reports","plans","settings"],
+  electric:       ["dashboard","personal_plan","my_job_description","my_surveys","attendance","work","field","citizen_reports","letters","reports","plans", ...LIGHTING_MENUS],
+  camera_engineer:["dashboard","personal_plan","my_job_description","my_surveys","attendance","work","field","citizen_reports","letters","docs","reports","plans", ...CAMERA_MENUS],
+  worker:         ["dashboard","my_job_description","my_surveys","field"]
 };
 
 const menuNames = {
@@ -66,6 +66,7 @@ const menuNames = {
   dashboard:     "📊 Нэгдсэн дэлгэц",
   personal_plan: "✓ Миний төлөвлөгөө",
   my_job_description: "📄 Миний ажлын байрны тодорхойлолт",
+  my_surveys:    "📝 Миний судалгаа",
   website:       "🌐 Вэб сайт",
   assets:        "🏗 Объектийн бүртгэл",
   attendance:    "⏱ Ирц / цагийн бүртгэл",
@@ -126,7 +127,7 @@ const menuNames = {
 };
 
 const menuGroups = [
-  { label: "ХЯНАХ САМБАР",        items: ["dashboard","personal_plan","my_job_description"] },
+  { label: "ХЯНАХ САМБАР",        items: ["dashboard","personal_plan","my_job_description","my_surveys"] },
   { label: "ОБЪЕКТИЙН БҮРТГЭЛ",  items: ["assets"] },
   { label: "ҮЙЛДЛИЙН УДИРДЛАГА", items: ["attendance","work","field"] },
   { label: "БАЙГУУЛЛАГА",         items: ["hr","letters","citizen_reports","eng_hub","habea_hub","safety","plans", ...LIGHTING_MENUS, ...CAMERA_MENUS, "finance", ...WAREHOUSE_MENUS, "payroll"] },
@@ -503,6 +504,7 @@ function renderShell() {
       <div class="top-badge">ОНЛАЙН</div>
       <div id="topClock"></div>
       <button class="mobile-job-btn" onclick="show('my_job_description')" title="Ажлын байрны тодорхойлолт">АБТ</button>
+      <button class="mobile-job-btn" onclick="show('my_surveys')" title="Миний судалгаа">Судалгаа</button>
       <div class="top-user">
         <b>${state.me.full_name}</b>
         <span>${state.me.role}</span>
@@ -709,6 +711,22 @@ async function show(m) {
   if (typeof fn === "function") return fn();
 }
 
+function my_surveys() {
+  const main = document.getElementById("main") || document.querySelector(".main");
+  if (!main) return;
+  main.innerHTML = `
+    <div style="height:calc(100vh - 64px);display:flex;flex-direction:column;background:#eef2f7">
+      <div style="background:#fff;border-bottom:1px solid #e2e8f0;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <div>
+          <div style="font-size:18px;font-weight:900;color:#0f172a">📝 Миний судалгаа</div>
+          <div style="font-size:12px;color:#64748b;margin-top:3px">Идэвхтэй асуумжаа сонгоод бөглөнө үү.</div>
+        </div>
+        <button class="btn secondary" onclick="window.open('/employee-surveys.html','_blank')">Шинэ цонхонд нээх</button>
+      </div>
+      <iframe src="/employee-surveys.html" title="Миний судалгаа" style="border:0;width:100%;flex:1;background:#eef2f7"></iframe>
+    </div>`;
+}
+
 async function code_export() {
   const main = document.getElementById("main") || document.querySelector(".main");
   if (main) main.innerHTML = `
@@ -748,7 +766,7 @@ window._doCodeExport = async function() {
 };
 
 Object.assign(window, {
-  login, logout, renderLogin, show, toggleSideGroup, code_export,
+  login, logout, renderLogin, show, toggleSideGroup, my_surveys, code_export,
   chooseMyAvatar, uploadMyAvatar,
   showForgotPassword, showLoginView, forgotPassword, resetPassword,
   loadNotifications, toggleNotifPanel, notifRead, notifReadAll,

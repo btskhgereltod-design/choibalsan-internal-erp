@@ -1,4 +1,4 @@
-import { api, today, table, state, escapeHtml } from "./common.js";
+import { api, today, table, state, escapeHtml, toast } from "./common.js";
 
 // ── Weather code → [emoji, Mongolian label] ──
 const WX_CODE = {
@@ -78,6 +78,93 @@ function renderWeather(w) {
       <div class="wc-label">🌡️ ЦАГ АГААР · ЧОЙБАЛСАН</div>
       <div class="wc-main" style="color:var(--ink3)">Интернэт холболт байхгүй</div>
       <div class="wc-sub">Локал сүлжээнд ажиллаж байна</div>`;
+  }
+}
+
+function dashboardLocationPanel() {
+  return `
+  <div class="panel" style="margin-bottom:16px;border-color:#bfdbfe">
+    <div class="panel-body" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <div>
+        <div style="font-size:14px;font-weight:900;color:#0f172a">📍 Миний байршил</div>
+        <div id="dashLocStatus" style="font-size:11px;color:#64748b;margin-top:3px">Ажилтан өөрөө зөвшөөрөөд GPS байршлаа ERP-д илгээнэ.</div>
+      </div>
+      <button id="dashLocBtn" class="btn" onclick="dashboardSendLocation()" style="padding:9px 14px;font-size:12px;white-space:nowrap">GPS илгээх</button>
+    </div>
+  </div>`;
+}
+
+function dashboardBestGeoPosition(onProgress) {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) return reject(new Error("GPS дэмжигдэхгүй байна"));
+    let best = null;
+    let done = false;
+    let watchId = null;
+    let timer = null;
+    const cleanup = () => {
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+      if (timer) clearTimeout(timer);
+    };
+    const finish = () => {
+      if (done) return;
+      done = true;
+      cleanup();
+      if (best) resolve(best);
+      else reject(new Error("GPS координат авч чадсангүй"));
+    };
+    timer = setTimeout(finish, 15000);
+    watchId = navigator.geolocation.watchPosition(
+      pos => {
+        const accuracy = Number(pos.coords.accuracy || Infinity);
+        const bestAccuracy = best ? Number(best.coords.accuracy || Infinity) : Infinity;
+        if (!best || accuracy < bestAccuracy) best = pos;
+        if (typeof onProgress === "function") onProgress(best);
+        if (Number(best.coords.accuracy || Infinity) <= 80) finish();
+      },
+      err => {
+        if (done) return;
+        done = true;
+        cleanup();
+        reject(err);
+      },
+      { timeout: 15000, enableHighAccuracy: true, maximumAge: 0 }
+    );
+  });
+}
+
+async function dashboardSendLocation() {
+  const btn = document.getElementById("dashLocBtn");
+  const status = document.getElementById("dashLocStatus");
+  if (!navigator.geolocation) {
+    toast("GPS дэмжигдэхгүй байна");
+    return;
+  }
+  if (btn) { btn.disabled = true; btn.textContent = "GPS шалгаж байна..."; }
+  if (status) status.textContent = "GPS асаалттай эсэхийг шалгаад 10-15 сек хамгийн зөв координат авч байна...";
+  try {
+    const pos = await dashboardBestGeoPosition(best => {
+      if (!status || !best?.coords) return;
+      status.textContent = `GPS уншиж байна... одоогийн нарийвчлал ±${Math.round(Number(best.coords.accuracy || 0))}м`;
+    });
+    const lat = Number(pos.coords.latitude);
+    const lng = Number(pos.coords.longitude);
+    const accuracy = Number(pos.coords.accuracy || 0);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || accuracy > 300) {
+      toast("GPS нарийвчлал муу байна. Location/GPS асаагаад гадаа эсвэл цонхны ойролцоо дахин дарна уу.");
+      if (status) status.textContent = `Хадгалаагүй: GPS нарийвчлал муу байна (±${Math.round(accuracy || 0)}м).`;
+      return;
+    }
+    const saved = await api("/api/me/location", {
+      method: "POST",
+      body: JSON.stringify({ lat, lng, accuracy, note: "dashboard_mobile" }),
+    });
+    toast("Байршил ERP-д хадгалагдлаа");
+    if (status) status.textContent = `Илгээгдсэн: ${(saved.created_at || "").slice(0,16)} · ${lat.toFixed(5)}, ${lng.toFixed(5)} · ±${Math.round(accuracy)}м`;
+  } catch (e) {
+    toast(e.message || "GPS авахад алдаа гарлаа");
+    if (status) status.textContent = "GPS permission зөвшөөрөгдөөгүй эсвэл нарийвчлалтай координат авч чадсангүй.";
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "GPS илгээх"; }
   }
 }
 
@@ -411,6 +498,8 @@ async function workerDashboard() {
     <div class="wc-divider"></div>
     <div class="wc-section" id="wcOrg" style="cursor:default"></div>
   </div>
+
+  ${dashboardLocationPanel()}
 
   <!-- Миний сарын ирц -->
   <div class="panel" style="margin-bottom:16px">
@@ -826,6 +915,8 @@ export async function dashboard() {
   </div>
 
   <!-- ═══ STATS ROW ═══ -->
+  ${dashboardLocationPanel()}
+
   <div class="stats-grid" style="grid-template-columns:repeat(6,1fr);margin-bottom:20px">
     <div class="stat-card blue">
       <div class="stat-top">
@@ -1600,4 +1691,4 @@ async function saveOrgInfo() {
   }
 }
 
-Object.assign(window, { dashboard, openOrgEdit, saveOrgInfo });
+Object.assign(window, { dashboard, dashboardSendLocation, openOrgEdit, saveOrgInfo });
