@@ -6,7 +6,7 @@ import './modules/warehouse.js';
 import './modules/hr.js?v=20260612attendanceovertime';
 import './modules/docs.js';
 import './modules/habea.js?v=20260612repairrole';
-import './modules/reports.js';
+import './modules/reports.js?v=20260702workdownload';
 import './modules/nyagtlan.js?v=20260526financenavfix';
 import './modules/nyarav.js?v=20260608manualmat';
 import './modules/personal_plan.js?v=20260604time24select';
@@ -14,7 +14,7 @@ import './modules/admin_hub.js';
 import './modules/streetlights.js?v=20260618noloratab';
 import './modules/lighting_schedule.js?v=20260527engineeredit';
 import './modules/lora_monitor.js?v=20260618redirect';
-import './modules/iot_monitor.js?v=20260629manualonreason';
+import './modules/iot_monitor.js?v=20260703phonestatus';
 import './modules/citizen_reports.js?v=20260622portal';
 import './modules/settings.js?v=20260527loginrights';
 import './modules/eng_hub.js?v=20260529monthfilter';
@@ -487,6 +487,7 @@ async function uploadMyAvatar(input) {
 
 function renderShell() {
   const allowed = getAllowedMenus();
+  const hasIotStatus = allowed.includes("iot_monitor");
   document.getElementById("app").innerHTML = `
   <div class="top">
     <div class="top-brand">
@@ -503,6 +504,7 @@ function renderShell() {
     <div class="top-right" style="gap:14px;padding-right:4px">
       <div class="top-badge">ОНЛАЙН</div>
       <div id="topClock"></div>
+      ${hasIotStatus ? `<button class="mobile-job-btn mobile-node-btn" onclick="openPhoneIotStatus()" title="Node 1/2 статус">Node</button>` : ""}
       <button class="mobile-job-btn" onclick="show('my_job_description')" title="Ажлын байрны тодорхойлолт">АБТ</button>
       <button class="mobile-job-btn" onclick="show('my_surveys')" title="Миний судалгаа">Судалгаа</button>
       <div class="top-user">
@@ -711,6 +713,11 @@ async function show(m) {
   if (typeof fn === "function") return fn();
 }
 
+function openPhoneIotStatus() {
+  window._iotPreferredView = "mobile";
+  return show("iot_monitor");
+}
+
 function my_surveys() {
   const main = document.getElementById("main") || document.querySelector(".main");
   if (!main) return;
@@ -766,7 +773,7 @@ window._doCodeExport = async function() {
 };
 
 Object.assign(window, {
-  login, logout, renderLogin, show, toggleSideGroup, my_surveys, code_export,
+  login, logout, renderLogin, show, toggleSideGroup, openPhoneIotStatus, my_surveys, code_export,
   chooseMyAvatar, uploadMyAvatar,
   showForgotPassword, showLoginView, forgotPassword, resetPassword,
   loadNotifications, toggleNotifPanel, notifRead, notifReadAll,

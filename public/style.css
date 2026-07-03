@@ -506,6 +506,11 @@ body {
   font-weight: 900;
   cursor: pointer;
 }
+.mobile-node-btn {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
 .my-job-preview {
   position: fixed;
   inset: 0;

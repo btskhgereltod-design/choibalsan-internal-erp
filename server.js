@@ -1740,6 +1740,20 @@ async function initDb() {
   )`).catch(() => {});
 
   // ── Report schedules ──────────────────────────────────────
+  await run(`CREATE TABLE IF NOT EXISTS work_report_snapshots (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    year          INTEGER NOT NULL,
+    month         INTEGER NOT NULL,
+    category_key  TEXT NOT NULL DEFAULT 'all',
+    title         TEXT NOT NULL,
+    filter_json   TEXT DEFAULT '[]',
+    data_json     TEXT NOT NULL,
+    created_by    INTEGER,
+    created_at    TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at    TEXT DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(year, month, category_key)
+  )`).catch(() => {});
+
   await run(`CREATE TABLE IF NOT EXISTS report_schedules (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     name        TEXT NOT NULL,

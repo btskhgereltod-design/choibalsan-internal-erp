@@ -1379,7 +1379,8 @@ router.get("/iot/timeseries", auth, async (req, res) => {
     params.push(devEui);
   }
   const rows = await all(
-    `SELECT id,dev_eui,device_name,received_at,voltage,current,power,energy,do_state
+    `SELECT id,dev_eui,device_name,received_at,voltage,current,power,energy,do_state,
+            ua,ub,uc,ia,ib,ic,total_power,ep
        FROM iot_meter_readings
       WHERE datetime(received_at) >= datetime(?) AND datetime(received_at) < datetime(?)
       ${whereDev}
@@ -1402,9 +1403,21 @@ router.get("/iot/timeseries", auth, async (req, res) => {
         powerSum: 0,
         voltageSum: 0,
         currentSum: 0,
+        iaSum: 0,
+        ibSum: 0,
+        icSum: 0,
+        uaSum: 0,
+        ubSum: 0,
+        ucSum: 0,
         powerCount: 0,
         voltageCount: 0,
         currentCount: 0,
+        iaCount: 0,
+        ibCount: 0,
+        icCount: 0,
+        uaCount: 0,
+        ubCount: 0,
+        ucCount: 0,
         firstEnergy: null,
         lastEnergy: null,
       });
@@ -1412,13 +1425,25 @@ router.get("/iot/timeseries", auth, async (req, res) => {
     const b = buckets.get(key);
     b.samples += 1;
     if (isReadingOn(row)) b.onSamples += 1;
-    const power = Number(row.power);
-    const voltage = Number(row.voltage);
-    const current = Number(row.current);
-    const energy = Number(row.energy);
+    const power = Number(row.total_power ?? row.power);
+    const voltage = Number(row.ua ?? row.voltage);
+    const current = Number(row.ia ?? row.current);
+    const energy = Number(row.ep ?? row.energy);
+    const ia = Number(row.ia);
+    const ib = Number(row.ib);
+    const ic = Number(row.ic);
+    const ua = Number(row.ua);
+    const ub = Number(row.ub);
+    const uc = Number(row.uc);
     if (Number.isFinite(power)) { b.powerSum += power; b.powerCount += 1; }
     if (Number.isFinite(voltage)) { b.voltageSum += voltage; b.voltageCount += 1; }
     if (Number.isFinite(current)) { b.currentSum += current; b.currentCount += 1; }
+    if (Number.isFinite(ia)) { b.iaSum += ia; b.iaCount += 1; }
+    if (Number.isFinite(ib)) { b.ibSum += ib; b.ibCount += 1; }
+    if (Number.isFinite(ic)) { b.icSum += ic; b.icCount += 1; }
+    if (Number.isFinite(ua)) { b.uaSum += ua; b.uaCount += 1; }
+    if (Number.isFinite(ub)) { b.ubSum += ub; b.ubCount += 1; }
+    if (Number.isFinite(uc)) { b.ucSum += uc; b.ucCount += 1; }
     if (Number.isFinite(energy)) {
       if (b.firstEnergy === null) b.firstEnergy = energy;
       b.lastEnergy = energy;
@@ -1432,6 +1457,12 @@ router.get("/iot/timeseries", auth, async (req, res) => {
     avgPowerKw: b.powerCount ? round(b.powerSum / b.powerCount, 3) : null,
     avgVoltage: b.voltageCount ? round(b.voltageSum / b.voltageCount, 1) : null,
     avgCurrent: b.currentCount ? round(b.currentSum / b.currentCount, 2) : null,
+    avgIa: b.iaCount ? round(b.iaSum / b.iaCount, 2) : null,
+    avgIb: b.ibCount ? round(b.ibSum / b.ibCount, 2) : null,
+    avgIc: b.icCount ? round(b.icSum / b.icCount, 2) : null,
+    avgUa: b.uaCount ? round(b.uaSum / b.uaCount, 1) : null,
+    avgUb: b.ubCount ? round(b.ubSum / b.ubCount, 1) : null,
+    avgUc: b.ucCount ? round(b.ucSum / b.ucCount, 1) : null,
     onPct: b.samples ? round((b.onSamples / b.samples) * 100, 1) : 0,
     energyDeltaKwh: Number.isFinite(Number(b.lastEnergy) - Number(b.firstEnergy)) ? round(Math.max(0, Number(b.lastEnergy) - Number(b.firstEnergy)), 3) : null,
     energyKwh: b.lastEnergy,

@@ -39,6 +39,7 @@ let _iotFeederCables = [];
 let _iotFeedPointDeviceLinks = [];
 let _iotDualSide = false;
 let _iotSelectedFeedPointId = null;
+let _iotPoleWireStartId = null;
 let _iotRoadWidth = 14;
 let _iotScheduleInfo = [];
 let _iotEmployeeLocations = [];
@@ -204,6 +205,35 @@ function phaseLine(row) {
     `EP ${fmtNum(row.EP ?? row.energy, 3, "kWh")}`,
     `Pf ${fmtNum(row.Pf ?? row.power_factor, 3)}`,
   ].join(" · ");
+}
+
+function phaseLineVoltageEstimate(row) {
+  if (rowModel(row) !== "ADW300") return null;
+  const vals = ["Ua", "Ub", "Uc"]
+    .map(field => phaseNumber(row, field))
+    .filter(value => value !== null && value > 1);
+  if (!vals.length) return null;
+  const avgLn = vals.reduce((sum, value) => sum + value, 0) / vals.length;
+  return avgLn * Math.sqrt(3);
+}
+
+function nodeLiveVoltageHtml(row) {
+  if (rowModel(row) !== "ADW300") {
+    const model = rowModel(row);
+    const label = model === "ADW310" ? "220V 1 фаз" : "V";
+    return `<span class="iot-node-live-voltage" title="220V нэг фазын хүчдэл">
+      <b>${label}</b> ${fmtIotValue(row, "voltage", 1, " V")}
+    </span>`;
+  }
+  if (isDecoderMissing(row)) return `<span>-</span>`;
+  const ua = fmtNum(row.Ua, 1, "V");
+  const ub = fmtNum(row.Ub, 1, "V");
+  const uc = fmtNum(row.Uc, 1, "V");
+  const lineVoltage = phaseLineVoltageEstimate(row);
+  return `<span class="iot-node-live-voltage" title="Ua/Ub/Uc нь фаз-нейтраль 220-240V. Фаз хооронд ойролцоогоор 380-400V байна.">
+    <b>380V 3 фаз</b> L-N ${ua}/${ub}/${uc}
+    ${lineVoltage ? `<em>L-L ~${lineVoltage.toFixed(0)}V</em>` : ""}
+  </span>`;
 }
 
 function hasActiveLoad(row) {
@@ -515,10 +545,23 @@ function renderUsageChart() {
   const w = 860, h = 260, pl = 46, pr = 18, pt = 18, pb = 38;
   const cw = w - pl - pr, ch = h - pt - pb;
   const maxKw = Math.max(0.1, ...series.map(p => Number(p.avgPowerKw) || 0));
+  const hasPhaseCurrent = series.some(p => [p.avgIa, p.avgIb, p.avgIc].some(value => Number.isFinite(Number(value))));
+  const maxAmp = hasPhaseCurrent
+    ? Math.max(1, ...series.flatMap(p => [p.avgIa, p.avgIb, p.avgIc].map(value => Number(value) || 0)))
+    : 0;
   const xOf = i => pl + (series.length === 1 ? cw / 2 : (i / (series.length - 1)) * cw);
   const yKw = v => pt + ch - ((Number(v) || 0) / maxKw) * ch;
+  const yAmp = v => pt + ch - ((Number(v) || 0) / maxAmp) * ch;
   const yPct = v => pt + ch - ((Number(v) || 0) / 100) * ch;
   const powerPts = series.map((p, i) => `${xOf(i).toFixed(1)},${yKw(p.avgPowerKw).toFixed(1)}`).join(" ");
+  const phaseLines = hasPhaseCurrent ? [
+    { key: "avgIa", label: "Ia", color: "#dc2626" },
+    { key: "avgIb", label: "Ib", color: "#16a34a" },
+    { key: "avgIc", label: "Ic", color: "#7c3aed" },
+  ].map(line => ({
+    ...line,
+    points: series.map((p, i) => `${xOf(i).toFixed(1)},${yAmp(p[line.key]).toFixed(1)}`).join(" "),
+  })) : [];
   const onPts = series.map((p, i) => `${xOf(i).toFixed(1)},${yPct(p.onPct).toFixed(1)}`).join(" ");
   const ticks = series.filter((_, i) => series.length <= 10 || i % Math.ceil(series.length / 8) === 0 || i === series.length - 1);
   return `<div class="iot-chart-wrap">
@@ -528,8 +571,13 @@ function renderUsageChart() {
         const y = pt + ch - r * ch;
         return `<path d="M${pl} ${y} H${pl + cw}" stroke="#d5e0ea" stroke-width="1"/><text x="8" y="${y + 4}" font-size="10" fill="#58728b">${fmtNum(maxKw * r, 2)}</text>`;
       }).join("")}
+      ${hasPhaseCurrent ? [0, .25, .5, .75, 1].map(r => {
+        const y = pt + ch - r * ch;
+        return `<text x="${w - 14}" y="${y + 4}" text-anchor="end" font-size="10" fill="#7c3aed">${fmtNum(maxAmp * r, 1)}</text>`;
+      }).join("") : ""}
       <polyline points="${onPts}" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="5 4"/>
       <polyline points="${powerPts}" fill="none" stroke="#1f6fb2" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      ${phaseLines.map(line => `<polyline points="${line.points}" fill="none" stroke="${line.color}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`).join("")}
       ${series.map((p, i) => {
         const x = xOf(i), y = yKw(p.avgPowerKw);
         return `<circle cx="${x}" cy="${y}" r="4" fill="#1f6fb2"><title>${chartTimeLabel(p.bucketStart)} · ${fmtNum(p.avgPowerKw, 3, " kW")} · ON ${fmtNum(p.onPct, 1, "%")} · ${p.samples} sample</title></circle>`;
@@ -537,6 +585,14 @@ function renderUsageChart() {
       ${ticks.map((p, i) => `<text x="${xOf(series.indexOf(p))}" y="${h - 12}" text-anchor="${i === 0 ? "start" : "middle"}" font-size="10" fill="#58728b">${chartTimeLabel(p.bucketStart)}</text>`).join("")}
       <text x="${pl}" y="12" font-size="11" fill="#1f6fb2" font-weight="800">kW</text>
       <text x="${pl + 42}" y="12" font-size="11" fill="#64748b" font-weight="800">--- ON%</text>
+      ${hasPhaseCurrent ? `
+        <text x="${w - 14}" y="12" text-anchor="end" font-size="11" fill="#7c3aed" font-weight="800">A</text>
+        <g font-size="11" font-weight="800">
+          <text x="${pl + 116}" y="12" fill="#dc2626">Ia</text>
+          <text x="${pl + 140}" y="12" fill="#16a34a">Ib</text>
+          <text x="${pl + 164}" y="12" fill="#7c3aed">Ic</text>
+        </g>
+      ` : ""}
     </svg>
   </div>`;
 }
@@ -912,7 +968,7 @@ function renderNodeLivePanel() {
           </div>
           <div class="iot-node-live-state" style="color:${relayColor}">${relayLabel}</div>
           <div class="iot-node-live-vals">
-            <span>${fmtIotValue(row, "voltage", 1, " V")}</span>
+            ${nodeLiveVoltageHtml(row)}
             <span>${fmtIotValue(row, "current", 2, " A")}</span>
             <span>${fmtIotValue(row, "power", 3, " kW")}</span>
             <span>${fmtIotValue(row, "energy", 3, " kWh")}</span>
@@ -921,6 +977,55 @@ function renderNodeLivePanel() {
         </div>`;
       }).join("")}
     </div>
+  </div>`;
+}
+
+function phoneNodeRows() {
+  const byName = name => _iotRows.find(row => String(row.deviceName || "").toLowerCase().includes(name));
+  return [byName("nod 1") || byName("node 1"), byName("nod 2") || byName("node 2")]
+    .filter(Boolean);
+}
+
+function renderPhoneNodeCard(row) {
+  const relay = relayState(row);
+  const online = isDeviceOnline(row);
+  const stateLabel = relay === "on" ? "АССАН" : relay === "off" ? "УНТАРСАН" : "ТОДОРХОЙГҮЙ";
+  const cardClass = relay === "on" ? "is-on" : relay === "off" ? "is-off" : "is-unknown";
+  return `<section class="iot-phone-node ${cardClass}">
+    <div class="iot-phone-node-top">
+      <div>
+        <h3>${fmtText(row.deviceName)}</h3>
+        <span>${rowModel(row) === "ADW300" ? "380V 3 фаз" : "220V 1 фаз"}</span>
+      </div>
+      <b>${stateLabel}</b>
+    </div>
+    <div class="iot-phone-metrics">
+      <div><span>Дохио</span><strong class="${online ? "ok" : "bad"}">${online ? "Ирсэн" : "Тасарсан"}</strong></div>
+      <div><span>kW</span><strong>${fmtIotValue(row, "power", 3, "")}</strong></div>
+      <div><span>A</span><strong>${fmtIotValue(row, "current", 2, "")}</strong></div>
+      <div><span>kWh</span><strong>${fmtIotValue(row, "energy", 3, "")}</strong></div>
+    </div>
+    <div class="iot-phone-voltage">${nodeLiveVoltageHtml(row)}</div>
+    ${rowModel(row) === "ADW300" ? `<div class="iot-phone-phase">
+      <span>Ia ${fmtNum(row.Ia, 2, "A")}</span>
+      <span>Ib ${fmtNum(row.Ib, 2, "A")}</span>
+      <span>Ic ${fmtNum(row.Ic, 2, "A")}</span>
+    </div>` : ""}
+    <time>${fmtDate(row.last_seen)}</time>
+  </section>`;
+}
+
+function renderPhoneStatusPanel() {
+  const rows = phoneNodeRows();
+  return `<div class="iot-phone-page">
+    <div class="iot-phone-head">
+      <div>
+        <h2>Миний утасны IoT статус</h2>
+        <p>Node 1, Node 2 · зөвхөн ERP login-той үед харагдана</p>
+      </div>
+      <button onclick="iotRefresh()">Шинэчлэх</button>
+    </div>
+    ${rows.length ? `<div class="iot-phone-list">${rows.map(renderPhoneNodeCard).join("")}</div>` : `<div class="iot-chart-empty">Node 1, Node 2 мэдээлэл олдсонгүй.</div>`}
   </div>`;
 }
 
@@ -1322,6 +1427,10 @@ function routePopup(row) {
   const lampCount = invRow?.lamp_count || row.lamp_count || routePoles.length || 0;
   const spacingM = lampCount > 1 && totalM > 0 ? Math.round(totalM / (lampCount - 1)) : "-";
   const savedCount = lampCount;
+  const routeCableSegs = _iotNetworkRoutes.filter(r => r.route_type === "cable" && Number(r.parent_route_id) === Number(row.id));
+  const routeFeederLinks = _iotFeederCables.filter(fc =>
+    routeCableSegs.some(seg => Number(seg.id) === Number(fc.cable_segment_id))
+  );
   const totalMStr = totalM > 0 ? (totalM / 1000).toFixed(2) + " км" : "—";
   const catLabel = { road: "Авто замын гэрэл", ger: "Гэр хороолол", tower: "Цамхаг" }[row.route_type] || row.route_type || "";
   const statusLabel = row.status === "active" ? "Идэвхтэй" : "Ноорог";
@@ -1491,7 +1600,7 @@ function polePopup(pole) {
         </div>` : ""}
       ${divider}
       <div style="display:flex;gap:6px;flex-wrap:wrap">
-        
+        ${!isFeed ? `<button style="${btnStyle} #fed7aa;background:#fff7ed;color:#9a3412" onclick="iotStartPoleWire(${Number(pole.id)})">${_iotPoleWireStartId && Number(_iotPoleWireStartId) !== Number(pole.id) ? "🔗 Утас холбох" : "🔗 Утас эхлэх"}</button>` : ""}
         ${route && !isFeed ? `<button style="${btnStyle} #86efac;background:#f0fdf4;color:#166534" onclick="iotEditPoles(${Number(route.id)})">✏ Шон засах</button>` : ""}
         <button style="${btnStyle} #fecaca;background:#fff0f0;color:#b91c1c" onclick="iotDeleteNetworkPole(${Number(pole.id)})">🗑 Устгах</button>
       </div>
@@ -1906,6 +2015,7 @@ function renderMapPanel({ editable = true } = {}) {
 }
 
 function renderIotBody() {
+  if (_iotView === "mobile") return renderPhoneStatusPanel();
   if (_iotView === "report") return renderReportPanel();
   if (_iotView === "list") return renderTable();
   if (_iotView === "map") return `${renderOperatorGuide()}${renderMapPanel({ editable: true })}`;
@@ -1966,6 +2076,7 @@ async function initIotMap() {
   const lightLayer = window.L.featureGroup().addTo(_iotMap);
   const linkLayer = window.L.featureGroup().addTo(_iotMap);
   const networkRouteLayer = window.L.featureGroup().addTo(_iotMap);
+  const cableLayer = window.L.featureGroup().addTo(_iotMap);
   const poleLayer = window.L.featureGroup().addTo(_iotMap);
   const gatewayLayer = window.L.featureGroup().addTo(_iotMap);
   const employeeLayer = window.L.featureGroup().addTo(_iotMap);
@@ -2051,7 +2162,7 @@ async function initIotMap() {
         color: wireColor, weight: _iotScadaMode ? 3 : 2, dashArray: "6 4", opacity: 0.9,
       }).bindPopup(cableRoutePopup(route))
         .bindTooltip(`⚡ ${escapeHtml(route.name || "Тэжээлийн утас")}`, { sticky: true })
-        .addTo(networkRouteLayer);
+        .addTo(cableLayer);
       return;
     }
     const segStatus = isCable ? iotSegmentVisualStatus(route) : null;
@@ -2069,11 +2180,26 @@ async function initIotMap() {
     const cableHaloWeight = zoomNow <= 13 ? 5 : zoomNow <= 15 ? 7 : (_iotScadaMode ? 11 : 9);
     const cableLineWeight = zoomNow <= 13 ? 2.5 : zoomNow <= 15 ? 3.5 : (_iotScadaMode ? 4 : 5);
     if (isCable) {
+      const hitLine = window.L.polyline(geometry.map(p => [p.lat, p.lng]), {
+        color: "#000",
+        weight: Math.max(cableHaloWeight + 12, 18),
+        opacity: 0,
+        interactive: true,
+      }).addTo(cableLayer);
+      hitLine.on("click", (e) => {
+        window.L.DomEvent.stopPropagation(e);
+        if (_iotDrawMode === "feed_connect" && _iotSelectedFeedPointId) {
+          iotConnectFeedToSegment(_iotSelectedFeedPointId, Number(route.id));
+        } else {
+          window.L.popup({ maxWidth: 400 }).setLatLng(e.latlng).setContent(cableRoutePopup(route)).openOn(_iotMap);
+        }
+      });
       window.L.polyline(geometry.map(p => [p.lat, p.lng]), {
         color: _iotScadaMode ? "rgba(255,107,53,0.28)" : "rgba(239,68,68,0.30)",
         weight: cableHaloWeight,
         opacity: 1,
-      }).addTo(networkRouteLayer);
+        interactive: false,
+      }).addTo(cableLayer);
     }
     const cableLabel = isCable && route.pole_start ? ` · ${route.pole_start}-${route.pole_end} шон` : "";
     const routeLine = window.L.polyline(geometry.map(p => [p.lat, p.lng]), {
@@ -2082,7 +2208,7 @@ async function initIotMap() {
       opacity: route.status === "active" ? 0.92 : 0.62,
       dashArray: isCable ? "12 6" : (route.status === "active" ? "" : "8 7"),
     }).bindTooltip(isCable ? `🔌 ${escapeHtml(route.name || "Кабель")}${cableLabel}` : escapeHtml(route.name || "Трасс"), { sticky: true })
-      .addTo(networkRouteLayer);
+      .addTo(isCable ? cableLayer : networkRouteLayer);
     if (isCable) {
       routeLine.on("click", (e) => {
         window.L.DomEvent.stopPropagation(e);
@@ -2236,6 +2362,7 @@ async function initIotMap() {
   window.L.control.layers({}, {
     "ADW төхөөрөмж": _iotMarkers,
     "Трасс / коридор": networkRouteLayer,
+    "Кабель / цахилгааны утас": cableLayer,
     "Шон / pole": poleLayer,
     "⚡ Тэжээлийн цэг": newFeedPointLayer,
     "Ажилтан GPS": employeeLayer,
@@ -2245,6 +2372,7 @@ async function initIotMap() {
     ...meterLayer.getLayers(),
     ...lightLayer.getLayers(),
     ...networkRouteLayer.getLayers(),
+    ...cableLayer.getLayers(),
     ...poleLayer.getLayers(),
     ...employeeLayer.getLayers(),
   ]);
@@ -2572,6 +2700,52 @@ function iotStartFeedConnect(feedPointId) {
   updateIotDrawButtons();
   setIotDrawHint(`⚡ "${fp?.name || "Тэжээл"}" сонгогдлоо · Холбох кабель сегмент дээр дарна уу`);
   renderNetworkWorkspace();
+}
+
+async function iotStartPoleWire(poleId) {
+  const pole = _iotNetworkPoles.find(row => Number(row.id) === Number(poleId));
+  if (!pole) { toast("Шон олдсонгүй"); return; }
+  const coord = coordForStoredPoint(pole);
+  if (!coord) { toast("Энэ шонд GPS байхгүй"); return; }
+  if (!_iotPoleWireStartId || Number(_iotPoleWireStartId) === Number(poleId)) {
+    _iotPoleWireStartId = Number(poleId);
+    _iotDrawMode = "";
+    _iotSplitMode = false;
+    _iotSelectedFeedPointId = null;
+    _iotMap?.closePopup();
+    updateIotDrawButtons();
+    setIotDrawHint(`🔗 "${pole.name || pole.code || "Шон"}" эхлэл боллоо · Холбох хоёр дахь шон дээр дарж "Утас холбох" сонгоно уу`);
+    return;
+  }
+  const startPole = _iotNetworkPoles.find(row => Number(row.id) === Number(_iotPoleWireStartId));
+  const startCoord = startPole ? coordForStoredPoint(startPole) : null;
+  if (!startPole || !startCoord) {
+    _iotPoleWireStartId = Number(poleId);
+    toast("Эхний шон олдсонгүй, энэ шоныг эхлэл болголоо");
+    return;
+  }
+  if (!confirm(`"${startPole.name || startPole.code || "Шон"}" ↔ "${pole.name || pole.code || "Шон"}" хооронд цахилгааны утас холбох уу?`)) return;
+  const routeName = `Холбогч утас: ${startPole.name || startPole.code || startPole.id} ↔ ${pole.name || pole.code || pole.id}`;
+  await api("/api/sl-network/routes", {
+    method: "POST",
+    body: JSON.stringify({
+      name: routeName,
+      route_type: "feed_wire",
+      status: "active",
+      color: "#f97316",
+      parent_route_id: startPole.route_id || pole.route_id || null,
+      wire_install_type: "pole_to_pole",
+      notes: `pole_wire:${startPole.id}-${pole.id}`,
+      geometry: [
+        { lat: startCoord.lat, lng: startCoord.lng },
+        { lat: coord.lat, lng: coord.lng },
+      ],
+    }),
+  });
+  _iotPoleWireStartId = null;
+  _iotMap?.closePopup();
+  toast("Шон хоорондын цахилгааны утас холбогдлоо");
+  await iotRefresh();
 }
 
 function iotClearDraft() {
@@ -3198,6 +3372,18 @@ async function iotDeleteFeederCable(id) {
   await iotRefresh();
 }
 
+async function iotDisconnectFeedFromSegment(feedPoleOrPointId, cableSegmentId) {
+  const link = _iotFeederCables.find(fc =>
+    Number(fc.cable_segment_id) === Number(cableSegmentId) &&
+    Number(fc.feed_point_id) === Number(feedPoleOrPointId)
+  );
+  if (link) {
+    await iotDeleteFeederCable(link.id);
+    return;
+  }
+  toast("Салгах тэжээлийн холболт олдсонгүй");
+}
+
 async function iotToggleSegmentStatus(segmentId, newStatus) {
   const res = await api(`/api/sl-network/cable-segments/${segmentId}/status`, {
     method: "PUT",
@@ -3356,7 +3542,7 @@ function feedPointPopup(fp) {
         }).join("")}
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
-        <button style="${btnS}#fde68a;background:#fffbeb;color:#92400e" onclick="_iotMap?.closePopup();iotSetDrawMode('feed_connect');_iotSelectedFeedPointId=${Number(fp.id)};setIotDrawHint('⚡ &quot;${escapeHtml(fp.name)}&quot; сонгогдлоо · Холбох кабель сегмент дээр дарна уу');renderNetworkWorkspace()">🔗 Кабель холбох</button>
+        <button style="${btnS}#fde68a;background:#fffbeb;color:#92400e" onclick="iotStartFeedConnect(${Number(fp.id)})">🔗 Кабель холбох</button>
         <button style="${btnS}#fecaca;background:#fff0f0;color:#b91c1c" onclick="iotDeleteFeedPoint(${Number(fp.id)})">🗑 Устгах</button>
       </div>
     </div>`;
@@ -3663,6 +3849,19 @@ function cableRoutePopup(route) {
   const feedPole = route.feed_pole_id ? _iotNetworkPoles.find(p => Number(p.id) === Number(route.feed_pole_id)) : null;
   const parentRoute = route.parent_route_id ? _iotNetworkRoutes.find(r => Number(r.id) === Number(route.parent_route_id)) : null;
   const poleCount = route.pole_start && route.pole_end ? (Number(route.pole_end) - Number(route.pole_start) + 1) : null;
+  const selectedFeedPoint = _iotSelectedFeedPointId ? _iotFeedPoints.find(fp => Number(fp.id) === Number(_iotSelectedFeedPointId)) : null;
+  const linkedFeeders = !isFeedWire
+    ? _iotFeederCables.filter(fc => Number(fc.cable_segment_id) === Number(route.id))
+    : [];
+  const feederLink = !isFeedWire
+    ? _iotFeederCables.find(fc => Number(fc.cable_segment_id) === Number(route.id) && (!_iotSelectedFeedPointId || Number(fc.feed_point_id) === Number(_iotSelectedFeedPointId)))
+    : null;
+  const feedLabel = feedPole
+    ? `⚡ ${escapeHtml(feedPole.name || "Холбогдсон")}`
+    : linkedFeeders.length
+      ? linkedFeeders.map(fc => `⚡ ${escapeHtml(fc.feed_point_name || _iotFeedPoints.find(fp => Number(fp.id) === Number(fc.feed_point_id))?.name || "Тэжээл")}`).join(" · ")
+      : "Холбоогүй";
+  const feedColor = (feedPole || linkedFeeders.length) ? "#b45309" : "#94a3b8";
   const headerColor = isFeedWire ? "#ea580c" : "#ef4444";
   const headerLabel = isFeedWire ? "⚡ Тэжээлийн утас" : "🔌 Кабель сегмент";
   const segStatus = isFeedWire ? null : iotSegmentVisualStatus(route);
@@ -3684,7 +3883,10 @@ function cableRoutePopup(route) {
         ${segStatusLabel ? `<span style="color:#64748b">Төлөв</span><b style="color:${segStatusColor}">${segStatusLabel}</b>` : ""}
         <span style="color:#64748b">Тэжээл</span><b style="color:${feedPole ? '#b45309' : '#94a3b8'}">${feedPole ? `⚡ ${escapeHtml(feedPole.name || "Холбогдсон")}` : "Холбоогүй"}</b>
       </div>
+      ${linkedFeeders.length ? `<div style="margin-top:7px;padding:6px 8px;border:1px solid #fde68a;background:#fffbeb;border-radius:7px;font-size:12px;color:#92400e;font-weight:800">Шинэ холболт: ${feedLabel}</div>` : ""}
       <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+        ${!isFeedWire && selectedFeedPoint && !feederLink ? `<button style="${btnStyle} #fde68a;background:#fffbeb;color:#92400e" onclick="iotConnectFeedToSegment(${Number(selectedFeedPoint.id)},${Number(route.id)})">🔗 ${escapeHtml(selectedFeedPoint.name || "Тэжээл")} холбох</button>` : ""}
+        ${!isFeedWire && selectedFeedPoint && feederLink ? `<button style="${btnStyle} #fca5a5;background:#fff0f0;color:#b91c1c" onclick="iotDeleteFeederCable(${Number(feederLink.id)})">✕ ${escapeHtml(selectedFeedPoint.name || "Тэжээл")} салгах</button>` : ""}
         ${!isFeedWire ? `<button style="${btnStyle} ${toggleBorder}" onclick="iotToggleSegmentStatus(${Number(route.id)},'${toggleStatus}')">${toggleLabel}</button>` : ""}
         ${!isFeedWire ? `<button style="${btnStyle} #fde68a;background:#fffbeb;color:#92400e" onclick="iotSetSegmentFault(${Number(route.id)})">⚠ Гэмтэл</button>` : ""}
         ${route.feed_pole_id ? `<button style="${btnStyle} #e0f2fe;background:#f0f9ff;color:#0369a1" onclick="iotHighlightFeed(${Number(route.feed_pole_id)},${Number(route.id)})">⚡ Тодруулах</button>` : ""}
@@ -3749,7 +3951,7 @@ function iotToggleMaximize() {
 }
 
 function iotSetView(view) {
-  _iotView = ["overview", "map", "list", "report"].includes(view) ? view : "overview";
+  _iotView = ["overview", "mobile", "map", "list", "report"].includes(view) ? view : "overview";
   _iotMap = null;
   _iotMarkers = null;
   renderIotPage();
@@ -3948,7 +4150,33 @@ renderIotPage = function() {
       .iot-node-live-badge{font-size:10px;padding:2px 7px;border-radius:999px;font-weight:700;white-space:nowrap;flex-shrink:0}
       .iot-node-live-state{font-size:11px;font-weight:800;margin-bottom:4px}
       .iot-node-live-vals{display:flex;gap:10px;font-size:11px;color:#475569;font-family:Consolas,monospace;flex-wrap:wrap}
+      .iot-node-live-voltage{display:flex;align-items:center;gap:4px;flex-wrap:wrap;line-height:1.25;color:#334155}
+      .iot-node-live-voltage b{font-family:Inter,system-ui,sans-serif;font-size:10px;color:#2563eb}
+      .iot-node-live-voltage em{font-style:normal;font-family:Inter,system-ui,sans-serif;font-size:10px;font-weight:800;color:#15803d;background:#dcfce7;border-radius:999px;padding:1px 5px}
       .iot-node-live-time{font-size:10px;color:#94a3b8;margin-top:3px}
+      .iot-phone-page{max-width:560px;margin:0 auto;padding:8px 0 18px}
+      .iot-phone-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+      .iot-phone-head h2{margin:0;color:#102033;font-size:20px;line-height:1.2}
+      .iot-phone-head p{margin:4px 0 0;color:#58728b;font-size:12px}
+      .iot-phone-head button{border:1px solid #8db4d8;background:#e8f2fb;color:#1f5f9a;border-radius:8px;padding:9px 12px;font-size:12px;font-weight:900}
+      .iot-phone-list{display:grid;gap:12px}
+      .iot-phone-node{border:1px solid #b8c7d6;border-radius:10px;background:#fff;padding:14px;box-shadow:0 10px 22px rgba(31,55,77,.08)}
+      .iot-phone-node.is-on{border-color:#86efac;background:linear-gradient(180deg,#f0fdf4,#ffffff)}
+      .iot-phone-node.is-off{border-color:#fca5a5;background:linear-gradient(180deg,#fef2f2,#ffffff)}
+      .iot-phone-node-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px}
+      .iot-phone-node h3{margin:0;color:#0f172a;font-size:18px;line-height:1.2}
+      .iot-phone-node-top span{display:block;margin-top:4px;color:#58728b;font-size:12px;font-weight:800}
+      .iot-phone-node-top b{border-radius:10px;padding:8px 10px;color:#fff;font-size:13px;font-weight:950;white-space:nowrap}
+      .iot-phone-node.is-on .iot-phone-node-top b{background:#16a34a}.iot-phone-node.is-off .iot-phone-node-top b{background:#dc2626}.iot-phone-node.is-unknown .iot-phone-node-top b{background:#64748b}
+      .iot-phone-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:10px}
+      .iot-phone-metrics div{border:1px solid #d5e0ea;border-radius:8px;background:#f8fbff;padding:8px;min-width:0}
+      .iot-phone-metrics span{display:block;color:#58728b;font-size:10px;font-weight:900;text-transform:uppercase}
+      .iot-phone-metrics strong{display:block;color:#102033;font-size:15px;margin-top:3px;overflow:hidden;text-overflow:ellipsis}
+      .iot-phone-metrics strong.ok{color:#15803d}.iot-phone-metrics strong.bad{color:#b91c1c}
+      .iot-phone-voltage{font-family:Consolas,Menlo,monospace;font-size:12px;color:#334155;margin-bottom:8px}
+      .iot-phone-phase{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+      .iot-phone-phase span{border:1px solid #dbeafe;background:#eff6ff;color:#1d4ed8;border-radius:999px;padding:4px 8px;font-size:11px;font-weight:900}
+      .iot-phone-node time{display:block;color:#94a3b8;font-size:11px}
       .iot-view-overview .iot-map-shell{height:100%;width:100%;display:flex;flex-direction:column;min-height:0;min-width:0}
       .iot-view-overview .iot-map-toolbar{padding:9px 12px}
       .iot-view-overview .iot-map-sub{font-size:11px;line-height:1.25}
@@ -4135,6 +4363,10 @@ renderIotPage = function() {
       }
       @media (max-width:760px){
         .iot-page{padding:10px}
+        .iot-tabs{overflow-x:auto;padding-bottom:2px}
+        .iot-tab{white-space:nowrap}
+        .iot-phone-head{align-items:stretch;flex-direction:column}
+        .iot-phone-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
         .iot-command-title{align-items:stretch;flex-direction:column}
         .iot-command-title h2{font-size:18px}
         .iot-guide summary{align-items:flex-start;flex-direction:column}
@@ -4149,6 +4381,7 @@ renderIotPage = function() {
     <div class="iot-page iot-view-${_iotView}">
       <div class="iot-tabs" role="tablist" aria-label="IoT харагдац">
         <button class="iot-tab ${_iotView === "overview" ? "is-active" : ""}" onclick="iotSetView('overview')">Нөхцөл байдлын самбар</button>
+        <button class="iot-tab ${_iotView === "mobile" ? "is-active" : ""}" onclick="iotSetView('mobile')">Утасны самбар</button>
         <button class="iot-tab ${_iotView === "map" ? "is-active" : ""}" onclick="iotSetView('map')">Зураглал, бүтэц засвар</button>
         <button class="iot-tab ${_iotView === "list" ? "is-active" : ""}" onclick="iotSetView('list')">Node удирдлага</button>
         <button class="iot-tab ${_iotView === "report" ? "is-active" : ""}" onclick="iotSetView('report')">Ажиллагааны түүх</button>
@@ -4355,6 +4588,13 @@ async function iotSetAutoMode(devEui, autoMode) {
 }
 
 async function iot_monitor() {
+  if (window._iotPreferredView) {
+    _iotView = window._iotPreferredView;
+    window._iotPreferredView = "";
+  }
+  const isPhone = window.matchMedia("(max-width: 760px)").matches ||
+    Math.min(window.screen?.width || 9999, window.screen?.height || 9999) <= 760;
+  if (isPhone && _iotView === "overview") _iotView = "mobile";
   const el = document.getElementById("main");
   if (el) {
     el.innerHTML = `<div style="padding:24px;color:#64748b">IoT хэмжилтүүдийг ачааллаж байна...</div>`;
@@ -4405,6 +4645,7 @@ Object.assign(window, {
   setIotDrawHint,
   iotSetDrawMode,
   iotStartFeedConnect,
+  iotStartPoleWire,
   iotClearDraft,
   iotSaveDraftRoute,
   iotDeleteNetworkRoute,
@@ -4425,6 +4666,7 @@ Object.assign(window, {
   iotPlaceFeedPoint,
   iotConnectFeedToSegment,
   iotDeleteFeederCable,
+  iotDisconnectFeedFromSegment,
   iotDeleteFeedPoint,
   iotLinkNodePrompt: iotLinkNodePromptReplace,
   iotLinkNodeToFeedPoint: iotLinkNodeToFeedPointReplace,

@@ -314,8 +314,85 @@ function rptGroupByCategory(rows) {
   return [...groups.entries()].map(([category, items]) => ({ category, items }));
 }
 
+async function buildWorkReportSnapshot(year, month) {
+  let allWork = [], execs = [];
+  if (_rptCache && _rptCache.year === year) {
+    allWork = _rptCache.allWork || [];
+    execs = _rptCache.execs || [];
+  } else {
+    try { allWork = await api("/api/work-logs"); } catch(e) {}
+    try { execs = await api(`/api/executions?year=${year}`); } catch(e) {}
+  }
+  const execMap = rptExecMap(execs);
+  const mm = String(month).padStart(2, "0");
+  const prefix = `${year}-${mm}`;
+  const execWorkIdsInMonth = new Set();
+  for (const e of execs) {
+    if ((e.start_date || "").startsWith(prefix) || (e.end_date || "").startsWith(prefix)) {
+      execWorkIdsInMonth.add(e.work_log_id);
+    }
+  }
+  const filtered = rptWorkRows(allWork.filter(r => {
+    const d = r.start_date || r.work_date || "";
+    return d.startsWith(prefix) || (r.end_date || "").startsWith(prefix) || execWorkIdsInMonth.has(r.id);
+  }).filter(r => _rptCatFilter.size === 0 || _rptCatFilter.has(r.category || "")), execMap);
+
+  const done = filtered.filter(r => rptIsDoneStatus(r.status)).length;
+  const ongoing = filtered.filter(r => String(r.status || "").includes("Явц")).length;
+  const waiting = filtered.length - done - ongoing;
+  const avgProgress = filtered.length
+    ? Math.round(filtered.reduce((s, r) => s + Number(r._displayProgress || 0), 0) / filtered.length)
+    : 0;
+  const rows = filtered.map(r => ({
+    id: r.id,
+    title: r.title || "",
+    location: r.location || "",
+    category: r.category || "",
+    start_date: r.start_date || r.work_date || "",
+    end_date: r.end_date || "",
+    workers: r.material_note || "",
+    status: r.status || "",
+    progress: Number(r._displayProgress || 0),
+    overdue: !!r._overdue,
+    material_count: Number(r.material_count || 0),
+    photo_count: Number(r.photo_count || 0),
+    confirm_status: r.confirm_status || "",
+    executions: (r._execs || []).map(e => ({
+      id: e.id,
+      title: e.title || "",
+      start_date: e.start_date || "",
+      end_date: e.end_date || "",
+      workers: e.workers || "",
+      note: e.note || "",
+      status: e.status || "",
+      progress: Number(e.progress || 0),
+      photo_count: Number(e.photo_count || 0),
+    })),
+  }));
+  return {
+    year,
+    month,
+    filter: [..._rptCatFilter],
+    saved_at: new Date().toISOString(),
+    summary: { total: filtered.length, done, ongoing, waiting, avg_progress: avgProgress },
+    rows,
+  };
+}
+
 function rptBadge(text, color = "#2563eb", bg = "#eff6ff") {
   return `<span style="display:inline-block;margin:2px 4px 0 0;padding:2px 7px;border-radius:20px;background:${bg};color:${color};font-size:9px;font-weight:700;white-space:nowrap">${text}</span>`;
+}
+
+function downloadHtmlFile(filename, html) {
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename.replace(/[\\/:*?"<>|]+/g, "_");
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 async function reports() {
@@ -332,6 +409,7 @@ async function reports() {
 
   const MN_MONTHS = ["","1-р сар","2-р сар","3-р сар","4-р сар","5-р сар",
     "6-р сар","7-р сар","8-р сар","9-р сар","10-р сар","11-р сар","12-р сар"];
+  const canSaveSnapshot = ["director","hr","accountant"].includes(state.me?.role) || !!state.me?.permissions;
 
   let allWork = [], execs = [], execMap = new Map();
   if (_rptCache && _rptCache.year === initYear) {
@@ -384,6 +462,9 @@ async function reports() {
       <select id="rptMonth" class="input" style="width:100px">
         ${MN_MONTHS.slice(1).map((m,i)=>`<option value="${i+1}" ${i+1===initMonth?"selected":""}>${m}</option>`).join("")}
       </select>
+      ${canSaveSnapshot ? `<button class="btn" onclick="const v=_rptVals();saveWorkReportSnapshot(v.y,v.m)" style="padding:6px 14px;background:#16a34a;border-color:#16a34a">💾 Хадгалах</button>` : ""}
+      <button class="btn secondary" onclick="const v=_rptVals();showWorkReportSnapshots(v.y,v.m)" style="padding:6px 14px">📂 Хадгалсан</button>
+      <button class="btn secondary" onclick="const v=_rptVals();downloadLiveWorkReport(v.y,v.m)" style="padding:6px 14px">📥 HTML татах</button>
       <button class="btn" onclick="const v=_rptVals();printWorkReport(v.y,v.m,false)" style="padding:6px 14px">🖨️ Зураггүй</button>
       <button class="btn" onclick="const v=_rptVals();printWorkReport(v.y,v.m,true)" style="padding:6px 14px;background:#0ea5e9;border-color:#0ea5e9">🖼️ Зурагтай</button>
     </div>
@@ -886,6 +967,176 @@ async function audit() {
   </div>`;
 }
 
+function workReportSnapshotHtml(snap, autoPrint = false) {
+  const d = snap.data || snap;
+  const MN_MONTHS = ["","1-р сар","2-р сар","3-р сар","4-р сар","5-р сар","6-р сар","7-р сар","8-р сар","9-р сар","10-р сар","11-р сар","12-р сар"];
+  const summary = d.summary || {};
+  let rowNo = 0;
+  const rows = rptGroupByCategory(d.rows || []).map(group => {
+    const body = group.items.map(r => {
+      rowNo++;
+      const execs = (r.executions || []).map((ex, i) => `
+        <div class="exec"><b>Г${i + 1}:</b> ${escapeHtml(ex.title || "")}
+          <span class="muted">(${escapeHtml(ex.start_date || "")} ~ ${escapeHtml(ex.end_date || "")}, ${Number(ex.progress || 0)}%)</span>
+          ${ex.workers ? `<br><small>Ажилчид: ${escapeHtml(ex.workers)}</small>` : ""}
+          ${ex.note ? `<br><small>Тайлбар: ${escapeHtml(ex.note)}</small>` : ""}
+        </div>`).join("");
+      return `
+      <tr class="${r.overdue ? "overdue" : ""}">
+        <td style="text-align:center">${rowNo}</td>
+        <td><b>${escapeHtml(r.title || "")}</b><br><span class="muted">${escapeHtml(r.location || "")}</span></td>
+        <td style="text-align:center;white-space:nowrap">${escapeHtml(r.start_date || "")}</td>
+        <td style="text-align:center;white-space:nowrap">${escapeHtml(r.end_date || "")}</td>
+        <td>${escapeHtml(r.workers || "")}</td>
+        <td style="text-align:center;font-weight:700">${Number(r.progress || 0)}%</td>
+        <td style="text-align:center">${escapeHtml(r.status || "")}</td>
+        <td>${execs || "—"}</td>
+      </tr>`;
+    }).join("");
+    return `<tr class="cat-row"><td colspan="8">${escapeHtml(group.category)} · ${group.items.length} ажил</td></tr>${body}`;
+  }).join("");
+  const savedAt = (snap.updated_at || snap.saved_at || d.saved_at || "").slice(0, 16);
+  const savedBy = snap.created_name ? ` · Хадгалсан: ${escapeHtml(snap.created_name)}` : "";
+  return `<!DOCTYPE html><html lang="mn"><head><meta charset="utf-8">
+  <title>${escapeHtml(snap.title || "Ажлын явцын тайлан")}</title>
+  <style>
+    @page { size:A4 landscape; margin:8mm; }
+    body { font-family:Arial,sans-serif; font-size:9.5pt; color:#000; margin:0; }
+    .header { text-align:center; border-bottom:2px solid #000; padding-bottom:7px; margin-bottom:8px; }
+    .header h2 { margin:3px 0; font-size:13pt; }
+    .header p { margin:2px 0; color:#444; }
+    .summary { display:flex; gap:8px; margin-bottom:8px; }
+    .sum-box { flex:1; border:1px solid #ccc; border-radius:5px; padding:6px 10px; text-align:center; }
+    .sum-box b { display:block; font-size:14pt; }
+    .sum-box span { color:#666; font-size:8pt; }
+    table { width:100%; border-collapse:collapse; font-size:8.5pt; }
+    th { background:#1d4ed8; color:#fff; padding:4px 6px; text-align:left; font-size:8pt; }
+    td { padding:3px 5px; border-bottom:1px solid #e0e0e0; vertical-align:top; }
+    tr:nth-child(even) td { background:#f5f7ff; }
+    tr { break-inside:avoid; page-break-inside:avoid; }
+    .cat-row td { background:#dbeafe!important; color:#1e40af; font-weight:800; border-top:2px solid #1d4ed8; }
+    .overdue td { background:#fff7ed!important; }
+    .muted { color:#666; font-size:8pt; }
+    .exec { margin-bottom:3px; padding:3px 5px; border-left:2px solid #6366f1; background:#f8fafc; break-inside:avoid; }
+    .footer { margin-top:16px; display:flex; justify-content:space-between; }
+    .sign { text-align:center; border-top:1px solid #000; padding-top:5px; width:180px; font-size:9pt; }
+  </style></head><body>
+  <div class="header">
+    <div style="font-size:11pt;margin-bottom:4px">ЧОЙБАЛСАН ХӨГЖИЛ ОНӨҮГ</div>
+    <h2>АЖЛЫН ЯВЦЫН ХАДГАЛСАН ТАЙЛАН</h2>
+    <p>${MN_MONTHS[d.month || snap.month] || ""} ${d.year || snap.year} он · ${escapeHtml((d.filter || snap.filter || []).join(", ") || "Бүх категори")}</p>
+    <p style="font-size:9pt;color:#666">Хадгалсан: ${escapeHtml(savedAt || "—")}${savedBy}</p>
+  </div>
+  <div class="summary">
+    <div class="sum-box"><b>${summary.total || 0}</b><span>Нийт ажил</span></div>
+    <div class="sum-box"><b style="color:#16a34a">${summary.done || 0}</b><span>Дууссан</span></div>
+    <div class="sum-box"><b style="color:#6366f1">${summary.ongoing || 0}</b><span>Явцтай</span></div>
+    <div class="sum-box"><b style="color:#d97706">${summary.waiting || 0}</b><span>Хүлээгдэж буй</span></div>
+    <div class="sum-box"><b style="color:#2563eb">${summary.avg_progress || 0}%</b><span>Дундаж явц</span></div>
+  </div>
+  <table>
+    <thead><tr><th style="width:28px">#</th><th>Ажлын нэр / Байршил</th><th>Эхлэх</th><th>Дуусах</th><th>Ажилчид</th><th>Явц%</th><th>Төлөв</th><th>Гүйцэтгэл</th></tr></thead>
+    <tbody>${rows || `<tr><td colspan="8" style="text-align:center;padding:20px;color:#999">Мэдээлэл байхгүй</td></tr>`}</tbody>
+  </table>
+  <div class="footer">
+    <div class="sign">Тайлан гаргасан:<br><br>.....................<br></div>
+    <div class="sign">Ахлах инженер:<br><br>.....................<br></div>
+    <div class="sign">Захирал:<br><br>.....................<br></div>
+  </div>
+  ${autoPrint ? `<script>window.onload=()=>window.print();<\/script>` : ""}
+  </body></html>`;
+}
+
+async function saveWorkReportSnapshot(year, month) {
+  const label = _rptCatFilter.size ? [..._rptCatFilter].join(", ") : "Бүх категори";
+  if (!confirm(`${year} оны ${month}-р сарын "${label}" ажлын явцын тайланг хадгалах уу?\n(Өмнө хадгалсан ижил сарын/категорийн тайлан байвал шинэчлэгдэнэ)`)) return;
+  try {
+    const data = await buildWorkReportSnapshot(year, month);
+    const title = `Ажлын явцын тайлан ${year}-${String(month).padStart(2, "0")} · ${label}`;
+    await api("/api/work-report-snapshots", {
+      method: "POST",
+      body: JSON.stringify({ year, month, title, filter: data.filter, data }),
+    });
+    toast("Тайлан хадгалагдлаа");
+    showWorkReportSnapshots(year, month);
+  } catch(e) { toast("Алдаа: " + e.message); }
+}
+
+async function showWorkReportSnapshots(year, month) {
+  let rows = [];
+  try { rows = await api(`/api/work-report-snapshots?year=${year}&month=${month}`); }
+  catch(e) { toast(e.message); return; }
+  const old = document.getElementById("workReportSnapModal");
+  if (old) old.remove();
+  const modal = document.createElement("div");
+  modal.id = "workReportSnapModal";
+  modal.style.cssText = "position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:1200;display:flex;align-items:center;justify-content:center;padding:18px";
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:12px;width:min(760px,96vw);max-height:84vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.22)">
+      <div style="padding:16px 18px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;gap:12px;align-items:center">
+        <div>
+          <div style="font-size:16px;font-weight:900;color:#0f172a">📂 Хадгалсан ажлын тайлан</div>
+          <div style="font-size:12px;color:#64748b;margin-top:2px">${year} оны ${month}-р сар</div>
+        </div>
+        <button class="btn secondary" onclick="document.getElementById('workReportSnapModal')?.remove()">Хаах</button>
+      </div>
+      <div style="padding:14px 18px">
+        ${rows.length ? rows.map(r => `
+          <div style="border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;margin-bottom:10px;display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap">
+            <div style="min-width:0">
+              <div style="font-size:13px;font-weight:900;color:#0f172a">${escapeHtml(r.title || "")}</div>
+              <div style="font-size:11px;color:#64748b;margin-top:3px">Хадгалсан: ${(r.updated_at || r.created_at || "").slice(0,16)} · ${escapeHtml(r.created_name || "")}</div>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="btn secondary" style="padding:6px 10px;font-size:12px" onclick="openWorkReportSnapshot(${r.id},false)">Харах</button>
+              <button class="btn" style="padding:6px 10px;font-size:12px" onclick="openWorkReportSnapshot(${r.id},true)">Хэвлэх</button>
+              <button class="btn" style="padding:6px 10px;font-size:12px;background:#0ea5e9;border-color:#0ea5e9" onclick="downloadWorkReportSnapshot(${r.id})">Татах</button>
+            </div>
+          </div>`).join("") : `<div style="text-align:center;color:#94a3b8;padding:28px">Хадгалсан тайлан байхгүй байна</div>`}
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+async function openWorkReportSnapshot(id, autoPrint = false) {
+  try {
+    const snap = await api(`/api/work-report-snapshots/${id}`);
+    const w = window.open("", "_blank");
+    if (!w) { toast("Popup блоклогдсон байна"); return; }
+    w.document.write(workReportSnapshotHtml(snap, autoPrint));
+    w.document.close();
+  } catch(e) { toast(e.message); }
+}
+
+async function downloadWorkReportSnapshot(id) {
+  try {
+    const snap = await api(`/api/work-report-snapshots/${id}`);
+    const html = workReportSnapshotHtml(snap, false);
+    const ym = `${snap.year}-${String(snap.month).padStart(2, "0")}`;
+    downloadHtmlFile(`${ym}-ajliin-yavtsiin-hadgalsan-tailan.html`, html);
+    toast("Тайлан HTML файл болж татагдлаа");
+  } catch(e) { toast(e.message); }
+}
+
+async function downloadLiveWorkReport(year, month) {
+  try {
+    const data = await buildWorkReportSnapshot(year, month);
+    const label = data.filter.length ? data.filter.join(", ") : "Бүх категори";
+    const snap = {
+      year,
+      month,
+      title: `Ажлын явцын тайлан ${year}-${String(month).padStart(2, "0")} · ${label}`,
+      filter: data.filter,
+      data,
+      updated_at: data.saved_at,
+      created_name: state.me?.full_name || "",
+    };
+    const html = workReportSnapshotHtml(snap, false);
+    downloadHtmlFile(`${year}-${String(month).padStart(2, "0")}-ajliin-yavtsiin-tailan.html`, html);
+    toast("Одоогийн тайлан HTML файл болж татагдлаа");
+  } catch(e) { toast("Алдаа: " + e.message); }
+}
+
 // ── Нэгтгэсэн сарын тайлан ───────────────────────────────────
 
 let _unifiedViewMode = 'live'; // 'live' | 'snap'
@@ -1259,4 +1510,4 @@ async function unifiedSaveSnapshot(year, month) {
   } catch(e) { toast("Алдаа: " + e.message); }
 }
 
-Object.assign(window, { reports, audit, report_schedule, reports_unified, printWorkReport, printUnifiedReport, reloadReports, _rptVals, rptToggleCat, rptToggleAll, unifiedSaveSnapshot, _unifiedViewMode });
+Object.assign(window, { reports, audit, report_schedule, reports_unified, printWorkReport, printUnifiedReport, reloadReports, _rptVals, rptToggleCat, rptToggleAll, saveWorkReportSnapshot, showWorkReportSnapshots, openWorkReportSnapshot, downloadWorkReportSnapshot, downloadLiveWorkReport, unifiedSaveSnapshot, _unifiedViewMode });
