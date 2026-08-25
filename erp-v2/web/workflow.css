@@ -1,0 +1,31 @@
+.field-help {
+  color: #7d8999;
+  font-size: .7rem;
+  font-weight: 500;
+}
+
+.workflow-control {
+  display: grid;
+  justify-items: start;
+  gap: 7px;
+  min-width: 205px;
+}
+
+.workflow-stage {
+  color: #56667d;
+  font-size: .7rem;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.workflow-action {
+  padding: 8px 10px;
+  font-size: .68rem;
+  white-space: normal;
+  text-align: left;
+}
+
+.workflow-action:disabled {
+  cursor: wait;
+  opacity: .6;
+}

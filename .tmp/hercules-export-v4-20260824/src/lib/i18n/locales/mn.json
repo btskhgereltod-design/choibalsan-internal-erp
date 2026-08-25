@@ -1,0 +1,71 @@
+{
+  "common": {
+    "save": "Хадгалах",
+    "cancel": "Болих",
+    "edit": "Засах",
+    "archive": "Архивлах",
+    "create": "Үүсгэх",
+    "loading": "Уншиж байна...",
+    "error": "Алдаа гарлаа",
+    "retry": "Дахин оролдох",
+    "back": "Буцах",
+    "confirm": "Баталгаажуулах",
+    "search": "Хайх",
+    "noData": "Мэдээлэл байхгүй",
+    "language": "Хэл",
+    "actions": "Үйлдлүүд",
+    "status": {
+      "active": "Идэвхтэй",
+      "archived": "Архивлагдсан"
+    }
+  },
+  "nav": {
+    "dashboard": "Хяналтын самбар",
+    "departments": "Хэлтэс",
+    "employees": "Ажилчид",
+    "positions": "Албан тушаал",
+    "roles": "Эрх",
+    "audit": "Аудит",
+    "settings": "Тохиргоо"
+  },
+  "org": {
+    "title": "Байгууллагын бүтэц",
+    "tenant": "Байгууллага",
+    "totalDepartments": "Нийт хэлтэс",
+    "activeDepartments": "Идэвхтэй хэлтэс",
+    "archivedDepartments": "Архивлагдсан хэлтэс",
+    "rootDepartments": "Үндсэн хэлтсүүд"
+  },
+  "department": {
+    "title": "Хэлтэс",
+    "plural": "Хэлтэсүүд",
+    "name": "Нэр",
+    "nameMn": "Монгол нэр",
+    "nameEn": "Англи нэр",
+    "code": "Код",
+    "parent": "Дээд хэлтэс",
+    "parentNone": "Үндсэн хэлтэс (дээд хэлтэсгүй)",
+    "manager": "Менежер",
+    "subDepartments": "Дэд хэлтсүүд",
+    "members": "Гишүүд",
+    "noSubDepartments": "Дэд хэлтэс байхгүй",
+    "createNew": "Шинэ хэлтэс үүсгэх",
+    "editTitle": "Хэлтэс засах",
+    "archiveTitle": "Хэлтэс архивлах",
+    "archiveConfirm": "Та энэ хэлтсийг архивлахдаа итгэлтэй байна уу? Дэд хэлтсүүд идэвхтэй хэвээр үлдэнэ.",
+    "archiveSuccess": "Хэлтэс амжилттай архивлагдлаа",
+    "createSuccess": "Хэлтэс амжилттай үүслээ",
+    "updateSuccess": "Хэлтэс амжилттай шинэчлэгдлээ",
+    "notFound": "Хэлтэс олдсонгүй",
+    "tree": "Хэлтсийн бүтэц",
+    "detail": "Дэлгэрэнгүй"
+  },
+  "errors": {
+    "nameRequired": "Нэр оруулна уу",
+    "codeRequired": "Код оруулна уу",
+    "codeFormat": "Код зөвхөн үсэг, тоо, зураасаас бүрдэх ёстой",
+    "loadFailed": "Мэдээлэл ачааллахад алдаа гарлаа",
+    "saveFailed": "Хадгалахад алдаа гарлаа",
+    "archiveFailed": "Архивлахад алдаа гарлаа"
+  }
+}

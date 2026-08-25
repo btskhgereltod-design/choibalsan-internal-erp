@@ -1,0 +1,17 @@
+.env
+.env.*
+!.env.example
+!.env.development.example
+!.env.staging.example
+!.env.production.example
+secrets/*
+!secrets/*.example
+cloudflared.production.yml
+backups/
+backups-production/
+api/node_modules/
+*.log
+certificates/
+caddy_data/
+caddy_config/
+.tmp-hercules-export-audit-*/

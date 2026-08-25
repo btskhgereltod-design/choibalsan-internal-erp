@@ -1,0 +1,52 @@
+{
+  "name": "overva-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Multi-tenant modular API for the OVERVA platform",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node scripts/start.js",
+    "dev": "node --watch src/server.js",
+    "migrate": "node scripts/migrate.js",
+    "bootstrap": "node scripts/bootstrap.js",
+    "test:integration": "node -e \"process.env.RUN_INTEGRATION='1'; require('./scripts/integration-test')\"",
+    "test:business": "node -e \"process.env.RUN_BUSINESS_INTEGRATION='1'; require('./scripts/business-modules-test')\"",
+    "test:finance": "node -e \"process.env.RUN_FINANCE_INTEGRATION='1'; require('./scripts/finance-integration-test')\"",
+    "simulate:device": "node scripts/device-simulator.js",
+    "test:operations": "node -e \"process.env.RUN_OPERATIONS_INTEGRATION='1'; require('./scripts/operations-integration-test')\"",
+    "test:developer": "node -e \"process.env.RUN_DEVELOPER_INTEGRATION='1'; require('./scripts/developer-integration-test')\"",
+    "test:attendance": "node -e \"process.env.RUN_ATTENDANCE_INTEGRATION='1'; require('./scripts/attendance-integration-test')\"",
+    "worker:webhooks": "node scripts/webhook-worker.js",
+    "test:cleanup": "node scripts/cleanup-orphan-test-events.js",
+    "release:check": "node scripts/release-check.js",
+    "smoke:session": "node scripts/session-smoke.js",
+    "smoke:platform-status": "node scripts/platform-status-smoke.js",
+    "smoke:safety": "node scripts/safety-smoke.js",
+    "smoke:administration": "node scripts/administration-smoke.js",
+    "smoke:builder": "node scripts/builder-smoke.js",
+    "smoke:ai-provider": "node scripts/ai-provider-smoke.js",
+    "import:legacy-employees": "node scripts/import-legacy-employees.js",
+    "import:legacy-lighting": "node scripts/import-legacy-lighting.js",
+    "test": "node --test",
+    "check": "node --check src/server.js && node --check src/app.js && node --check scripts/start.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.1",
+    "exceljs": "4.4.0",
+    "express": "^4.21.2",
+    "express-rate-limit": "^8.0.1",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.2.0",
+    "pg": "^8.16.3",
+    "zod": "^4.0.17"
+  },
+  "overrides": {
+    "uuid": "11.1.1"
+  }
+}

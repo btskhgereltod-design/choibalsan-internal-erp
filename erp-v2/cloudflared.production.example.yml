@@ -1,0 +1,23 @@
+tunnel: OVERVA_TUNNEL_ID
+credentials-file: C:\Users\YOUR_USER\.cloudflared\OVERVA_TUNNEL_ID.json
+
+ingress:
+  - hostname: overva.com
+    service: http://127.0.0.1:4180
+  - hostname: www.overva.com
+    service: http://127.0.0.1:4180
+  - hostname: app.overva.com
+    service: http://127.0.0.1:4180
+  - hostname: api.overva.com
+    service: http://127.0.0.1:4180
+  - hostname: admin.overva.com
+    service: http://127.0.0.1:4180
+  - hostname: auth.overva.com
+    service: http://127.0.0.1:4180
+  - hostname: iot.overva.com
+    service: http://127.0.0.1:4180
+  - hostname: map.overva.com
+    service: http://127.0.0.1:4180
+  - hostname: status.overva.com
+    service: http://127.0.0.1:4180
+  - service: http_status:404

@@ -1,0 +1,74 @@
+FROM node:22-alpine AS vendor
+WORKDIR /vendor
+COPY package.json ./
+RUN npm install --omit=dev
+
+FROM nginx:1.31.4-alpine
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY index.html /usr/share/nginx/html/index.html
+COPY style.css /usr/share/nginx/html/style.css
+COPY workflow.css /usr/share/nginx/html/workflow.css
+COPY app.js /usr/share/nginx/html/app.js
+COPY work-history.css /usr/share/nginx/html/work-history.css
+COPY notifications.css /usr/share/nginx/html/notifications.css
+COPY asset-detail.css /usr/share/nginx/html/asset-detail.css
+COPY reports.css /usr/share/nginx/html/reports.css
+COPY attachments.css /usr/share/nginx/html/attachments.css
+COPY audit.css /usr/share/nginx/html/audit.css
+COPY business-modules.css /usr/share/nginx/html/business-modules.css
+COPY business-modules.js /usr/share/nginx/html/business-modules.js
+COPY map.css /usr/share/nginx/html/map.css
+COPY map.js /usr/share/nginx/html/map.js
+COPY gps.css /usr/share/nginx/html/gps.css
+COPY gps.js /usr/share/nginx/html/gps.js
+COPY iot.css /usr/share/nginx/html/iot.css
+COPY iot.js /usr/share/nginx/html/iot.js
+COPY finance.css /usr/share/nginx/html/finance.css
+COPY finance.js /usr/share/nginx/html/finance.js
+COPY executive.css /usr/share/nginx/html/executive.css
+COPY executive.js /usr/share/nginx/html/executive.js
+COPY integration-lab.css /usr/share/nginx/html/integration-lab.css
+COPY integration-lab.js /usr/share/nginx/html/integration-lab.js
+COPY automation.css /usr/share/nginx/html/automation.css
+COPY automation.js /usr/share/nginx/html/automation.js
+COPY ai-director.css /usr/share/nginx/html/ai-director.css
+COPY ai-director.js /usr/share/nginx/html/ai-director.js
+COPY mobile.css /usr/share/nginx/html/mobile.css
+COPY mobile.js /usr/share/nginx/html/mobile.js
+COPY manifest.webmanifest /usr/share/nginx/html/manifest.webmanifest
+COPY service-worker.js /usr/share/nginx/html/service-worker.js
+COPY cop-icon.svg /usr/share/nginx/html/cop-icon.svg
+COPY developer-platform.css /usr/share/nginx/html/developer-platform.css
+COPY developer-platform.js /usr/share/nginx/html/developer-platform.js
+COPY attendance.css /usr/share/nginx/html/attendance.css
+COPY attendance.js /usr/share/nginx/html/attendance.js
+COPY safety.css /usr/share/nginx/html/safety.css
+COPY safety.js /usr/share/nginx/html/safety.js
+COPY administration.css /usr/share/nginx/html/administration.css
+COPY hr-operations.css /usr/share/nginx/html/hr-operations.css
+COPY administration.js /usr/share/nginx/html/administration.js
+COPY industry-profile.css /usr/share/nginx/html/industry-profile.css
+COPY industry-profile.js /usr/share/nginx/html/industry-profile.js
+COPY builder.css /usr/share/nginx/html/builder.css
+COPY builder-ai.css /usr/share/nginx/html/builder-ai.css
+COPY builder.js /usr/share/nginx/html/builder.js
+COPY lighting.js /usr/share/nginx/html/lighting.js
+COPY camera.js /usr/share/nginx/html/camera.js
+COPY workspace-policy.js /usr/share/nginx/html/workspace-policy.js
+COPY employee-access.js /usr/share/nginx/html/employee-access.js
+COPY employee-access.css /usr/share/nginx/html/employee-access.css
+COPY standard-workspace.js /usr/share/nginx/html/standard-workspace.js
+COPY standard-workspace.css /usr/share/nginx/html/standard-workspace.css
+COPY organization-blueprint.js /usr/share/nginx/html/organization-blueprint.js
+COPY organization-blueprint.css /usr/share/nginx/html/organization-blueprint.css
+COPY structure-smart-import.js /usr/share/nginx/html/structure-smart-import.js
+COPY structure-smart-import.css /usr/share/nginx/html/structure-smart-import.css
+COPY structure-hub.js /usr/share/nginx/html/structure-hub.js
+COPY structure-hub.css /usr/share/nginx/html/structure-hub.css
+COPY legacy-theme.css /usr/share/nginx/html/legacy-theme.css
+COPY --from=vendor /vendor/node_modules/leaflet/dist /usr/share/nginx/html/vendor/leaflet
+COPY platform.html /usr/share/nginx/html/platform.html
+COPY platform.css /usr/share/nginx/html/platform.css
+COPY platform-system.css /usr/share/nginx/html/platform-system.css
+COPY platform-ai-usage.js /usr/share/nginx/html/platform-ai-usage.js
+COPY platform.js /usr/share/nginx/html/platform.js

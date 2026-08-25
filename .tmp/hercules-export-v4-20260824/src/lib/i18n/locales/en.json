@@ -1,0 +1,71 @@
+{
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "edit": "Edit",
+    "archive": "Archive",
+    "create": "Create",
+    "loading": "Loading...",
+    "error": "An error occurred",
+    "retry": "Retry",
+    "back": "Back",
+    "confirm": "Confirm",
+    "search": "Search",
+    "noData": "No data",
+    "language": "Language",
+    "actions": "Actions",
+    "status": {
+      "active": "Active",
+      "archived": "Archived"
+    }
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "departments": "Departments",
+    "employees": "Employees",
+    "positions": "Positions",
+    "roles": "Roles",
+    "audit": "Audit",
+    "settings": "Settings"
+  },
+  "org": {
+    "title": "Organization Structure",
+    "tenant": "Organization",
+    "totalDepartments": "Total Departments",
+    "activeDepartments": "Active Departments",
+    "archivedDepartments": "Archived Departments",
+    "rootDepartments": "Root Departments"
+  },
+  "department": {
+    "title": "Department",
+    "plural": "Departments",
+    "name": "Name",
+    "nameMn": "Mongolian Name",
+    "nameEn": "English Name",
+    "code": "Code",
+    "parent": "Parent Department",
+    "parentNone": "Root Department (no parent)",
+    "manager": "Manager",
+    "subDepartments": "Sub-departments",
+    "members": "Members",
+    "noSubDepartments": "No sub-departments",
+    "createNew": "Create New Department",
+    "editTitle": "Edit Department",
+    "archiveTitle": "Archive Department",
+    "archiveConfirm": "Are you sure you want to archive this department? Sub-departments will remain active.",
+    "archiveSuccess": "Department archived successfully",
+    "createSuccess": "Department created successfully",
+    "updateSuccess": "Department updated successfully",
+    "notFound": "Department not found",
+    "tree": "Department Tree",
+    "detail": "Details"
+  },
+  "errors": {
+    "nameRequired": "Name is required",
+    "codeRequired": "Code is required",
+    "codeFormat": "Code may only contain letters, numbers, and hyphens",
+    "loadFailed": "Failed to load data",
+    "saveFailed": "Failed to save",
+    "archiveFailed": "Failed to archive"
+  }
+}

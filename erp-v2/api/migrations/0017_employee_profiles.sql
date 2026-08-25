@@ -1,0 +1,40 @@
+ALTER TABLE users ADD COLUMN can_login BOOLEAN NOT NULL DEFAULT true;
+
+CREATE TABLE employee_profiles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE RESTRICT,
+  user_id UUID NOT NULL,
+  legacy_user_id INTEGER,
+  register_no TEXT,
+  address TEXT,
+  phone TEXT,
+  hire_date DATE,
+  contract_type TEXT,
+  contract_end DATE,
+  salary NUMERIC(18,2),
+  status_hr TEXT,
+  job_category TEXT,
+  education TEXT,
+  gender TEXT,
+  birthdate DATE,
+  nationality TEXT,
+  emergency_contact TEXT,
+  contract_scan_url TEXT,
+  avatar_url TEXT,
+  skill_allowance_rate NUMERIC(8,4),
+  skill_allowance NUMERIC(18,2),
+  meal_allowance NUMERIC(18,2),
+  tenure_years NUMERIC(8,2),
+  tenure_allowance_rate NUMERIC(8,4),
+  tenure_allowance NUMERIC(18,2),
+  haot_exempt BOOLEAN NOT NULL DEFAULT false,
+  work_condition TEXT,
+  legacy_created_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (organization_id, user_id),
+  UNIQUE (organization_id, legacy_user_id),
+  FOREIGN KEY (organization_id, user_id) REFERENCES users(organization_id, id) ON DELETE CASCADE
+);
+
+CREATE INDEX employee_profiles_org_idx ON employee_profiles (organization_id);

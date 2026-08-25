@@ -1,0 +1,301 @@
+{
+  "reportPath": ".\\mt4\\research\\X_Count_Report.htm",
+  "configuredMaxTrades": 100,
+  "maximumObservedLevel": 9,
+  "tradeCount": 10723,
+  "unmatchedOpenOrders": 0,
+  "unfinishedCycleTrades": 0,
+  "overall": {
+    "cycles": 7168,
+    "wins": 7168,
+    "fullLosses": 0,
+    "fullLossRatePct": 0,
+    "net": 170.88
+  },
+  "stopOutCycles": 0,
+  "practicalTerminalFailures": 0,
+  "practicalTerminalFailureRatePct": 0,
+  "completedFullLossWilson95Pct": [
+    5.421010862427522e-18,
+    0.05356307501707934
+  ],
+  "practicalFailureWilson95Pct": [
+    0,
+    0.05355560753361068
+  ],
+  "binomialPValueObservedOrWorseVsGrossBreakEven": 0.9999999999998546,
+  "grossBreakEvenFullLossRatePct": 0.411522633744856,
+  "conditionalFailureByLevel": [
+    {
+      "level": 1,
+      "reached": 7169,
+      "failed": 2370,
+      "failureRatePct": 33.05900404519459
+    },
+    {
+      "level": 2,
+      "reached": 2370,
+      "failed": 828,
+      "failureRatePct": 34.936708860759495
+    },
+    {
+      "level": 3,
+      "reached": 828,
+      "failed": 256,
+      "failureRatePct": 30.917874396135264
+    },
+    {
+      "level": 4,
+      "reached": 256,
+      "failed": 70,
+      "failureRatePct": 27.34375
+    },
+    {
+      "level": 5,
+      "reached": 70,
+      "failed": 21,
+      "failureRatePct": 30
+    },
+    {
+      "level": 6,
+      "reached": 21,
+      "failed": 5,
+      "failureRatePct": 23.80952380952381
+    },
+    {
+      "level": 7,
+      "reached": 5,
+      "failed": 2,
+      "failureRatePct": 40
+    },
+    {
+      "level": 8,
+      "reached": 2,
+      "failed": 2,
+      "failureRatePct": 100
+    },
+    {
+      "level": 9,
+      "reached": 2,
+      "failed": 0,
+      "failureRatePct": 0
+    }
+  ],
+  "tradeLabelDistribution": [
+    {
+      "label": "BUY1",
+      "opened": 4540,
+      "tp": 3058,
+      "sl": 1481,
+      "forcedClose": 1
+    },
+    {
+      "label": "BUY2",
+      "opened": 524,
+      "tp": 384,
+      "sl": 140,
+      "forcedClose": 0
+    },
+    {
+      "label": "BUY3",
+      "opened": 37,
+      "tp": 22,
+      "sl": 15,
+      "forcedClose": 0
+    },
+    {
+      "label": "BUY4",
+      "opened": 2,
+      "tp": 0,
+      "sl": 2,
+      "forcedClose": 0
+    },
+    {
+      "label": "BUY5",
+      "opened": 1,
+      "tp": 1,
+      "sl": 0,
+      "forcedClose": 0
+    },
+    {
+      "label": "SELL1",
+      "opened": 4999,
+      "tp": 3282,
+      "sl": 1717,
+      "forcedClose": 0
+    },
+    {
+      "label": "SELL2",
+      "opened": 560,
+      "tp": 374,
+      "sl": 186,
+      "forcedClose": 0
+    },
+    {
+      "label": "SELL3",
+      "opened": 54,
+      "tp": 43,
+      "sl": 11,
+      "forcedClose": 0
+    },
+    {
+      "label": "SELL4",
+      "opened": 5,
+      "tp": 3,
+      "sl": 2,
+      "forcedClose": 0
+    },
+    {
+      "label": "SELL5",
+      "opened": 1,
+      "tp": 1,
+      "sl": 0,
+      "forcedClose": 0
+    }
+  ],
+  "byLevel": [
+    {
+      "level": 1,
+      "count": 4799,
+      "wins": 4799,
+      "fullLosses": 0,
+      "net": 47759.94
+    },
+    {
+      "level": 2,
+      "count": 1542,
+      "wins": 1541,
+      "fullLosses": 0,
+      "net": -15561.12
+    },
+    {
+      "level": 3,
+      "count": 572,
+      "wins": 572,
+      "fullLosses": 0,
+      "net": -17227.47
+    },
+    {
+      "level": 4,
+      "count": 186,
+      "wins": 186,
+      "fullLosses": 0,
+      "net": -9322.43
+    },
+    {
+      "level": 5,
+      "count": 49,
+      "wins": 49,
+      "fullLosses": 0,
+      "net": -3437.63
+    },
+    {
+      "level": 6,
+      "count": 16,
+      "wins": 16,
+      "fullLosses": 0,
+      "net": -1443.87
+    },
+    {
+      "level": 7,
+      "count": 3,
+      "wins": 3,
+      "fullLosses": 0,
+      "net": -332.09
+    },
+    {
+      "level": 8,
+      "count": 0,
+      "wins": 0,
+      "fullLosses": 0,
+      "net": 0
+    },
+    {
+      "level": 9,
+      "count": 2,
+      "wins": 2,
+      "fullLosses": 0,
+      "net": -299.66
+    }
+  ],
+  "direction": [
+    {
+      "startDirection": "buy",
+      "cycles": 3188,
+      "wins": 3188,
+      "fullLosses": 0,
+      "fullLossRatePct": 0,
+      "net": 972.5
+    },
+    {
+      "startDirection": "sell",
+      "cycles": 3980,
+      "wins": 3980,
+      "fullLosses": 0,
+      "fullLossRatePct": 0,
+      "net": -801.62
+    }
+  ],
+  "yearly": [
+    {
+      "year": "2020",
+      "cycles": 388,
+      "wins": 388,
+      "fullLosses": 0,
+      "fullLossRatePct": 0,
+      "net": 24.43
+    },
+    {
+      "year": "2021",
+      "cycles": 190,
+      "wins": 190,
+      "fullLosses": 0,
+      "fullLossRatePct": 0,
+      "net": -471.08
+    },
+    {
+      "year": "2022",
+      "cycles": 235,
+      "wins": 235,
+      "fullLosses": 0,
+      "fullLossRatePct": 0,
+      "net": -412.28
+    },
+    {
+      "year": "2023",
+      "cycles": 219,
+      "wins": 219,
+      "fullLosses": 0,
+      "fullLossRatePct": 0,
+      "net": 143.4
+    },
+    {
+      "year": "2024",
+      "cycles": 398,
+      "wins": 398,
+      "fullLosses": 0,
+      "fullLossRatePct": 0,
+      "net": -152.49
+    },
+    {
+      "year": "2025",
+      "cycles": 1467,
+      "wins": 1467,
+      "fullLosses": 0,
+      "fullLossRatePct": 0,
+      "net": 111.01
+    },
+    {
+      "year": "2026",
+      "cycles": 4271,
+      "wins": 4271,
+      "fullLosses": 0,
+      "fullLossRatePct": 0,
+      "net": 927.89
+    }
+  ],
+  "worstFullLossCycles": [],
+  "maxBalanceDrawdown": 11204.79,
+  "maxBalanceDrawdownPct": 56.0239,
+  "finalBalance": 10132.8
+}

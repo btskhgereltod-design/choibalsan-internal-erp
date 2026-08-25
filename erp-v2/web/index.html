@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="mn">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0a2544">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/cop-icon.svg" type="image/svg+xml">
+  <meta name="color-scheme" content="light">
+  <title>OVERVA ERP</title>
+  <link rel="stylesheet" href="/style.css?v=45">
+  <link rel="stylesheet" href="/workflow.css?v=1">
+  <link rel="stylesheet" href="/work-history.css">
+  <link rel="stylesheet" href="/notifications.css">
+  <link rel="stylesheet" href="/asset-detail.css">
+  <link rel="stylesheet" href="/reports.css">
+  <link rel="stylesheet" href="/attachments.css">
+  <link rel="stylesheet" href="/audit.css">
+  <link rel="stylesheet" href="/business-modules.css?v=23">
+  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="/map.css">
+  <link rel="stylesheet" href="/gps.css">
+  <link rel="stylesheet" href="/iot.css">
+  <link rel="stylesheet" href="/finance.css">
+  <link rel="stylesheet" href="/executive.css?v=2">
+  <link rel="stylesheet" href="/integration-lab.css">
+  <link rel="stylesheet" href="/automation.css">
+  <link rel="stylesheet" href="/ai-director.css">
+  <link rel="stylesheet" href="/mobile.css">
+  <link rel="stylesheet" href="/developer-platform.css">
+  <link rel="stylesheet" href="/attendance.css">
+  <link rel="stylesheet" href="/safety.css">
+  <link rel="stylesheet" href="/administration.css?v=33">
+  <link rel="stylesheet" href="/hr-operations.css?v=2">
+  <link rel="stylesheet" href="/industry-profile.css">
+  <link rel="stylesheet" href="/builder.css">
+  <link rel="stylesheet" href="/builder-ai.css">
+  <link rel="stylesheet" href="/standard-workspace.css?v=25">
+  <link rel="stylesheet" href="/organization-blueprint.css?v=2">
+  <link rel="stylesheet" href="/structure-smart-import.css?v=1">
+  <link rel="stylesheet" href="/organization-structure-hub.css?v=1">
+  <link rel="stylesheet" href="/legacy-theme.css?v=24">
+  <link rel="stylesheet" href="/employee-access.css?v=26">
+</head>
+<body>
+  <section class="login-layout" id="loginView">
+    <div class="login-brand"><div class="brand-mark">OV</div><div><strong>OVERVA</strong><span>Connected Organization Platform</span></div></div>
+    <div class="login-copy">
+      <span class="eyebrow">OVERVA · CONNECTED ORGANIZATION PLATFORM</span>
+      <h1>Байгууллагаа бүхэлд нь<br>нэг дор хар.</h1>
+      <p>Хүмүүс, ажил, хөрөнгө, өгөгдөл болон төхөөрөмжийг нэгтгэсэн байгууллагын удирдлагын платформ.</p>
+      <div class="feature-row"><span>Multi-tenant</span><span>Audit trail</span><span>PostgreSQL</span></div>
+    </div>
+    <form class="login-card" id="loginForm">
+      <div class="overva-lockup"><div class="overva-symbol">O</div><div><strong>OVERVA</strong><span>Connected Organization Platform</span></div></div>
+      <div class="overva-promise">Байгууллагаа бүхэлд нь <strong>нэг дор хар.</strong></div>
+      <div><span class="eyebrow">Системд нэвтрэх</span><h2>Тавтай морилно уу</h2><p>Байгууллага болон хэрэглэгчийн мэдээллээ оруулна уу.</p></div>
+      <label>Байгууллагын код<input name="organization" placeholder="Танай байгууллагын код" autocomplete="organization" required></label>
+      <label>И-мэйл эсвэл хэрэглэгчийн нэр<input name="identifier" type="text" autocomplete="username" placeholder="admin@company.mn" required></label>
+      <label>Нууц үг<input name="password" type="password" autocomplete="current-password" placeholder="••••••••••••" minlength="8" required></label>
+      <p class="form-error" id="loginError" role="alert"></p>
+      <button class="primary wide" type="submit">Нэвтрэх</button>
+      <div class="secure-note"><span class="secure-dot"></span> OVERVA ERP · Тусгаарлагдсан орчин</div>
+    </form>
+  </section>
+
+  <div class="app-layout hidden" id="appView">
+    <aside class="sidebar">
+      <div class="sidebar-brand"><div class="brand-mark small">OV</div><div><strong>OVERVA ERP</strong><span id="orgName">Байгууллага</span></div></div>
+      <nav aria-label="Үндсэн цэс">
+        <button class="nav-item active" data-view="dashboard"><span>⌂</span>Байгууллагын нүүр</button>
+        <button class="nav-item hidden" id="executiveNav" data-view="executive" data-module="executive"><span>◉</span>Чиг хандлага</button>
+        <button class="nav-item" data-view="assets" data-module="assets"><span>◇</span>Хөрөнгийн бүртгэл</button>
+        <button class="nav-item" data-view="work-orders" data-module="work-orders"><span>✓</span>Нэгдсэн ажлын урсгал</button>
+        <button class="nav-item hidden" id="lightingNav" data-view="lighting" data-module="lighting-operations"><span>☼</span>Гэрэлтүүлэг</button>
+        <button class="nav-item" id="mapNav" data-view="map" data-module="map"><span>⌖</span>OVERVA Map</button>
+        <button class="nav-item" id="fleetNav" data-view="fleet" data-module="fleet"><span>▰</span>GPS / Fleet</button>
+        <button class="nav-item" id="iotNav" data-view="iot" data-module="iot"><span>⌁</span>IoT Control</button>
+        <button class="nav-item hidden" id="financeNav" data-view="finance" data-module="finance"><span>₮</span>Санхүүгийн Hub</button>
+        <button class="nav-item hidden" id="integrationLabNav" data-view="integration-lab" data-module="integration-lab"><span>↯</span>Integration Lab</button>
+        <button class="nav-item hidden" id="automationNav" data-view="automation" data-module="automation"><span>⚡</span>Automation</button>
+        <button class="nav-item hidden" id="aiDirectorNav" data-view="ai-director" data-module="ai-director"><span>✦</span>AI Director</button>
+        <button class="nav-item" id="mobileNav" data-view="mobile" data-module="field"><span>▣</span>Талбарын апп</button>
+        <button class="nav-item hidden" id="developerNav" data-view="developer"><span>{ }</span>Модуль ба API</button>
+        <button class="nav-item hidden" id="structureNav" data-view="structure" data-module="structure" aria-hidden="true" tabindex="-1" style="display:none!important"><span>♧</span>Байгууллагын бүтэц</button>
+        <button class="nav-item hidden" id="employeesNav" data-view="employees"><span>♙</span>Ажилтны бүртгэл</button>
+        <button class="nav-item hidden" id="industryProfileNav" data-view="industry-profile"><span>⌘</span>Салбарын загвар</button>
+        <button class="nav-item hidden" id="builderNav" data-view="builder"><span>✦</span>OVERVA Builder</button>
+        <button class="nav-item hidden" id="attendanceNav" data-view="attendance" data-module="attendance"><span>▦</span>Ирцийн бүртгэл</button>
+        <button class="nav-item hidden" id="safetyNav" data-view="safety" data-module="safety"><span>⚠</span>ХАБЭА</button>
+        <button class="nav-item hidden" id="hrNav" data-view="hr" data-module="hr"><span>♙</span>Хүний нөөц</button>
+        <button class="nav-item hidden" id="recordsNav" data-view="records" data-module="records"><span>▤</span>Бичиг хэрэг</button>
+        <button class="nav-item hidden" id="archiveNav" data-view="archive" data-module="archive"><span>▣</span>Архив</button>
+        <button class="nav-item hidden" id="inventoryNav" data-view="inventory" data-module="inventory"><span>▦</span>Агуулах</button>
+        <button class="nav-item hidden" id="maintenanceNav" data-view="maintenance" data-module="maintenance"><span>↻</span>Төлөвлөгөөт засвар</button>
+        <button class="nav-item hidden" id="procurementNav" data-view="procurement" data-module="procurement"><span>₮</span>Худалдан авалт</button>
+        <button class="nav-item hidden" id="reportsNav" data-view="reports"><span>▥</span>Нэгдсэн тайлан</button>
+        <button class="nav-item hidden" id="auditNav" data-view="audit" aria-hidden="true" tabindex="-1" style="display:none!important"><span>◎</span>Аудит журнал</button>
+        <button class="nav-item hidden" id="usersNav" data-view="users" aria-hidden="true" tabindex="-1" style="display:none!important"><span>♙</span>Хэрэглэгч ба эрх</button>
+        <button class="nav-item hidden" id="settingsNav" data-view="settings"><span>⚙</span>Тохиргоо</button>
+        <button class="nav-item hidden" id="billingNav" data-view="billing"><span>▤</span>Багц ба төлбөр</button>
+      </nav>
+      <div class="sidebar-foot">
+        <div class="api-indicator"><i></i> OVERVA API online</div>
+        <div class="sidebar-actions">
+          <button class="logout-link" type="button" data-open="passwordDialog"><span>⚿</span>Нууц үг солих</button>
+          <button class="logout-link logout-action" type="button" id="logoutButton"><span>↪</span>Гарах / байгууллага солих</button>
+        </div>
+      </div>
+    </aside>
+    <main class="workspace">
+      <header class="topbar"><span class="breadcrumb">OVERVA ERP / <b id="breadcrumb">Хяналтын самбар</b></span><div class="topbar-actions"><div class="notification-wrap"><button class="notification-button" id="notificationButton" aria-label="Мэдэгдэл">♢<b class="hidden" id="notificationCount">0</b></button><section class="notification-panel hidden" id="notificationPanel"><div class="notification-head"><strong>Мэдэгдэл</strong><button id="readAllButton">Бүгдийг унших</button></div><div id="notificationList"></div></section></div><div class="user-chip"><span class="avatar" id="userAvatar">A</span><div><strong id="userName">Хэрэглэгч</strong><span id="userRole">Эрх</span></div></div><button class="topbar-logout" type="button" id="topLogoutButton">Гарах</button></div></header>
+      <section class="page" id="pageContent" aria-live="polite"></section>
+    </main>
+  </div>
+
+  <dialog id="assetDialog"><form id="assetForm" class="dialog-form">
+    <div class="dialog-head"><div><span class="eyebrow">Хөрөнгийн бүртгэл</span><h2>Шинэ хөрөнгө</h2></div><button type="button" class="icon-button" data-close="assetDialog">×</button></div>
+    <label>Хөрөнгийн код<input name="code" placeholder="VEH-001" required maxlength="80"></label>
+    <label>Нэр<input name="name" placeholder="Үйлчилгээний автомашин" required maxlength="250"></label>
+    <label>Ангилал<select name="category" required><option>Тээврийн хэрэгсэл</option><option>Гэрэлтүүлэг</option><option>Камер</option><option>Тоног төхөөрөмж</option><option>Барилга</option><option>Бусад</option></select></label>
+    <div class="form-grid"><label>Серийн дугаар<input name="serialNumber" maxlength="200"></label><label>Байршил<input name="location" maxlength="250" placeholder="Төв байр, 2 давхар"></label></div>
+    <div class="form-grid"><label>Хариуцагч<select name="responsibleUserId" id="assetResponsible"><option value="">Хариуцагчгүй</option></select></label><label>Ашиглалтад орсон огноо<input name="acquiredAt" type="date"></label></div>
+    <label>Тэмдэглэл<textarea name="notes" rows="3" maxlength="5000"></textarea></label>
+    <p class="form-error" data-form-error></p><div class="dialog-actions"><button type="button" class="secondary" data-close="assetDialog">Болих</button><button type="submit" class="primary">Хадгалах</button></div>
+  </form></dialog>
+
+  <dialog id="assetDetailDialog" class="asset-dialog"><form id="assetDetailForm" class="dialog-form">
+    <input name="id" type="hidden">
+    <div class="dialog-head"><div><span class="eyebrow">ХӨРӨНГИЙН ДЭЛГЭРЭНГҮЙ</span><h2 id="assetDetailTitle">Хөрөнгө</h2></div><button type="button" class="icon-button" data-close="assetDetailDialog">×</button></div>
+    <div class="asset-detail-grid"><section class="asset-edit-fields"><div class="form-grid"><label>Код<input name="code" required maxlength="80"></label><label>Төлөв<select name="status"><option value="active">Идэвхтэй</option><option value="repair">Засварт</option><option value="inactive">Идэвхгүй</option><option value="retired">Акталсан</option></select></label></div><label>Нэр<input name="name" required maxlength="250"></label><label>Ангилал<input name="category" required maxlength="100"></label><div class="form-grid"><label>Серийн дугаар<input name="serialNumber" maxlength="200"></label><label>Байршил<input name="location" maxlength="250"></label></div><div class="form-grid"><label>Хариуцагч<select name="responsibleUserId" id="assetDetailResponsible"></select></label><label>Ашиглалтад орсон<input name="acquiredAt" type="date"></label></div><label>Тэмдэглэл<textarea name="notes" rows="3" maxlength="5000"></textarea></label><p class="form-error" data-form-error></p><button class="primary" type="submit">Өөрчлөлт хадгалах</button></section><section class="asset-related"><h3>Засвар үйлчилгээний ажлууд</h3><div id="assetWorkOrders"></div><h3>Өөрчлөлтийн түүх</h3><div id="assetEvents"></div></section></div>
+    <section class="attachment-box"><h3>Хавсралтууд</h3><div class="attachment-upload"><input id="assetAttachmentFile" type="file" accept="image/jpeg,image/png,image/webp,application/pdf,text/plain,.docx,.xlsx"><button type="button" class="secondary" id="assetAttachmentUpload">Файл нэмэх</button></div><div class="attachment-list" id="assetAttachments"></div><small class="attachment-help">Зураг, PDF, TXT, DOCX, XLSX · дээд хэмжээ 10 MB</small></section>
+  </form></dialog>
+
+  <dialog id="workOrderDialog"><form id="workOrderForm" class="dialog-form">
+    <div class="dialog-head"><div><span class="eyebrow">Ажлын удирдлага</span><h2>Шинэ ажлын захиалга</h2></div><button type="button" class="icon-button" data-close="workOrderDialog">×</button></div>
+    <label>Ажлын нэр<input name="title" placeholder="Камерын тэжээл шалгах" required maxlength="300"></label>
+    <label>Ажлын төрөл ба хариуцах нэгж<select name="workTypeId" id="workOrderType"><option value="">Ердийн ажлын захиалга</option></select><small class="field-help">Ажлын төрлөөс хариуцах тасаг, зөвшөөрөл болон хяналтын урсгал автоматаар сонгогдоно.</small></label>
+    <label>Холбогдох хөрөнгө<select name="assetId" id="workOrderAsset"><option value="">Хөрөнгө сонгохгүй</option></select></label>
+    <label>Хариуцагч ажилтан<select name="assignedTo" id="workOrderAssignee"><option value="">Дараа хуваарилах</option></select></label>
+    <div class="form-grid"><label>Ангилал<select name="category"><option>Засвар үйлчилгээ</option><option>Үзлэг шалгалт</option><option>Суурилуулалт</option><option>Бусад</option></select></label><label>Яаралтай эсэх<select name="priority"><option value="normal">Хэвийн</option><option value="high">Өндөр</option><option value="emergency">Яаралтай</option><option value="low">Бага</option></select></label></div>
+    <label>Дуусгах хугацаа<input name="dueAt" type="datetime-local"></label>
+    <label>Тайлбар<textarea name="description" rows="4" maxlength="5000" placeholder="Гүйцэтгэх ажлын дэлгэрэнгүй..."></textarea></label>
+    <p class="form-error" data-form-error></p><div class="dialog-actions"><button type="button" class="secondary" data-close="workOrderDialog">Болих</button><button type="submit" class="primary">Үүсгэх</button></div>
+  </form></dialog>
+
+  <dialog id="workHistoryDialog" class="wide-dialog"><div class="dialog-form">
+    <div class="dialog-head"><div><span class="eyebrow">АЖЛЫН ГҮЙЦЭТГЭЛ</span><h2 id="workHistoryTitle">Ажлын түүх</h2></div><button type="button" class="icon-button" data-close="workHistoryDialog">×</button></div>
+    <div class="work-history" id="workHistory"></div>
+    <form id="workNoteForm" class="note-form"><input name="workOrderId" type="hidden"><label>Гүйцэтгэлийн тэмдэглэл<textarea name="note" rows="3" maxlength="2000" placeholder="Хийсэн ажил, гарсан үр дүнг бичнэ үү..." required></textarea></label><p class="form-error" data-form-error></p><div class="dialog-actions"><button type="submit" class="primary">Тэмдэглэл нэмэх</button></div></form>
+    <section class="attachment-box"><h3>Хавсралтууд</h3><div class="attachment-upload"><input id="workAttachmentFile" type="file" accept="image/jpeg,image/png,image/webp,application/pdf,text/plain,.docx,.xlsx"><button type="button" class="secondary" id="workAttachmentUpload">Файл нэмэх</button></div><div class="attachment-list" id="workAttachments"></div><small class="attachment-help">Зураг, PDF, TXT, DOCX, XLSX · дээд хэмжээ 10 MB</small></section>
+  </div></dialog>
+
+  <dialog id="userDialog"><form id="userForm" class="dialog-form">
+    <div class="dialog-head"><div><span class="eyebrow">Хэрэглэгчийн удирдлага</span><h2>Шинэ хэрэглэгч</h2></div><button type="button" class="icon-button" data-close="userDialog">×</button></div>
+    <label>Овог нэр<input name="fullName" placeholder="Бат Эрдэнэ" required maxlength="200"></label>
+    <div class="form-grid"><label>Хэрэглэгчийн нэр<input name="username" placeholder="baterdene" required minlength="3" maxlength="80" pattern="[a-zA-Z0-9._-]+"></label><label>И-мэйл<input name="email" type="email" placeholder="user@company.mn" required></label></div>
+    <label>Эрхийн түвшин<select name="role" id="userRoleSelect" required></select></label>
+    <label>Анхны нууц үг<input name="password" type="password" minlength="12" placeholder="Хамгийн багадаа 12 тэмдэгт" required></label>
+    <p class="form-error" data-form-error></p><div class="dialog-actions"><button type="button" class="secondary" data-close="userDialog">Болих</button><button type="submit" class="primary">Хэрэглэгч үүсгэх</button></div>
+  </form></dialog>
+
+  <dialog id="employeeDialog"><form id="employeeForm" class="dialog-form">
+    <div class="dialog-head"><div><span class="eyebrow">БАЙГУУЛЛАГЫН ХҮМҮҮС</span><h2>Шинэ ажилтан</h2></div><button type="button" class="icon-button" data-close="employeeDialog">×</button></div>
+    <label>Овог нэр<input name="fullName" placeholder="Бат Эрдэнэ" required maxlength="200"></label>
+    <div class="form-grid"><label>Ажилтны дугаар<input name="employeeNo" maxlength="80" placeholder="EMP-001"></label><label>Ажлын чиглэл<select name="role" id="employeeRoleSelect" required></select></label></div>
+    <div class="form-grid"><label>Хэлтэс / нэгж<select name="departmentId" id="employeeDepartmentSelect"></select></label><label>Албан тушаал<select name="positionId" id="employeePositionSelect"></select></label></div>
+    <p class="form-error" data-form-error></p><div class="dialog-actions"><button type="button" class="secondary" data-close="employeeDialog">Болих</button><button type="submit" class="primary">Ажилтан бүртгэх</button></div>
+  </form></dialog>
+
+  <dialog id="accessDialog"><form id="accessForm" class="dialog-form">
+    <div class="dialog-head"><div><span class="eyebrow">СИСТЕМИЙН ХАНДАЛТ</span><h2>Ажилтанд нэвтрэх эрх өгөх</h2></div><button type="button" class="icon-button" data-close="accessDialog">×</button></div>
+    <label>Ажилтан<select name="employeeId" id="accessEmployeeSelect" required></select></label>
+    <div class="form-grid"><label>Хэрэглэгчийн нэр<input name="username" placeholder="baterdene" required minlength="3" maxlength="80" pattern="[a-zA-Z0-9._-]+"></label><label>И-мэйл<input name="email" type="email" placeholder="user@company.mn" required></label></div>
+    <label>Системийн эрх<select name="role" id="accessRoleSelect" required></select></label>
+    <label>Анхны нууц үг<input name="password" type="password" minlength="12" placeholder="Хамгийн багадаа 12 тэмдэгт" required></label>
+    <p class="form-error" data-form-error></p><div class="dialog-actions"><button type="button" class="secondary" data-close="accessDialog">Болих</button><button type="submit" class="primary">Нэвтрэх эрх олгох</button></div>
+  </form></dialog>
+
+  <dialog id="accessManageDialog">
+    <form id="manageAccessForm" class="dialog-form">
+      <div class="dialog-head"><div><span class="eyebrow">НЭВТРЭХ ЭРХИЙН ТОХИРГОО</span><h2 id="manageAccessName">Ажилтан</h2></div><button type="button" class="icon-button" data-close="accessManageDialog">×</button></div>
+      <input type="hidden" name="userId" id="manageAccessUserId">
+      <div class="access-manager-person"><span class="access-avatar">OV</span><div><strong id="manageAccessContext"></strong><span>Ажилтны мэдээлэл болон нэвтрэх эрх тусдаа хадгалагдана.</span></div></div>
+      <div class="access-identity-grid"><div><small>Хэрэглэгчийн нэр</small><strong id="manageAccessUsername">—</strong></div><div><small>И-мэйл</small><strong id="manageAccessEmail">—</strong></div></div>
+      <div class="form-grid"><label>Үндсэн системийн эрх<select name="role" id="manageAccessRole" required></select></label><label>Нэвтрэх төлөв<select name="active" id="manageAccessActive" required><option value="true">Идэвхтэй</option><option value="false">Түр хаалттай</option></select></label></div>
+      <p class="access-permission-summary" id="manageAccessPermissionSummary"></p>
+      <p class="form-error" data-form-error></p><div class="dialog-actions"><button type="button" class="secondary" data-close="accessManageDialog">Болих</button><button type="submit" class="primary">Тохиргоо хадгалах</button></div>
+    </form>
+    <form id="accessPasswordResetForm" class="access-password-box">
+      <h3>Нууц үг шинэчлэх</h3><p>Одоогийн нууц үгийг харах боломжгүй. Шинэ нууц үг хамгийн багадаа 12 тэмдэгт байна.</p>
+      <div class="access-password-row"><input name="password" type="password" minlength="12" autocomplete="new-password" placeholder="Шинэ нууц үг" required><button class="secondary" type="submit">Нууц үг шинэчлэх</button></div>
+      <p class="form-error" data-form-error></p>
+    </form>
+  </dialog>
+
+  <dialog id="passwordDialog"><form id="passwordForm" class="dialog-form">
+    <div class="dialog-head"><div><span class="eyebrow">Аюулгүй байдал</span><h2>Нууц үг солих</h2></div><button type="button" class="icon-button" data-close="passwordDialog">×</button></div>
+    <label>Одоогийн нууц үг<input name="currentPassword" type="password" autocomplete="current-password" required></label>
+    <label>Шинэ нууц үг<input name="newPassword" type="password" autocomplete="new-password" minlength="12" required></label>
+    <label>Шинэ нууц үг давтах<input name="confirmPassword" type="password" autocomplete="new-password" minlength="12" required></label>
+    <p class="form-error" data-form-error></p><div class="dialog-actions"><button type="button" class="secondary" data-close="passwordDialog">Болих</button><button type="submit" class="primary">Нууц үг солих</button></div>
+  </form></dialog>
+  <div class="toast" id="toast" role="status"></div>
+  <script src="/app.js?v=31" defer></script>
+  <script src="/employee-access.js?v=29" defer></script>
+  <script src="/business-modules.js?v=32" defer></script>
+  <script src="/organization-blueprint.js?v=3" defer></script>
+  <script src="/structure-smart-import.js?v=1" defer></script>
+  <script src="/organization-structure-hub.js?v=1" defer></script>
+  <script src="/vendor/leaflet/leaflet.js" defer></script>
+  <script src="/map.js" defer></script>
+  <script src="/gps.js" defer></script>
+  <script src="/iot.js" defer></script>
+  <script src="/finance.js" defer></script>
+  <script src="/executive.js?v=3" defer></script>
+  <script src="/integration-lab.js" defer></script>
+  <script src="/automation.js" defer></script>
+  <script src="/ai-director.js" defer></script>
+  <script src="/mobile.js" defer></script>
+  <script src="/developer-platform.js" defer></script>
+  <script src="/attendance.js" defer></script>
+  <script src="/safety.js" defer></script>
+  <script src="/administration.js?v=35" defer></script>
+  <script src="/industry-profile.js" defer></script>
+  <script src="/builder.js" defer></script>
+  <script src="/lighting.js?v=3" defer></script>
+  <script src="/workspace-policy.js?v=30" defer></script>
+  <script src="/standard-workspace.js?v=32" defer></script>
+</body>
+</html>

@@ -1,0 +1,114 @@
+{
+	email {$ACME_EMAIL}
+	admin 127.0.0.1:2019
+}
+
+(security_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+}
+
+{$SITE_SCHEME:https}://overva.com {
+	import security_headers
+	encode zstd gzip
+	@trial_api path /api/public/*
+	handle @trial_api {
+		reverse_proxy api:4100
+	}
+	handle {
+		reverse_proxy public-site:8080
+	}
+}
+
+{$SITE_SCHEME:https}://www.overva.com {
+	redir https://overva.com{uri} permanent
+}
+
+{$SITE_SCHEME:https}://app.overva.com {
+	import security_headers
+	encode zstd gzip
+	reverse_proxy web:80
+}
+
+{$SITE_SCHEME:https}://api.overva.com {
+	import security_headers
+	encode zstd gzip
+	@public_api path /health /api/*
+	handle @public_api {
+		reverse_proxy api:4100
+	}
+	handle {
+		respond "Not found" 404
+	}
+}
+
+{$SITE_SCHEME:https}://admin.overva.com {
+	import security_headers
+	encode zstd gzip
+	@root path /
+	redir @root /platform.html 302
+	@admin_static path /platform.html /platform.css /platform-system.css /platform-ai-usage.js /platform.js /cop-icon.svg
+	handle @admin_static {
+		reverse_proxy web:80
+	}
+	@admin_api path /api/platform/*
+	handle @admin_api {
+		reverse_proxy api:4100
+	}
+	handle {
+		respond "Not found" 404
+	}
+}
+
+{$SITE_SCHEME:https}://auth.overva.com {
+	import security_headers
+	encode zstd gzip
+	@auth_api path /health /api/auth/*
+	handle @auth_api {
+		reverse_proxy api:4100
+	}
+	handle {
+		respond "Not found" 404
+	}
+}
+
+{$SITE_SCHEME:https}://iot.overva.com {
+	import security_headers
+	encode zstd gzip
+	@iot_api path /health /api/iot/*
+	handle @iot_api {
+		reverse_proxy api:4100
+	}
+	handle {
+		respond "Not found" 404
+	}
+}
+
+{$SITE_SCHEME:https}://map.overva.com {
+	import security_headers
+	encode zstd gzip
+	@map_api path /health /api/map/* /api/gps/*
+	handle @map_api {
+		reverse_proxy api:4100
+	}
+	handle {
+		respond "Not found" 404
+	}
+}
+
+{$SITE_SCHEME:https}://status.overva.com {
+	import security_headers
+	encode zstd gzip
+	@health path /health
+	handle @health {
+		reverse_proxy api:4100
+	}
+	handle {
+		reverse_proxy public-site:8080
+	}
+}

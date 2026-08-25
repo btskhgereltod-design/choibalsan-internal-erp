@@ -1,0 +1,10 @@
+.work-link{border:0;padding:0;color:#205fbf;background:transparent;text-align:left;font-weight:800}
+.assignee-select{max-width:170px;border:1px solid #dce3ec;border-radius:8px;padding:7px;color:#405169;background:#fff;font-size:.72rem}
+.wide-dialog{width:min(680px,calc(100% - 32px))}
+.work-history{display:grid;gap:0;max-height:360px;overflow:auto;border:1px solid var(--line);border-radius:12px}
+.history-item{display:grid;grid-template-columns:12px 1fr;gap:12px;padding:14px;border-bottom:1px solid var(--line)}
+.history-item:last-child{border:0}.history-item i{width:9px;height:9px;margin-top:5px;border-radius:50%;background:#3477dd}
+.history-item strong,.history-item small{display:block}.history-item small{margin-top:4px;color:#8492a5}
+.history-note{margin:7px 0 0;color:#405169;line-height:1.5}.note-form{margin-top:18px}
+.note-form label{display:grid;gap:8px;color:#425168;font-size:.82rem;font-weight:700}
+.note-form textarea{width:100%;border:1px solid #dbe2ec;border-radius:11px;padding:12px 13px;resize:vertical}

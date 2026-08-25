@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="mn">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>OVERVA · Platform удирдлага</title>
+  <link rel="stylesheet" href="/platform.css?v=3">
+  <link rel="stylesheet" href="/platform-system.css?v=9">
+</head>
+<body>
+  <section class="platform-login" id="loginView">
+    <form class="login-card" id="loginForm">
+      <div class="logo">OV</div>
+      <span class="eyebrow">OVERVA PLATFORM УДИРДЛАГА</span>
+      <h1>Platform admin</h1>
+      <p>Харилцагч байгууллага болон сарын үйлчилгээний эрхийг удирдана.</p>
+      <label>И-мэйл<input name="email" type="email" autocomplete="username" required></label>
+      <label>Нууц үг<input name="password" type="password" autocomplete="current-password" minlength="12" required></label>
+      <p class="error" data-error></p>
+      <button class="primary" type="submit">Нэвтрэх</button>
+      <a href="https://app.overva.com">← Байгууллагын ERP рүү буцах</a>
+    </form>
+  </section>
+
+  <div class="platform-app hidden" id="appView">
+    <header>
+      <div class="brand"><span class="logo small">OV</span><div><b>OVERVA Platform</b><small>Үйлчилгээ үзүүлэгчийн удирдлага</small></div></div>
+      <div class="admin"><div><b id="adminName"></b><small id="adminEmail"></small></div><button class="ghost" type="button" data-open="accountDialog">Бүртгэл</button><button class="ghost" id="logoutButton">Гарах</button></div>
+    </header>
+    <div class="control-layout">
+      <nav class="control-nav" aria-label="Platform удирдлага">
+        <button class="active" data-view="command"><span>⌂</span>Хяналтын төв</button>
+        <button data-view="organizations"><span>▦</span>Байгууллагууд</button>
+        <button data-view="adoption"><span>↗</span>Нэвтрүүлэлт</button>
+        <small>БҮТЭЭГДЭХҮҮН</small>
+        <button data-view="catalog"><span>◇</span>Модуль ба стандарт</button>
+        <button data-view="ai-knowledge"><span>✦</span>AI мэдлэгийн сан</button>
+        <button data-view="ai-usage"><span>◫</span>AI хөгжүүлэлтийн зардал</button>
+        <small>ҮЙЛ АЖИЛЛАГАА</small>
+        <button data-view="governance"><span>◎</span>Data governance</button>
+        <button data-view="billing"><span>▤</span>Багц ба төлбөр</button>
+        <button data-view="operations"><span>◉</span>System health</button>
+      </nav>
+      <main>
+        <section class="platform-view active" data-view-panel="command">
+          <section class="page-head"><div><span class="eyebrow">PLATFORM COMMAND CENTER</span><h1>OVERVA хяналтын төв</h1><p>Байгууллага, үйлчилгээ, аюулгүй байдал болон ажиллагааны анхаарах асуудлыг нэг дор хянана.</p></div><button class="ghost" id="refreshButton">↻ Шинэчлэх</button></section>
+          <section class="command-hero" id="commandHero"></section>
+          <section class="command-grid"><article class="control-card attention-card"><div class="card-head"><div><span class="eyebrow">ACTION QUEUE</span><h2>Анхаарах шаардлагатай</h2></div><b id="attentionCount">0</b></div><div id="attentionQueue" class="attention-list"></div></article><article class="control-card"><div class="card-head"><div><span class="eyebrow">PLATFORM ACTIVITY</span><h2>Сүүлийн үйлдлүүд</h2></div></div><div id="platformActivity" class="activity-list"></div></article></section>
+          <section class="system-section"><div class="system-head"><div><span class="eyebrow">СЕРВЕРИЙН ХЯНАЛТ</span><h2>Системийн төлөв</h2></div><span class="system-health"><i></i> Хэвийн</span></div><div class="system-grid" id="systemPanel"></div></section>
+        </section>
+
+        <section class="platform-view" data-view-panel="organizations">
+          <section class="organizations-overview" id="organizationsOverview"><section class="page-head"><div><span class="eyebrow">TENANT CONTROL</span><h1>Байгууллагууд</h1><p>Байгууллагын төлөв, ашиглалт, тохиргооны бэлэн байдлыг удирдана.</p></div><button class="primary" data-open="organizationDialog">+ Шинэ байгууллага</button></section><section class="stats" id="stats"></section><section class="organization-list" id="organizationList"></section></section>
+          <section class="organization-control hidden" id="organizationControl"><div class="detail-head"><button class="ghost" data-close-detail>← Жагсаалт</button><div><span class="eyebrow">ORGANIZATION CONTROL</span><h2 id="detailTitle"></h2><p id="detailSubtitle"></p></div><button class="ghost" id="detailSubscriptionButton">Үйлчилгээний эрх</button></div><div class="detail-status" id="detailStatus"></div><div class="detail-grid" id="detailGrid"></div><div class="detail-columns"><article class="control-card"><div class="card-head"><h2>Идэвхтэй модулиуд</h2></div><div class="module-list" id="detailModules"></div></article><article class="control-card"><div class="card-head"><h2>Tenant-ийн сүүлийн үйлдэл</h2></div><div class="activity-list" id="detailActivity"></div></article></div></section>
+        </section>
+
+        <section class="platform-view" data-view-panel="adoption">
+          <section class="page-head"><div><span class="eyebrow">CUSTOMER ADOPTION</span><h1>Нэвтрүүлэлт ба үнэ цэнэ</h1><p>Байгууллага орчноо үүсгэснээс бодит ажилдаа тогтмол ашиглах хүртэлх зам, хугацаа болон саатлыг хэмжинэ.</p></div></section>
+          <section class="stats adoption-summary" id="adoptionSummary"></section>
+          <section class="control-card"><div class="card-head"><div><span class="eyebrow">ONBOARDING FUNNEL</span><h2>Нэвтрүүлэлтийн шат</h2></div></div><div class="adoption-funnel" id="adoptionFunnel"></div></section>
+          <section class="control-card adoption-table-card"><div class="card-head"><div><span class="eyebrow">TIME TO VALUE</span><h2>Байгууллага бүрийн явц</h2><p>Tenant-ийн ажилтан, баримт болон бизнесийн мөрийг задлахгүй; зөвхөн milestone ба хугацааны хураангуйг харуулна.</p></div></div><div class="adoption-table-wrap"><table class="adoption-table"><thead><tr><th>Байгууллага</th><th>Одоогийн шат</th><th>Эхэлснээс хойш</th><th>Бүтэц бэлэн</th><th>Анхны үнэ цэнэ</th><th>Тогтмол хэрэглээ</th><th>Сүүлийн идэвх</th><th>Анхаарах</th></tr></thead><tbody id="adoptionOrganizations"></tbody></table></div></section>
+          <section class="adoption-definitions" id="adoptionDefinitions"></section>
+        </section>
+
+        <section class="platform-view" data-view-panel="catalog"><section class="page-head"><div><span class="eyebrow">PRODUCT & DATA CATALOG</span><h1>Модуль ба стандарт</h1><p>OVERVA-ийн бүх tenant-д ашиглагдах бүтээгдэхүүн, master/reference data, KPI болон чанарын загвар.</p></div></section><section class="governance-catalog" id="governanceCatalog"></section></section>
+
+        <section class="platform-view" data-view-panel="ai-knowledge">
+          <section class="page-head"><div><span class="eyebrow">OVERVA AI KNOWLEDGE GOVERNANCE</span><h1>AI мэдлэгийн сан</h1><p>Аргачлалын хувилбар, ярилцлагын үр дүн, зөвлөмжийн чанар болон нийтлэг мэдлэгт дэвшүүлэх дүрмийг удирдана. Tenant-ийн түүхий мэдээллийг энд харуулахгүй.</p></div></section>
+          <section class="ai-knowledge-guardrails" id="aiKnowledgeGuardrails"></section>
+          <section class="stats" id="aiKnowledgeStats"></section>
+          <section class="control-card"><div class="card-head"><div><span class="eyebrow">METHOD VERSIONS</span><h2>Батлагдсан аргачлал</h2></div></div><div class="ai-method-list" id="aiMethodList"></div></section>
+          <section class="ai-library-grid">
+            <article class="control-card"><div class="card-head"><div><span class="eyebrow">REVIEWED SOURCES</span><h2>Онолын эх сурвалж</h2><p>Зөвхөн дахин ашиглах арга зүйг хадгална. Хичээлийн дасгал, жишээ байгууллагыг tenant-ийн үнэн гэж ашиглахгүй.</p></div></div><div class="ai-source-list" id="aiKnowledgeSources"></div></article>
+            <article class="control-card"><div class="card-head"><div><span class="eyebrow">METHOD COVERAGE</span><h2>Мэдлэгийн хамрах хүрээ</h2><p>Аргачлалын аль хувилбар ямар шинжилгээний сэдэв, ярилцлагын шатанд ашиглагдахыг харуулна.</p></div></div><div class="ai-coverage-list" id="aiKnowledgeCoverage"></div></article>
+          </section>
+          <section class="control-card"><div class="card-head"><div><span class="eyebrow">HUMAN REVIEW QUEUE</span><h2>Нийтлэг мэдлэгт дэвшүүлэх саналууд</h2><p>Зөвхөн нэргүйжүүлэлт баталгаажсан, хангалттай нотолгоотой дүрмийг хүн зөвшөөрнө.</p></div></div><div class="ai-candidate-list" id="aiCandidateList"></div></section>
+        </section>
+
+        <section class="platform-view" data-view-panel="ai-usage">
+          <section class="page-head"><div><span class="eyebrow">AI DELIVERY CONTROL</span><h1>AI хөгжүүлэлтийн зардал ба үр дүн</h1><p>OpenAI болон Hercules-ийн хэрэглээг token, credit, ажлын төрөл, хүлээн авсан үр дүнгээр хэмжинэ. Tenant-ийн түүхий өгөгдөл энд хадгалахгүй.</p></div></section>
+          <section class="stats" id="aiUsageStats"></section>
+          <section class="ai-usage-grid">
+            <article class="control-card"><div class="card-head"><div><span class="eyebrow">USAGE BREAKDOWN</span><h2>Зардлын задаргаа</h2></div></div><div class="ai-usage-list" id="aiUsageBreakdown"></div></article>
+            <article class="control-card"><div class="card-head"><div><span class="eyebrow">EXTERNAL TOOL USAGE</span><h2>Hercules хэрэглээ бүртгэх</h2><p>Нэг модуль эсвэл нэг тодорхой artifact тутам зарцуулсан credit-ээ бүртгэнэ.</p></div></div><form class="ai-usage-form" id="externalAiUsageForm"><div class="grid"><label>Үйлчилгээ<select name="provider"><option value="hercules">Hercules</option><option value="other">Бусад</option></select></label><label>Ажлын төрөл<select name="operationMode"><option value="build">Build</option><option value="repair">Repair</option><option value="design">Design</option><option value="review">Review</option></select></label></div><label>Ажлын хүрээ<input name="scope" required maxlength="240" placeholder="Жишээ: Inventory барааны бүртгэлийн дэлгэц"></label><div class="grid"><label>Зарцуулсан credit<input name="externalCredits" type="number" min="0" step="0.01" required></label><label>Үр дүн<select name="outcome"><option value="accepted">Хүлээн авсан</option><option value="partial">Хэсэгчлэн ашигласан</option><option value="rejected">Ашиглаагүй</option><option value="failed">Алдаатай</option></select></label></div><label>Artifact / commit / холбоос<input name="artifactReference" maxlength="500" placeholder="Commit, файл эсвэл Hercules ажлын дугаар"></label><button class="primary" type="submit">Хэрэглээ бүртгэх</button></form></article>
+          </section>
+          <section class="control-card ai-usage-recent"><div class="card-head"><div><span class="eyebrow">RECENT USAGE</span><h2>Сүүлийн AI ажлууд</h2></div></div><div class="ai-usage-list" id="aiUsageRecent"></div></section>
+          <section class="control-card ai-usage-recent"><div class="card-head"><div><span class="eyebrow">MODULE CONTRACTS</span><h2>Модуль ба route-ийн засаглал</h2><p>Hercules-ээс ирсэн модуль шууд production-д орохгүй. Manifest, route, permission, audit contract-аар шалгагдана.</p></div></div><div class="ai-usage-list" id="moduleGovernance"></div></section>
+        </section>
+
+        <section class="platform-view" data-view-panel="governance"><section class="system-section first"><div class="system-head"><div><span class="eyebrow">ӨГӨГДЛИЙН ЗАСАГЛАЛ</span><h2>Байгууллагуудын хэрэгжилтийн хяналт</h2><p>Зөвхөн бодлого, хариуцлага, эрсдэлийн хураангуй. Tenant-ийн ажилтан болон бизнесийн бодит өгөгдлийг энд задлахгүй.</p></div><span class="system-health" id="governanceHealth"><i></i> Хянаж байна</span></div><div class="stats" id="governanceStats"></div><div class="governance-list" id="governanceList"></div></section></section>
+
+        <section class="platform-view" data-view-panel="billing"><section class="system-section first"><div class="system-head"><div><span class="eyebrow">САРЫН ҮЙЛЧИЛГЭЭ</span><h2>Багц, нэхэмжлэх ба орлого</h2></div><button class="primary" data-open="invoiceDialog">+ Нэхэмжлэх</button></div><div class="stats" id="billingStats"></div><div class="organization-list" id="invoiceList"></div></section></section>
+
+        <section class="platform-view" data-view-panel="operations"><section class="page-head"><div><span class="eyebrow">PLATFORM OPERATIONS</span><h1>System health</h1><p>API, database, backup, хадгалалт болон release schema-ийн ажиллагааны хураангуй.</p></div></section><section class="system-section"><div class="system-head"><div><h2>Үндсэн үйлчилгээ</h2></div><span class="system-health"><i></i> Хэвийн</span></div><div class="system-grid" id="operationsSystemPanel"></div></section></section>
+      </main>
+    </div>
+  </div>
+
+  <dialog id="accountDialog" class="account-dialog">
+    <form id="profileForm">
+      <div class="dialog-head"><div><span class="eyebrow">PLATFORM ADMIN</span><h2>Бүртгэлийн мэдээлэл</h2></div><button type="button" class="icon" data-close="accountDialog">×</button></div>
+      <div class="grid"><label>Овог нэр<input name="fullName" required minlength="2" maxlength="200" autocomplete="name"></label><label>Нэвтрэх и-мэйл<input name="email" type="email" required maxlength="200" autocomplete="email"></label></div>
+      <label>Одоогийн нууц үгээр баталгаажуулах<input name="currentPassword" type="password" minlength="12" required autocomplete="current-password"></label>
+      <p class="error" data-error></p>
+      <div class="actions"><button type="button" class="ghost" data-close="accountDialog">Болих</button><button class="primary" type="submit">Мэдээлэл хадгалах</button></div>
+    </form>
+    <form id="platformPasswordForm" class="password-form">
+      <h2>Нууц үг солих</h2>
+      <label>Одоогийн нууц үг<input name="currentPassword" type="password" minlength="12" required autocomplete="current-password"></label>
+      <div class="grid"><label>Шинэ нууц үг<input name="newPassword" type="password" minlength="12" required autocomplete="new-password"></label><label>Шинэ нууц үг давтах<input name="confirmPassword" type="password" minlength="12" required autocomplete="new-password"></label></div>
+      <small class="password-help">Хамгийн багадаа 12 тэмдэгт ашиглана уу.</small>
+      <p class="error" data-error></p>
+      <div class="actions"><button class="primary" type="submit">Нууц үг солих</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="organizationDialog"><form id="organizationForm">
+    <div class="dialog-head"><div><span class="eyebrow">ШИНЭ ХАРИЛЦАГЧ</span><h2>Байгууллага нээх</h2></div><button type="button" class="icon" data-close="organizationDialog">×</button></div>
+    <label>Байгууллагын нэр<input name="name" placeholder="Дорнод Сервис ХХК" required maxlength="200"></label>
+    <label>Байгууллагын код<input name="slug" placeholder="dornod-service" required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" maxlength="80"><small>Нэвтрэх үед ашиглана. Жишээ: dornod-service</small></label>
+    <div class="grid"><label>Захирлын овог нэр<input name="adminName" required></label><label>Захирлын и-мэйл<input name="adminEmail" type="email" required></label></div>
+    <div class="grid"><label>Хэрэглэгчийн нэр<input name="adminUsername" placeholder="admin" pattern="[a-zA-Z0-9._-]+" minlength="3" required></label><label>Анхны нууц үг<input name="adminPassword" type="password" minlength="12" required></label></div>
+    <div class="grid"><label>Үйлчилгээний багц<select name="planCode"><option value="pilot">Pilot</option><option value="starter">Starter</option><option value="business">Business</option></select></label><label>Туршилтын хоног<input name="trialDays" type="number" value="30" min="1" max="365" required></label></div>
+    <p class="error" data-error></p>
+    <div class="actions"><button type="button" class="ghost" data-close="organizationDialog">Болих</button><button class="primary" type="submit">Байгууллага үүсгэх</button></div>
+  </form></dialog>
+
+  <dialog id="invoiceDialog"><form id="invoiceForm">
+    <div class="dialog-head"><div><span class="eyebrow">SaaS ТӨЛБӨР</span><h2>Шинэ нэхэмжлэх</h2></div><button type="button" class="icon" data-close="invoiceDialog">×</button></div>
+    <label>Байгууллага<select name="organizationId" id="invoiceOrganization" required></select></label>
+    <div class="grid"><label>Эхлэх огноо<input name="periodStart" type="date" required></label><label>Дуусах огноо<input name="periodEnd" type="date" required></label></div>
+    <div class="grid"><label>Төлөх огноо<input name="dueDate" type="date" required></label><label>Дүн (₮)<input name="amount" type="number" min="0" step="1" required></label></div>
+    <label>Тэмдэглэл<input name="note"></label><p class="error" data-error></p>
+    <div class="actions"><button type="button" class="ghost" data-close="invoiceDialog">Болих</button><button class="primary">Нэхэмжлэх үүсгэх</button></div>
+  </form></dialog>
+
+  <dialog id="subscriptionDialog"><form id="subscriptionForm">
+    <input name="id" type="hidden">
+    <div class="dialog-head"><div><span class="eyebrow">ҮЙЛЧИЛГЭЭНИЙ ЭРХ</span><h2 id="subscriptionTitle">Эрх шинэчлэх</h2></div><button type="button" class="icon" data-close="subscriptionDialog">×</button></div>
+    <div class="grid"><label>Байгууллагын төлөв<select name="organizationStatus"><option value="active">Идэвхтэй</option><option value="suspended">Түдгэлзүүлсэн</option><option value="archived">Архивласан</option></select></label><label>Үйлчилгээний төлөв<select name="subscriptionStatus"><option value="trial">Туршилт</option><option value="active">Идэвхтэй</option><option value="past_due">Төлбөр хэтэрсэн</option><option value="suspended">Түдгэлзүүлсэн</option><option value="cancelled">Цуцалсан</option></select></label></div>
+    <div class="grid"><label>Багц<select name="planCode"><option value="pilot">Pilot</option><option value="starter">Starter</option><option value="business">Business</option></select></label><label>Дуусах огноо<input name="endsAt" type="date"></label></div>
+    <p class="error" data-error></p>
+    <div class="actions"><button type="button" class="ghost" data-close="subscriptionDialog">Болих</button><button class="primary" type="submit">Хадгалах</button></div>
+  </form></dialog>
+  <div class="toast" id="toast"></div>
+  <script src="/platform-ai-usage.js?v=1" defer></script>
+  <script src="/platform.js?v=9" defer></script>
+</body>
+</html>

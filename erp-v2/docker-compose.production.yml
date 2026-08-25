@@ -1,0 +1,272 @@
+name: overva-production
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  init: true
+  security_opt:
+    - no-new-privileges:true
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+services:
+  caddy:
+    <<: *service-defaults
+    image: caddy:2.11.4-alpine
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL is required}
+      SITE_SCHEME: ${SITE_SCHEME:-https}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - edge
+      - backend
+    depends_on:
+      public-site:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "caddy", "validate", "--config", "/etc/caddy/Caddyfile"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  public-site:
+    <<: *service-defaults
+    build:
+      context: ./public-site
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
+    networks:
+      - edge
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
+  web:
+    <<: *service-defaults
+    build:
+      context: ./web
+    networks:
+      - backend
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1/health || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
+  api:
+    <<: *service-defaults
+    build:
+      context: ./api
+    env_file:
+      - ${OVERVA_ENV_FILE:-.env.production}
+    environment:
+      NODE_ENV: production
+      API_PORT: 4100
+      DATABASE_URL_FILE: /run/secrets/app_database_url
+      JWT_SECRET_FILE: /run/secrets/jwt_secret
+      OPENAI_API_KEY_FILE: /run/secrets/openai_api_key
+    secrets:
+      - app_database_url
+      - jwt_secret
+      - openai_api_key
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      - uploads_data:/app/uploads
+      - ${OVERVA_BACKUP_DIR:-./backups-production}:/app/backups:ro
+    networks:
+      - backend
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command: ["node", "src/server.js"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4100/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  db:
+    <<: *service-defaults
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_APP_USER: ${APP_DATABASE_USER:?APP_DATABASE_USER is required}
+      POSTGRES_APP_PASSWORD_FILE: /run/secrets/app_database_password
+    secrets:
+      - postgres_password
+      - app_database_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./ops/postgres-init-app-user.sh:/docker-entrypoint-initdb.d/10-overva-app-user.sh:ro
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    stop_grace_period: 60s
+
+  migrate:
+    build:
+      context: ./api
+    restart: "no"
+    env_file:
+      - ${OVERVA_ENV_FILE:-.env.production}
+    environment:
+      NODE_ENV: production
+      DATABASE_URL_FILE: /run/secrets/migration_database_url
+      JWT_SECRET_FILE: /run/secrets/jwt_secret
+      APP_DATABASE_USER: ${APP_DATABASE_USER:?APP_DATABASE_USER is required}
+    secrets:
+      - migration_database_url
+      - jwt_secret
+    read_only: true
+    tmpfs:
+      - /tmp
+    command: ["node", "scripts/production-migrate.js"]
+    networks:
+      - backend
+    depends_on:
+      db:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  backup-scheduler:
+    <<: *service-defaults
+    image: postgres:16-alpine
+    env_file:
+      - ${OVERVA_ENV_FILE:-.env.production}
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+    secrets:
+      - postgres_password
+    volumes:
+      - uploads_data:/source/uploads:ro
+      - ${OVERVA_BACKUP_DIR:-./backups-production}:/backups
+      - ./ops:/ops:ro
+    networks:
+      - backend
+    depends_on:
+      db:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "/ops/backup-scheduler.sh"]
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /backups/LATEST && test -d /backups/$$(tr -d '\\r\\n' < /backups/LATEST)"]
+      interval: 5m
+      timeout: 10s
+      retries: 3
+      start_period: 2m
+
+  monitor:
+    <<: *service-defaults
+    image: postgres:16-alpine
+    env_file:
+      - ${OVERVA_ENV_FILE:-.env.production}
+    environment:
+      MONITOR_INTERVAL_SECONDS: ${MONITOR_INTERVAL_SECONDS:-60}
+    volumes:
+      - ./ops:/ops:ro
+    networks:
+      - backend
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "/ops/monitor.sh"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h db -U $$POSTGRES_USER -d $$POSTGRES_DB >/dev/null && wget -q -T 5 -O /dev/null http://api:4100/health"]
+      interval: 1m
+      timeout: 10s
+      retries: 3
+
+  webhook-worker:
+    <<: *service-defaults
+    build:
+      context: ./api
+    profiles: ["integrations"]
+    env_file:
+      - ${OVERVA_ENV_FILE:-.env.production}
+    environment:
+      NODE_ENV: production
+      DATABASE_URL_FILE: /run/secrets/app_database_url
+      JWT_SECRET_FILE: /run/secrets/jwt_secret
+      WEBHOOK_WORKER_INTERVAL_MS: ${WEBHOOK_WORKER_INTERVAL_MS:-30000}
+    secrets:
+      - app_database_url
+      - jwt_secret
+    read_only: true
+    tmpfs:
+      - /tmp
+    command: ["node", "scripts/webhook-worker.js"]
+    networks:
+      - backend
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "const fs=require('node:fs');const t=Number(fs.readFileSync('/tmp/webhook-worker-heartbeat','utf8'));if(!t||Date.now()-t>180000)process.exit(1)"]
+      interval: 1m
+      timeout: 5s
+      retries: 3
+      start_period: 1m
+
+secrets:
+  postgres_password:
+    file: ./secrets/postgres_password
+  app_database_password:
+    file: ./secrets/app_database_password
+  migration_database_url:
+    file: ./secrets/migration_database_url
+  app_database_url:
+    file: ./secrets/app_database_url
+  jwt_secret:
+    file: ./secrets/jwt_secret
+  openai_api_key:
+    file: ./secrets/openai_api_key
+
+networks:
+  edge:
+  backend:
+    internal: true
+
+volumes:
+  postgres_data:
+  uploads_data:
+  caddy_data:
+  caddy_config:

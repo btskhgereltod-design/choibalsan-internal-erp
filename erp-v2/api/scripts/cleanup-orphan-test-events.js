@@ -1,0 +1,3 @@
+"use strict";
+require("dotenv").config();const {getPool,closePool}=require("../src/db");
+(async()=>{const result=await getPool().query(`DELETE FROM automation_events e WHERE (e.source_entity_type='work_order' AND NOT EXISTS(SELECT 1 FROM work_orders w WHERE w.organization_id=e.organization_id AND w.id::text=e.source_entity_id)) OR (e.source_entity_type='finance_import_job' AND NOT EXISTS(SELECT 1 FROM finance_import_jobs j WHERE j.organization_id=e.organization_id AND j.id::text=e.source_entity_id)) RETURNING id`);console.log(`Cleaned ${result.rowCount} orphan integration-test automation events.`);await closePool()})().catch(error=>{console.error(error);process.exitCode=1});

@@ -1,0 +1,20 @@
+services:
+  api:
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    environment:
+      OPENAI_API_KEY_FILE: /run/secrets/openai_api_key
+    secrets:
+      - openai_api_key
+    networks:
+      - backend
+      - ai-egress
+
+secrets:
+  openai_api_key:
+    file: ./secrets/openai_api_key
+
+networks:
+  ai-egress:
+    driver: bridge

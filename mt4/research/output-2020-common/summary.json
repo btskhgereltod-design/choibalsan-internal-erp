@@ -1,0 +1,439 @@
+{
+  "assumptions": {
+    "tpPriceDistance": 10,
+    "stepPriceDistance": 20,
+    "multiplier": 3,
+    "maxLevel": 5,
+    "fixedSpread": 0.24,
+    "contractSize": 100,
+    "pathModel": "bullish O-L-H-C, bearish O-H-L-C",
+    "bytesRead": 420524580
+  },
+  "history": {
+    "h1Start": "2004-06-11T07:00:00.000Z",
+    "h1End": "2026-08-17T06:00:00.000Z",
+    "h1Bars": 128883,
+    "m1Segments": [
+      {
+        "start": "2004-06-11T07:18:00.000Z",
+        "end": "2026-06-12T22:53:00.000Z",
+        "bars": 6955095
+      },
+      {
+        "start": "2026-06-22T21:06:00.000Z",
+        "end": "2026-08-17T06:24:00.000Z",
+        "bars": 53648
+      }
+    ]
+  },
+  "summaries": [
+    {
+      "scenario": "current_ceil_auto_20k",
+      "startBalance": 20000,
+      "endBalance": 174990,
+      "netProfit": 154990,
+      "grossProfit": 868010,
+      "grossLoss": -713020,
+      "profitFactor": 1.2173711817340327,
+      "trades": 10804,
+      "tradeWinRate": 0.6734542761940022,
+      "cycles": 7295,
+      "cycleWins": 7276,
+      "cycleLosses": 19,
+      "cycleWinRate": 0.9973954763536669,
+      "maxBalanceDrawdown": 30190,
+      "terminalCounts": {
+        "WIN_L1": 4901,
+        "WIN_L3": 575,
+        "WIN_L2": 1581,
+        "WIN_L4": 175,
+        "LOSS_L5": 19,
+        "WIN_L5": 44
+      },
+      "yearStats": {
+        "2020": {
+          "cycles": 383,
+          "wins": 380,
+          "losses": 3,
+          "pnl": -9350
+        },
+        "2021": {
+          "cycles": 200,
+          "wins": 198,
+          "losses": 2,
+          "pnl": -5010
+        },
+        "2022": {
+          "cycles": 247,
+          "wins": 246,
+          "losses": 1,
+          "pnl": 39.99999999999818
+        },
+        "2023": {
+          "cycles": 216,
+          "wins": 215,
+          "losses": 1,
+          "pnl": -270.00000000000045
+        },
+        "2024": {
+          "cycles": 392,
+          "wins": 392,
+          "losses": 0,
+          "pnl": 3920.000000000001
+        },
+        "2025": {
+          "cycles": 1539,
+          "wins": 1533,
+          "losses": 6,
+          "pnl": -970
+        },
+        "2026": {
+          "cycles": 4318,
+          "wins": 4312,
+          "losses": 6,
+          "pnl": 166990
+        }
+      }
+    },
+    {
+      "scenario": "floor_auto_20k",
+      "startBalance": 20000,
+      "endBalance": 149400,
+      "netProfit": 129400,
+      "grossProfit": 707240,
+      "grossLoss": -577840,
+      "profitFactor": 1.2239374221237713,
+      "trades": 10804,
+      "tradeWinRate": 0.6734542761940022,
+      "cycles": 7295,
+      "cycleWins": 7276,
+      "cycleLosses": 19,
+      "cycleWinRate": 0.9973954763536669,
+      "maxBalanceDrawdown": 24220,
+      "terminalCounts": {
+        "WIN_L1": 4901,
+        "WIN_L3": 575,
+        "WIN_L2": 1581,
+        "WIN_L4": 175,
+        "LOSS_L5": 19,
+        "WIN_L5": 44
+      },
+      "yearStats": {
+        "2020": {
+          "cycles": 383,
+          "wins": 380,
+          "losses": 3,
+          "pnl": -5630
+        },
+        "2021": {
+          "cycles": 200,
+          "wins": 198,
+          "losses": 2,
+          "pnl": -2860
+        },
+        "2022": {
+          "cycles": 247,
+          "wins": 246,
+          "losses": 1,
+          "pnl": 39.99999999999818
+        },
+        "2023": {
+          "cycles": 216,
+          "wins": 215,
+          "losses": 1,
+          "pnl": -270.00000000000045
+        },
+        "2024": {
+          "cycles": 392,
+          "wins": 392,
+          "losses": 0,
+          "pnl": 3920.000000000001
+        },
+        "2025": {
+          "cycles": 1539,
+          "wins": 1533,
+          "losses": 6,
+          "pnl": 810
+        },
+        "2026": {
+          "cycles": 4318,
+          "wins": 4312,
+          "losses": 6,
+          "pnl": 133670
+        }
+      }
+    },
+    {
+      "scenario": "fixed_001_10k",
+      "startBalance": 10000,
+      "endBalance": 36760,
+      "netProfit": 26760,
+      "grossProfit": 231080,
+      "grossLoss": -204320,
+      "profitFactor": 1.1309710258418169,
+      "trades": 10804,
+      "tradeWinRate": 0.6734542761940022,
+      "cycles": 7295,
+      "cycleWins": 7276,
+      "cycleLosses": 19,
+      "cycleWinRate": 0.9973954763536669,
+      "maxBalanceDrawdown": 8640.000000000002,
+      "terminalCounts": {
+        "WIN_L1": 4901,
+        "WIN_L3": 575,
+        "WIN_L2": 1581,
+        "WIN_L4": 175,
+        "LOSS_L5": 19,
+        "WIN_L5": 44
+      },
+      "yearStats": {
+        "2020": {
+          "cycles": 383,
+          "wins": 380,
+          "losses": 3,
+          "pnl": -3460
+        },
+        "2021": {
+          "cycles": 200,
+          "wins": 198,
+          "losses": 2,
+          "pnl": -2860
+        },
+        "2022": {
+          "cycles": 247,
+          "wins": 246,
+          "losses": 1,
+          "pnl": 39.99999999999818
+        },
+        "2023": {
+          "cycles": 216,
+          "wins": 215,
+          "losses": 1,
+          "pnl": -270.00000000000045
+        },
+        "2024": {
+          "cycles": 392,
+          "wins": 392,
+          "losses": 0,
+          "pnl": 3920.000000000001
+        },
+        "2025": {
+          "cycles": 1539,
+          "wins": 1533,
+          "losses": 6,
+          "pnl": 810
+        },
+        "2026": {
+          "cycles": 4318,
+          "wins": 4312,
+          "losses": 6,
+          "pnl": 28600
+        }
+      }
+    },
+    {
+      "scenario": "fixed_001_inverse_ema",
+      "startBalance": 10000,
+      "endBalance": 20240,
+      "netProfit": 10240,
+      "grossProfit": 238500,
+      "grossLoss": -228260,
+      "profitFactor": 1.0448611232804697,
+      "trades": 10711,
+      "tradeWinRate": 0.6604425357109514,
+      "cycles": 7099,
+      "cycleWins": 7074,
+      "cycleLosses": 25,
+      "cycleWinRate": 0.9964783772362305,
+      "maxBalanceDrawdown": 8520,
+      "terminalCounts": {
+        "WIN_L2": 1678,
+        "WIN_L1": 4623,
+        "WIN_L3": 542,
+        "WIN_L5": 57,
+        "WIN_L4": 174,
+        "LOSS_L5": 25
+      },
+      "yearStats": {
+        "2020": {
+          "cycles": 365,
+          "wins": 362,
+          "losses": 3,
+          "pnl": -3640
+        },
+        "2021": {
+          "cycles": 191,
+          "wins": 191,
+          "losses": 0,
+          "pnl": 1910
+        },
+        "2022": {
+          "cycles": 264,
+          "wins": 264,
+          "losses": 0,
+          "pnl": 2640
+        },
+        "2023": {
+          "cycles": 185,
+          "wins": 184,
+          "losses": 1,
+          "pnl": -579.9999999999993
+        },
+        "2024": {
+          "cycles": 391,
+          "wins": 390,
+          "losses": 1,
+          "pnl": 1480.000000000001
+        },
+        "2025": {
+          "cycles": 1463,
+          "wins": 1457,
+          "losses": 6,
+          "pnl": 50
+        },
+        "2026": {
+          "cycles": 4240,
+          "wins": 4226,
+          "losses": 14,
+          "pnl": 8380
+        }
+      }
+    },
+    {
+      "scenario": "fixed_001_always_buy",
+      "startBalance": 10000,
+      "endBalance": 34170,
+      "netProfit": 24170,
+      "grossProfit": 237190,
+      "grossLoss": -213020,
+      "profitFactor": 1.1134635245516853,
+      "trades": 10818,
+      "tradeWinRate": 0.6710112775004622,
+      "cycles": 7279,
+      "cycleWins": 7259,
+      "cycleLosses": 20,
+      "cycleWinRate": 0.9972523698310207,
+      "maxBalanceDrawdown": 7500,
+      "terminalCounts": {
+        "WIN_L1": 4882,
+        "WIN_L3": 561,
+        "WIN_L2": 1581,
+        "WIN_L4": 185,
+        "WIN_L5": 50,
+        "LOSS_L5": 20
+      },
+      "yearStats": {
+        "2020": {
+          "cycles": 397,
+          "wins": 396,
+          "losses": 1,
+          "pnl": 1540
+        },
+        "2021": {
+          "cycles": 197,
+          "wins": 197,
+          "losses": 0,
+          "pnl": 1970
+        },
+        "2022": {
+          "cycles": 252,
+          "wins": 252,
+          "losses": 0,
+          "pnl": 2520.000000000002
+        },
+        "2023": {
+          "cycles": 209,
+          "wins": 208,
+          "losses": 1,
+          "pnl": -340
+        },
+        "2024": {
+          "cycles": 398,
+          "wins": 397,
+          "losses": 1,
+          "pnl": 1550
+        },
+        "2025": {
+          "cycles": 1564,
+          "wins": 1559,
+          "losses": 5,
+          "pnl": 3490
+        },
+        "2026": {
+          "cycles": 4262,
+          "wins": 4250,
+          "losses": 12,
+          "pnl": 13460
+        }
+      }
+    },
+    {
+      "scenario": "fixed_001_always_sell",
+      "startBalance": 10000,
+      "endBalance": 15560.000000000007,
+      "netProfit": 5560.000000000007,
+      "grossProfit": 233180,
+      "grossLoss": -227620,
+      "profitFactor": 1.0244266760390124,
+      "trades": 10729,
+      "tradeWinRate": 0.6608257992357163,
+      "cycles": 7117,
+      "cycleWins": 7090,
+      "cycleLosses": 27,
+      "cycleWinRate": 0.9962062666854011,
+      "maxBalanceDrawdown": 14189.999999999993,
+      "terminalCounts": {
+        "WIN_L2": 1699,
+        "WIN_L1": 4622,
+        "WIN_L3": 554,
+        "WIN_L4": 163,
+        "WIN_L5": 52,
+        "LOSS_L5": 27
+      },
+      "yearStats": {
+        "2020": {
+          "cycles": 376,
+          "wins": 374,
+          "losses": 2,
+          "pnl": -1100.0000000000002
+        },
+        "2021": {
+          "cycles": 194,
+          "wins": 192,
+          "losses": 2,
+          "pnl": -2920
+        },
+        "2022": {
+          "cycles": 250,
+          "wins": 249,
+          "losses": 1,
+          "pnl": 70
+        },
+        "2023": {
+          "cycles": 194,
+          "wins": 193,
+          "losses": 1,
+          "pnl": -489.9999999999993
+        },
+        "2024": {
+          "cycles": 370,
+          "wins": 368,
+          "losses": 2,
+          "pnl": -1159.9999999999936
+        },
+        "2025": {
+          "cycles": 1419,
+          "wins": 1414,
+          "losses": 5,
+          "pnl": 2040
+        },
+        "2026": {
+          "cycles": 4314,
+          "wins": 4300,
+          "losses": 14,
+          "pnl": 9120
+        }
+      }
+    }
+  ]
+}

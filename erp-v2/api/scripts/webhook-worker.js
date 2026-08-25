@@ -1,0 +1,5 @@
+"use strict";
+require("dotenv").config();const fs=require("node:fs"),{getPool,closePool}=require("../src/db"),{deliverWebhook}=require("../src/services/webhooks"),interval=Math.max(5000,Number(process.env.WEBHOOK_WORKER_INTERVAL_MS||30000));let stopping=false;
+async function cycle(){const result=await getPool().query(`SELECT id FROM webhook_deliveries WHERE status IN('queued','failed') AND attempts<max_attempts AND next_attempt_at<=now() ORDER BY next_attempt_at,created_at LIMIT 50 FOR UPDATE SKIP LOCKED`);for(const row of result.rows)await deliverWebhook(row.id)}
+async function run(){console.log(`[webhook-worker] interval=${interval}ms`);while(!stopping){try{await cycle()}catch(error){console.error("[webhook-worker]",error)}finally{fs.writeFileSync("/tmp/webhook-worker-heartbeat",String(Date.now()))}await new Promise(r=>setTimeout(r,interval))}await closePool()}
+process.on("SIGTERM",()=>{stopping=true});process.on("SIGINT",()=>{stopping=true});run().catch(error=>{console.error(error);process.exitCode=1});

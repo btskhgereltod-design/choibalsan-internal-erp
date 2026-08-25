@@ -1,0 +1,77 @@
+/* Familiar visual language carried forward from the legacy ERP. */
+:root { --navy:#fff; --blue:#2563eb; --ink:#0f1623; --muted:#667085; --line:#e2e6ed; --canvas:#f0f2f5; --green:#16a34a; --red:#dc2626; }
+body { background:var(--canvas); font-size:14px; line-height:1.5; }
+.login-layout { display:grid; grid-template-columns:1fr; place-items:center; padding:32px; background:linear-gradient(135deg,#0f1623 0%,#1d2d4a 50%,#0f1623 100%); }
+.login-layout::before { content:""; position:fixed; inset:0; background-image:repeating-linear-gradient(0deg,transparent,transparent 39px,#ffffff08 39px,#ffffff08 40px),repeating-linear-gradient(90deg,transparent,transparent 39px,#ffffff08 39px,#ffffff08 40px); pointer-events:none; }
+.login-layout::after,.login-brand,.login-copy { display:none; }
+.login-card { width:min(420px,92vw); padding:36px; border:1px solid #e2e6ed; border-radius:20px; box-shadow:0 10px 40px #0f162324; }
+.login-card h2 { margin:8px 0 6px; font-size:22px; }
+.login-card>div>p { margin-bottom:24px; font-size:13px; }
+.overva-lockup { display:flex; align-items:center; gap:12px; margin-bottom:18px; }
+.overva-symbol { display:grid; place-items:center; width:44px; height:44px; border-radius:12px; color:#fff; background:linear-gradient(145deg,#2c7bf1,#174bad); box-shadow:0 8px 20px #1d4ed833; font-size:20px; font-weight:900; }
+.overva-lockup strong,.overva-lockup span { display:block; }
+.overva-lockup strong { color:#0f1623; font-size:18px; font-weight:900; letter-spacing:.12em; }
+.overva-lockup span { margin-top:2px; color:#667085; font-size:9px; letter-spacing:.06em; text-transform:uppercase; }
+.overva-promise { margin:0 0 24px; padding:13px 15px; border-left:3px solid #2563eb; border-radius:0 9px 9px 0; color:#475467; background:#eff6ff; font-size:14px; }
+.overva-promise strong { color:#1d4ed8; }
+.app-layout { grid-template-columns:240px 1fr; background:var(--canvas); }
+.sidebar { padding:0 12px 14px; color:#344054; background:#fff; border-right:1px solid var(--line); box-shadow:1px 0 3px #0f16230a; }
+.sidebar-brand { height:56px; padding:0 8px; border-bottom:1px solid var(--line); }
+.sidebar-brand strong { color:#0f1623; font-size:12px; font-weight:800; letter-spacing:.02em; }
+.sidebar-brand span { color:#667085; font-size:10px; letter-spacing:.04em; }
+.brand-mark.small { width:32px; height:32px; border-radius:8px; box-shadow:none; }
+.sidebar nav { gap:2px; margin-top:14px; padding-bottom:16px; overflow-y:auto; }
+.nav-item { position:relative; gap:10px; border-radius:8px; padding:9px 10px; color:#344054; font-size:13px; font-weight:500; }
+.nav-item span { width:20px; color:#667085; font-size:16px; }
+.nav-item:hover { color:#0f1623; background:#f0f2f5; }
+.nav-item.active { color:#2563eb; background:#eff6ff; font-weight:700; }
+.nav-item.active span { color:#2563eb; }
+.nav-item.active::before { content:""; position:absolute; left:0; top:25%; bottom:25%; width:3px; border-radius:0 3px 3px 0; background:#2563eb; }
+.sidebar-foot { padding:14px 8px 2px; border-top:1px solid var(--line); }
+.api-indicator,.logout-link { color:#667085; }
+.sidebar-actions { display:grid; gap:5px; margin-top:10px; }
+.logout-link { display:flex; align-items:center; gap:8px; width:100%; margin:0; padding:8px 9px; border-radius:8px; text-align:left; }
+.logout-link span { width:18px; text-align:center; font-size:15px; }
+.logout-link:hover { color:#2563eb; background:#eff6ff; }
+.logout-link.logout-action { color:#b42318; }
+.logout-link.logout-action:hover { color:#b42318; background:#fef3f2; }
+.topbar-actions { display:flex; align-items:center; gap:12px; }
+.topbar-logout { min-height:34px; padding:7px 12px; border:1px solid #d0d5dd; border-radius:8px; color:#344054; background:#fff; font-size:12px; font-weight:700; }
+.topbar-logout:hover { color:#b42318; border-color:#fda29b; background:#fef3f2; }
+.topbar { height:56px; padding:0 20px; border-bottom:1px solid var(--line); box-shadow:0 1px 3px #0f162314; }
+.avatar { width:32px; height:32px; border-radius:8px; background:linear-gradient(135deg,#2563eb,#7c3aed); }
+.page { padding:24px 28px 48px; }
+.page-header { margin-bottom:20px; }
+.page-header h1 { font-size:22px; font-weight:800; }
+.page-header p { font-size:12px; }
+.eyebrow { font-size:10px; letter-spacing:.12em; }
+.stat-grid { gap:14px; }
+.stat-card { position:relative; overflow:hidden; padding:18px 20px; border-radius:14px; box-shadow:0 1px 3px #0f162314,0 1px 2px #0f16230f; transition:box-shadow .2s,transform .2s; }
+.stat-card:hover { transform:translateY(-1px); box-shadow:0 4px 16px #0f16231a,0 2px 4px #0f16230f; }
+.stat-card::after { content:""; position:absolute; inset:0 0 auto; height:3px; background:#2563eb; }
+.stat-card.green::after { background:#16a34a; }
+.stat-card.red::after { background:#dc2626; }
+.stat-card.purple::after { background:#7c3aed; }
+.stat-card.amber::after { background:#d97706; }
+.stat-card .stat-top { margin-bottom:12px; }
+.stat-card strong { margin-top:0; color:#2563eb; font-size:28px; line-height:1; }
+.stat-card.green strong { color:#16a34a; }
+.stat-card.red strong { color:#dc2626; }
+.stat-card.purple strong { color:#7c3aed; }
+.stat-card.amber strong { color:#d97706; }
+.stat-card .stat-icon { width:36px; height:36px; border-radius:8px; }
+.stat-card.green .stat-icon { color:#15803d; background:#f0fdf4; }
+.stat-card.red .stat-icon { color:#dc2626; background:#fee2e2; }
+.stat-card.purple .stat-icon { color:#7c3aed; background:#ede9fe; }
+.panel,.table-panel,.report-panel { border-radius:14px; box-shadow:0 1px 3px #0f162314,0 1px 2px #0f16230f; }
+.panel-head { padding:16px 20px; }
+.panel-head h2 { font-size:15px; }
+.content-grid { gap:16px; margin-top:16px; }
+.quick-action { padding:11px 12px; border-radius:10px; }
+.data-table th { color:#667085; background:#f8f9fb; }
+.data-table td { border-color:#e2e6ed; }
+.primary,.secondary { border-radius:10px; font-size:13px; }
+.secondary { border:1px solid #d0d5dd; background:#fff; }
+dialog { border-radius:14px; box-shadow:0 10px 40px #0f162324; }
+@media(max-width:720px) { .app-layout{grid-template-columns:1fr} .sidebar{padding:10px 12px} .sidebar-brand{height:48px} .sidebar nav{margin-top:8px} .page{padding:20px 14px 40px} }
+.module-disabled{display:none!important}

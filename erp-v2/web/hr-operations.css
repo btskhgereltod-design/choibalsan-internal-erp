@@ -1,0 +1,46 @@
+.hr-workspace-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 0 0 14px;
+  margin: 0 0 16px;
+  min-height: 43px;
+  border-bottom: 1px solid #dbe4f0;
+  scrollbar-width: thin;
+}
+.hr-workspace-tabs button {
+  flex: 0 0 auto;
+  border: 1px solid #d4deeb;
+  border-radius: 10px;
+  background: #fff;
+  color: #526176;
+  font-weight: 750;
+  line-height: 20px;
+  min-height: 42px;
+  padding: 10px 14px;
+  cursor: pointer;
+}
+.hr-workspace-tabs button:hover { background: #edf4ff; color: #205fce; }
+.hr-workspace-tabs button.active {
+  background: #276ee9;
+  border-color: #276ee9;
+  color: #fff;
+  box-shadow: 0 6px 16px rgba(39,110,233,.2);
+}
+.hr-edit.danger { color: #c0392b; border-color: #f2c8c3; }
+.hr-tag.pending { background: #fff5dd; color: #996000; }
+.hr-tag.approved,.hr-tag.completed,.hr-tag.closed { background: #e8f9ef; color: #11854c; }
+.hr-tag.rejected,.hr-tag.cancelled { background: #fff0ed; color: #c04435; }
+.hr-checklist-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(320px,1fr)); gap: 16px; }
+.hr-checklist {
+  border: 1px solid #dbe4f0;
+  border-radius: 16px;
+  background: #fff;
+  padding: 18px;
+  box-shadow: 0 4px 14px rgba(20,50,90,.05);
+}
+.hr-checklist h3 { margin: 0 0 6px; }
+.hr-checklist>span { display: block; color: #77869a; font-size: 12px; margin-bottom: 14px; }
+.hr-checklist label { display: block; padding: 9px 0; border-top: 1px solid #edf1f6; font-weight: 650; }
+.hr-checklist input { margin-right: 8px; }

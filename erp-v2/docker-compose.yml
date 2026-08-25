@@ -1,0 +1,127 @@
+name: choibalsan-erp-v2
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: ./api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: ${DATABASE_URL}
+      API_PORT: 4100
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - uploads_data:/app/uploads
+      - ./backups:/app/backups:ro
+    ports:
+      - "127.0.0.1:4101:4100"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4100/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  web:
+    build:
+      context: ./web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${ERP_WEB_BIND_IP:-127.0.0.1}:4100:80"
+
+  webhook-worker:
+    build:
+      context: ./api
+    restart: unless-stopped
+    profiles: ["integrations"]
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: ${DATABASE_URL}
+      WEBHOOK_WORKER_INTERVAL_MS: ${WEBHOOK_WORKER_INTERVAL_MS:-30000}
+    command: ["node", "scripts/webhook-worker.js"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  backup-scheduler:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - uploads_data:/source/uploads:ro
+      - ./backups:/backups
+      - ./ops:/ops:ro
+    entrypoint: ["/bin/sh", "/ops/backup-scheduler.sh"]
+
+  monitor:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      MONITOR_INTERVAL_SECONDS: ${MONITOR_INTERVAL_SECONDS:-60}
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    volumes:
+      - ./ops:/ops:ro
+    entrypoint: ["/bin/sh", "/ops/monitor.sh"]
+
+  backup:
+    image: postgres:16-alpine
+    profiles: ["ops"]
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - uploads_data:/source/uploads:ro
+      - ./backups:/backups
+      - ./ops:/ops:ro
+    entrypoint: ["/bin/sh", "/ops/backup.sh"]
+
+  backup-verify:
+    image: postgres:16-alpine
+    profiles: ["ops"]
+    volumes:
+      - ./backups:/backups:ro
+      - ./ops:/ops:ro
+    entrypoint: ["/bin/sh", "/ops/verify-latest.sh"]
+
+volumes:
+  postgres_data:
+  uploads_data:
