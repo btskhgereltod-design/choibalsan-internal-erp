@@ -9,7 +9,7 @@
     "map","fleet","iot","integration-lab","automation","ai-director",
     "developer","industry-profile","builder"
   ]);
-  const setupViews=new Set(["dashboard","employees","users","settings","billing","audit"]);
+  const setupViews=new Set(["dashboard","employees","users","settings","billing","audit","connectors"]);
   const nestedSetupViews=new Set(["structure"]);
   const ownerOversightViews=new Set(["work-orders","lighting","camera","executive","reports"]);
   const primaryAdminOnlyViews=new Set(["settings","users","audit"]);
@@ -35,7 +35,7 @@
 
   function isPrimaryAdmin(systemRoles=[]){return systemRoles.includes("owner")}
   function isOrganizationAdmin(systemRoles=[]){return systemRoles.includes("administrator")}
-  function allowedViews({role="worker",systemRoles=[],permissions=[],enabledModules=[],viewModules={}}={}){
+  function allowedViews({role="worker",systemRoles=[],permissions=[],workspaceCodes=[],enabledModules=[],viewModules={}}={}){
     const primary=isPrimaryAdmin(systemRoles);
     // System access and operational duty are independent, additive concepts.
     // An owner may also be a director, accountant or worker (especially in a
@@ -59,6 +59,7 @@
     }
     if(isOrganizationAdmin(systemRoles))for(const view of setupViews)if(!primaryAdminOnlyViews.has(view))allowed.add(view);
     for(const permission of permissions)for(const view of permissionViews[permission]||[])allowed.add(view);
+    for(const view of workspaceCodes)if(typeof view==="string"&&view)allowed.add(view);
     for(const view of [...allowed]){
       if(primaryAdminOnlyViews.has(view)&&!primary){allowed.delete(view);continue}
       if(advancedViews.has(view)){allowed.delete(view);continue}

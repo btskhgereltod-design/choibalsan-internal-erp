@@ -3,97 +3,291 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="OVERVA — байгууллагын нэгдсэн удирдлагын платформ. ERP, HR, санхүү, үйл ажиллагаа, хөрөнгө, GIS/GPS, IoT ба аналитикийг нэг дор.">
-  <meta name="color-scheme" content="dark">
-  <title>OVERVA — Байгууллагаа бүхэлд нь нэг дор хар</title>
-  <link rel="stylesheet" href="/site.css?v=1">
-  <script src="/site.js?v=1" defer></script>
+  <meta name="description" content="OVERVA — байгууллагын цахим хэрэгцээг бүтэцтэй хүсэлт болгож, тохирох хэрэгжүүлэх замыг сонгон, ажлыг pilot-аас production хүртэл хяналттай хүргэх орчин.">
+  <meta name="color-scheme" content="light">
+  <title>OVERVA — Байгууллагын цахим хэрэгцээний зах</title>
+  <link rel="stylesheet" href="/site.css?v=24">
+  <script src="/conversation-memory.js?v=15" defer></script>
+  <script src="/workspace-lifecycle.js?v=14" defer></script>
+  <script src="/workspace-registry.js?v=14" defer></script>
+  <script src="/workspace-intake.js?v=14.1" defer></script>
+  <script src="/request-draft-registry.js?v=2" defer></script>
+  <script src="/site.js?v=24" defer></script>
 </head>
 <body>
-  <header class="site-header">
-    <a class="brand" href="#top" aria-label="OVERVA нүүр"><span>OV</span><strong>OVERVA</strong></a>
-    <nav aria-label="Үндсэн цэс">
-      <a href="#platform">Платформ</a><a href="#layers">Бүтэц</a><a href="#trial">Туршиж үзэх</a>
-    </nav>
-    <a class="button button-small button-quiet" href="https://app.overva.com">Нэвтрэх</a>
-  </header>
-
-  <main id="top">
-    <section class="hero shell">
-      <div class="hero-copy">
-        <p class="eyebrow">CONNECTED ORGANIZATION PLATFORM</p>
-        <h1>Байгууллагаа<br><span>бүхэлд нь</span><br>нэг дор хар.</h1>
-        <p class="lead">OVERVA бол байгууллагын мэдээлэл, хүмүүс, хөрөнгө, ажил, санхүү болон төхөөрөмжийг нэг удирдлагын орчинд холбох модульчлагдсан COP/ERP платформ.</p>
-        <div class="hero-actions"><a class="button" href="#trial">14 хоног турших</a><a class="button button-quiet" href="#platform">Платформтой танилцах</a></div>
-        <div class="trust-row"><span>Multi-tenant</span><span>Immutable audit</span><span>Modular ERP</span><span>Offline-safe IoT</span></div>
+  <section class="portfolio-home" id="portfolioHome" aria-label="OVERVA үндсэн нүүр">
+    <aside class="portfolio-sidebar">
+      <a class="brand" href="/" aria-label="OVERVA нүүр"><span>OV</span><strong>OVERVA</strong></a>
+      <div class="market-role-switch" aria-label="OVERVA Market ашиглах горим">
+        <button class="active" type="button" data-market-role="customer">Захиалагч</button>
+        <button type="button" data-market-role="provider">Гүйцэтгэгч</button>
       </div>
-      <div class="overview-card" aria-label="OVERVA платформын давхаргууд">
-        <p>ONE VIEW · ONE ORGANIZATION</p>
-        <div class="overview-core">OVERVA<small>НЭГДСЭН ХЯНАЛТ</small></div>
-        <div class="signal-grid"><span>Бизнес</span><span>Үйл ажиллагаа</span><span>Аналитик</span><span>Системийн суурь</span></div>
+      <button class="new-work" id="homeNewWorkButton" type="button"><span>＋</span> Хүсэлт гаргах</button>
+      <nav class="market-side-nav" data-market-role-nav="customer" aria-label="Захиалагчийн хэсэг">
+        <button class="active" type="button" data-market-view="all"><span>▤</span> Бүх хүсэлт</button>
+        <button type="button" data-market-view="mine"><span>♙</span> Миний хүсэлт</button>
+        <button type="button" data-market-view="projects"><span>◇</span> Миний төслүүд</button>
+      </nav>
+      <nav class="market-side-nav hidden" data-market-role-nav="provider" aria-label="Гүйцэтгэгчийн хэсэг">
+        <button class="active" type="button" data-market-view="all"><span>▤</span> Ажил олох</button>
+        <button type="button" data-market-view="proposals"><span>♙</span> Миний саналууд</button>
+        <button type="button" data-market-view="deliveries"><span>◇</span> Гүйцэтгэх ажлууд</button>
+      </nav>
+      <div class="market-side-guides" data-market-role-guide="customer"><strong>ТУСЛАМЖ</strong><button type="button" data-market-view="rules">Үйлчилгээ хэрхэн явах вэ?</button><button type="button" data-market-view="labs">Өмнөх туршилтуудаа харах</button></div>
+      <div class="market-side-guides hidden" data-market-role-guide="provider"><strong>ТУСЛАМЖ</strong><button type="button" data-market-view="provider-rules">Ажил хэрхэн явах вэ?</button></div>
+      <div class="portfolio-privacy"><strong>Таны хүсэлтийн ноорог</strong><p>Нэвтрээгүй үед хүсэлтийн ноорог зөвхөн энэ төхөөрөмжид хадгалагдана. Бусад хүнд харагдахгүй.</p></div>
+      <button class="portfolio-nav-button" id="homeConnectorsButton" type="button"><span>⌁</span> Холболтууд</button>
+      <a class="portfolio-login" href="https://app.overva.com">Нэвтрэх</a>
+    </aside>
+    <section class="portfolio-main">
+      <header class="portfolio-topbar">
+        <label><span class="sr-only">Хүсэлт хайх</span><input id="homeSearchInput" type="search" placeholder="Хүсэлт, чиглэл, хэрэгтэй боломж хайх…"></label>
+        <span>OVERVA · See Your Organization as One</span>
+      </header>
+      <div class="portfolio-scroll">
+        <section class="portfolio-hero market-panel" data-portfolio-work-view data-market-panel="all">
+          <span id="marketHeroEyebrow">БАЙГУУЛЛАГЫН ЦАХИМ ХЭРЭГЦЭЭНИЙ ЗАХ</span>
+          <div class="market-hero-row"><div><h1 id="marketHeroTitle">Хэрэгтэй ажлаа ойлгомжтой хүсэлт болгох</h1><p class="portfolio-hero-copy" id="marketHeroCopy">Жишиг хүсэлтээс санаа авч, хийх ажил болон хүлээн авах үр дүнгээ нэг дор бичнэ.</p></div><button class="market-create-button" id="marketCreateRequestButton" type="button">＋ Хүсэлт гаргах</button></div>
+          <form class="home-intent-form hidden" id="homeIntentForm">
+            <strong class="home-intent-question">Байгууллагынхаа ямар ажлыг цахимжуулах хэрэгтэй байна?</strong>
+            <label class="sr-only" for="homeIntentInput">Цахимжуулах хэрэгцээгээ тайлбарлах</label>
+            <textarea id="homeIntentInput" rows="4" aria-describedby="homeIntentHelp" placeholder="Жишээ: Манай агуулахын орлого, зарлага Excel дээр хөтлөгддөг. Үлдэгдэл зөрдөг, нярав болон нягтлан тусдаа мэдээлэл ашигладаг…"></textarea>
+            <p class="home-intent-help" id="homeIntentHelp">Асуудлаа нэг өгүүлбэрээр бичнэ үү. Дараагийн маягт төрөл, төсөв, хугацаа болон харагдах хүрээг цэгцэлнэ.</p>
+            <div><div><button type="button" data-home-source="file">＋ Файл, өгөгдөл</button><button type="button" data-home-source="image">▧ Зураг, схем</button></div><button class="home-submit" type="submit" disabled>Хүсэлт гаргах <span>→</span></button></div>
+          </form>
+          <input class="hidden" id="homeRequestFileInput" type="file" accept=".xlsx,.xls,.csv,.docx,.doc,.pdf,.vsdx,.vsd,.txt">
+          <input class="hidden" id="homeRequestImageInput" type="file" accept="image/*,.svg">
+          <div class="market-category-bar" aria-label="Хүсэлтийн ангилал"><strong>Ангилал</strong><div><button class="active" type="button" data-market-category="all">Бүгд</button><button type="button" data-market-category="inventory">Агуулах, хөрөнгө</button><button type="button" data-market-category="workflow">Хүсэлт, урсгал</button><button type="button" data-market-category="service">Засвар, үйлчилгээ</button><button type="button" data-market-category="crm">Харилцагч, борлуулалт</button></div></div>
+          <div class="market-status-tabs"><button class="active" type="button">Шинэ <small id="marketVisibleCount">4</small></button><button type="button" disabled>Шалгаж буй <small>0</small></button><button type="button" disabled>Хаагдсан <small>0</small></button><span id="marketVisibleSummary">4 жишиг хүсэлт · Бодит захиалга биш</span></div>
+          <div class="provider-market-notice"><strong>Одоогоор нээлттэй бодит ажил алга.</strong><p>Доорх мөрүүд нь захиалга биш, цаашид гүйцэтгэгчид ямар бүтэцтэй хүсэлт харагдахыг үзүүлэх жишээ юм.</p></div>
+        </section>
+        <section class="request-market market-panel" id="requestMarket" data-portfolio-work-view data-market-panel="all" aria-labelledby="requestMarketTitle">
+          <div class="portfolio-section-title request-market-heading"><div><span>ХЭРЭГЦЭЭНИЙ ЗАХ</span><h2 id="requestMarketTitle">Байгууллагууд ингэж хүсэлтээ гаргаж болно</h2><p>Эдгээр нь бодит нийтлэгдсэн захиалга биш, хүсэлтээ хэрхэн ойлгомжтой бичихийг харуулах жишиг загварууд.</p></div><strong>Concierge pilot</strong></div>
+          <div class="request-market-grid">
+            <article class="request-card" data-market-category-row="inventory"><div><span class="sample-badge">ЖИШИГ</span><small>Агуулах · Бүртгэл</small></div><h3>Агуулахын орлого, зарлага, үлдэгдлийн систем</h3><p>Excel-ийн давхар бүртгэлийг халж, нярав ба нягтлан нэг баталгаатай үлдэгдэл ашиглах.</p><ul><li>Барааны хөдөлгөөн</li><li>Үлдэгдлийн тайлан</li><li>Эрхийн хяналт</li></ul><button type="button" data-request-template="inventory">Энэ загварыг ашиглах →</button></article>
+            <article class="request-card" data-market-category-row="workflow"><div><span class="sample-badge">ЖИШИГ</span><small>Дотоод ажил · Урсгал</small></div><h3>Дотоод хүсэлт, зөвшөөрлийн урсгал</h3><p>Хүсэлт хаана гацсаныг харж, шат бүрийн шийдвэр ба хугацааг хянах.</p><ul><li>Хүсэлтийн маягт</li><li>Зөвшөөрлийн шат</li><li>Мэдэгдэл</li></ul><button type="button" data-request-template="approval">Энэ загварыг ашиглах →</button></article>
+            <article class="request-card" data-market-category-row="service"><div><span class="sample-badge">ЖИШИГ</span><small>Үйлчилгээ · Ажил</small></div><h3>Засвар, үйлчилгээний дуудлага</h3><p>Дуудлага, хариуцагч, ашигласан материал болон гүйцэтгэлийг нэг урсгалаар удирдах.</p><ul><li>Ажил хуваарилалт</li><li>Талбайн нотолгоо</li><li>Гүйцэтгэлийн түүх</li></ul><button type="button" data-request-template="service">Энэ загварыг ашиглах →</button></article>
+            <article class="request-card" data-market-category-row="crm"><div><span class="sample-badge">ЖИШИГ</span><small>Борлуулалт · CRM</small></div><h3>Харилцагчийн бүртгэл, борлуулалтын CRM</h3><p>Олон файлд тархсан харилцагч, уулзалт, санал болон борлуулалтын үе шатыг нэгтгэх.</p><ul><li>Харилцагчийн түүх</li><li>Борлуулалтын шат</li><li>Удирдлагын тайлан</li></ul><button type="button" data-request-template="crm">Энэ загварыг ашиглах →</button></article>
+          </div><div class="market-empty hidden" id="marketFilterEmpty">Энэ хайлт, ангилалд тохирох жишиг хүсэлт олдсонгүй.</div>
+        </section>
+        <section class="home-value hidden" aria-labelledby="homeValueTitle">
+          <div class="home-value-heading"><span>ХЭРХЭН АЖИЛЛАХ ВЭ</span><h2 id="homeValueTitle">Хүсэлтээс ашиглалтад оруулах хүртэл нэг хяналттай зам</h2><p>OVERVA эхний хувилбартаа захиалгыг автоматаар нийтлэхгүй. Энэ төхөөрөмжид хадгалсан хүсэлтийг шалгаж, туршилтын үйлчилгээгээр тохирох хэрэгжүүлэх замд бэлтгэнэ.</p></div>
+          <div class="home-value-grid">
+            <article><b>01</b><strong>Хүсэлтээ бүтэцтэй гаргах</strong><p>Төрөл, асуудал, хүссэн үр дүн, чадвар, төсөв болон хугацааг нэг форматаар өгнө.</p></article>
+            <article><b>02</b><strong>Шаардлагаа шалгаж батлах</strong><p>Дутуу зүйлээ өөрөө засах эсвэл хүсвэл OVERVA-аар нэмэлт шалгалт хийлгэнэ.</p></article>
+            <article><b>03</b><strong>Саналуудыг нэг хэлээр харьцуулах</strong><p>Үнэ, хугацаа, дараах дэмжлэг, байршуулалт, системийн холболт болон эрсдэлийг ижил бүтэцтэй харьцуулна.</p></article>
+            <article><b>04</b><strong>Ажлыг хамгаалалттай хүргэх</strong><p>Туршилтын загвар, туршилтын хэрэглээ, хүлээн авалт болон үйл ажиллагаанд нэвтрүүлэх шат бүрийг хүн батална.</p></article>
+          </div>
+          <div class="home-path" aria-label="OVERVA хэрэгжүүлэх зам"><span>Хүсэлт</span><i>→</i><span>Шалгалт</span><i>→</i><span>Санал</span><i>→</i><span>Сонголт</span><i>→</i><span>Туршилт · Ашиглалт</span></div>
+        </section>
+        <section class="market-panel hidden" data-portfolio-work-view data-market-panel="mine" aria-labelledby="myRequestTitle">
+          <div class="market-page-head"><div><span>МИНИЙ ХҮСЭЛТ</span><h1 id="myRequestTitle">Энэ төхөөрөмжид хадгалсан хүсэлтүүд</h1><p>Эдгээр нь нийтлээгүй ноорог. Зөвхөн энэ төхөөрөмж дээр харагдах бөгөөд бусад хэрэглэгч, хөгжүүлэгчид хараахан очоогүй.</p></div><button class="market-create-button" type="button" data-open-request>＋ Хүсэлт гаргах</button></div>
+          <div class="market-status-tabs"><button class="active" type="button">Ноорог</button><button type="button" disabled>Нийтэлсэн 0</button><button type="button" disabled>Хаагдсан 0</button></div>
+          <div class="my-request-list" id="myRequestList"></div>
+        </section>
+        <section class="market-panel request-detail hidden" data-portfolio-work-view data-market-panel="request-detail" aria-labelledby="requestDetailTitle">
+          <button class="request-detail-back" id="requestDetailBack" type="button">← Миний хүсэлт</button>
+          <div class="market-page-head"><div><span>ХҮСЭЛТИЙН ДЭЛГЭРЭНГҮЙ</span><h1 id="requestDetailTitle">Хүсэлтийн гарчиг</h1><p id="requestDetailState">Ноорог · нийтлээгүй</p></div><button class="market-create-button" id="requestReviewButton" type="button">OVERVA-аар дутууг шалгуулах</button></div>
+          <div class="request-detail-grid" id="requestDetailGrid"></div>
+          <div class="request-next-step"><strong>Дараагийн зөв алхам</strong><p id="requestNextStep">Хүсэлтээ шалгаж баталгаажуулсны дараа л нийтлэх, санал авах шат руу орно. Энэ хүсэлт одоогоор төсөл болоогүй.</p></div>
+        </section>
+        <section class="market-panel market-role-empty hidden" data-portfolio-work-view data-market-panel="projects" aria-labelledby="customerProjectsTitle">
+          <div class="market-page-head"><div><span>ЗАХИАЛАГЧИЙН ТӨСЛҮҮД</span><h1 id="customerProjectsTitle">Тохиролцсон төслүүд</h1><p>Гүйцэтгэгчээ сонгож, хоёр тал хийх ажил болон нөхцөлөө баталсны дараа төсөл энд үүснэ.</p></div><strong>Бодит төсөл хараахан алга</strong></div>
+          <div class="market-lifecycle"><span>Хүсэлт</span><i>→</i><span>Санал</span><i>→</i><span>Сонголт</span><i>→</i><span class="optional-stage">Хамтын тодруулга <small>хүсвэл</small></span><i>→</i><span>Тохиролцоо</span><i>→</i><span>Төсөл</span></div>
+          <div class="market-empty"><strong>Хүсэлт болон төсөл тусдаа.</strong><p>Хамтын тодруулгыг алгасаж шууд тохиролцож болно. Тохиролцоог хоёр тал баталсны дараа л төсөл үүснэ.</p></div>
+        </section>
+        <section class="portfolio-workspaces market-panel hidden" data-portfolio-work-view data-market-panel="labs" aria-labelledby="workspaceGridTitle">
+          <div class="portfolio-section-title"><div><span>ӨМНӨХ ТУРШИЛТУУД</span><h2 id="workspaceGridTitle">Өмнө хадгалсан туршилтын ажлууд</h2><p>Хуучин AI яриа, загвар болон шалгалтыг устгалгүй энд хадгалсан. Энэ хэсэг заавал ашиглах шат биш, бодит төсөл ч биш.</p></div><button id="showAllWorkspacesButton" type="button">Бүгдийг харах</button></div>
+          <div class="workspace-card-grid" id="homeWorkspaceGrid"></div>
+        </section>
+        <section class="market-panel market-role-empty hidden" data-portfolio-work-view data-market-panel="proposals">
+          <div class="market-page-head"><div><span>МИНИЙ САНАЛУУД</span><h1>Санал өгсөн ажлууд</h1><p>Таны өгсөн, захиалагчийн шалгаж байгаа, сонгосон болон татгалзсан саналууд энд тусдаа харагдана.</p></div><strong>Одоогоор санал алга</strong></div>
+          <div class="market-empty"><strong>Та хараахан санал өгөөгүй байна.</strong><p>Нээлттэй бодит хүсэлт гарсны дараа “Ажил олох” хэсгээс хүсэлтийг уншиж, үнэ, хугацаа, хийх арга болон дараах дэмжлэгээ санал болгоно.</p><button type="button" data-market-view="all">Ажил олох</button></div>
+        </section>
+        <section class="market-panel market-role-empty hidden" data-portfolio-work-view data-market-panel="deliveries">
+          <div class="market-page-head"><div><span>ГҮЙЦЭТГЭХ АЖЛУУД</span><h1>Сонгогдсон болон эхэлсэн ажлууд</h1><p>Ажлаа өөрийн ашигладаг хэрэгслээр хийж болно. OVERVA дээр тохиролцоо, ажлын үе шат, хүргэсэн зүйл, захиалагчийн шийдвэр болон дууссан үр дүн үлдэнэ.</p></div><strong>Бодит ажил хараахан алга</strong></div>
+          <div class="market-lifecycle provider-delivery-flow"><span>Сонгогдох</span><i>→</i><span class="optional-stage">Хамтын тодруулга <small>хүсвэл</small></span><i>→</i><span>Тохиролцох</span><i>→</i><span>Гүйцэтгэх</span><i>→</i><span>Хүргэх</span><i>→</i><span>Хүлээн авах</span><i>→</i><span>Дуусгах</span></div>
+          <div class="optional-clarification"><div><strong>Хамтын тодруулга бол сонголт</strong><p>Сонгогдсон гүйцэтгэгч шаардлагатай үед захиалагчийг урьж, бодит ажлын урсгал, оролцогч, мэдээлэл болон хүлээн авах үр дүнг хамт зураглаж болно. Код бичих өрөө биш.</p></div><ul><li>Гүйцэтгэгч санал болгоно</li><li>Захиалагч зөвшөөрнө</li><li>Хоёр тал хүсвэл алгасана</li></ul></div>
+          <div class="market-empty"><strong>Одоогоор танд гүйцэтгэх ажил алга.</strong><p>Таны саналыг захиалагч сонгосны дараа хамтын тодруулга хийх эсвэл шууд тохиролцох сонголт гарна.</p></div>
+        </section>
+        <section class="market-panel market-rules hidden" data-portfolio-work-view data-market-panel="provider-rules">
+          <div class="market-page-head"><div><span>АЖИЛ ХЭРХЭН ЯВАХ ВЭ?</span><h1>Санал өгөхөөс ажил дуусгах хүртэл</h1><p>Энэ бол тусдаа хийх ажил биш, шаардлагатай үед эргэж харах товч заавар.</p></div></div>
+          <ol><li><strong>Ойлгосон хүсэлтэд санал өгнө.</strong><p>Үнэ, хугацаа, хийх арга болон дараах дэмжлэгээ ойлгомжтой бичнэ.</p></li><li><strong>Сонгогдсоны дараа ойлголтоо нэгтгэнэ.</strong><p>Хоёр тал шууд тохиролцож болно. Шаардлагатай бол гүйцэтгэгч “Хамтын тодруулга” санал болгож, захиалагч зөвшөөрсний дараа ашиглана.</p></li><li><strong>Тохирсон ажлаа үе шаттай хүргэнэ.</strong><p>Үзүүлэх хувилбар, шалгалтын үр дүн, баримт болон ажиллаж буй холбоосоо тухайн үе шаттай холбоно.</p></li><li><strong>Захиалагч хүлээн авна эсвэл засвар хүснэ.</strong><p>Захиалагчийн шийдвэргүйгээр ажил дууссан гэж тооцохгүй.</p></li><li><strong>Дууссан ажлын дараа хоёр тал үнэлнэ.</strong><p>Зөвхөн хүлээн авч, хаасан бодит ажлын үнэлгээ цаашдын нэр хүндэд нөлөөлнө.</p></li></ol>
+        </section>
+        <section class="developer-pilot hidden">
+          <div><span>ХӨГЖҮҮЛЭГЧ, ТЕХНОЛОГИЙН КОМПАНИУД</span><h2>Тодорхой шаардлагатай бодит pilot ажлын сүлжээ бүрдэж байна</h2><p>OVERVA хөгжүүлэгчийг хоосон санаатай биш, байгууллагаар баталсан асуудал, хамрах хүрээ болон acceptance criteria-тай ажилтай холбох загварыг туршина.</p></div>
+          <strong>Concierge pilot · Удахгүй</strong>
+        </section>
+        <section class="market-panel market-rules hidden" data-portfolio-work-view data-market-panel="rules">
+          <div class="market-page-head"><div><span>ҮЙЛЧИЛГЭЭНИЙ ДҮРЭМ</span><h1>Хүсэлтээс ажлын үр дүн хүртэлх үндсэн зарчим</h1><p>Эдгээр нь эхний туршилтын үйлчилгээний хамгаалалтын дүрэм. Төлбөр хадгалах, автомат гэрээ байгуулах, маргаан шийдвэрлэх үйлчилгээ одоогоор нээгдээгүй.</p></div></div>
+          <ol><li><strong>Хүсэлтээ ойлгомжтой болгоно.</strong><p>Одоогийн асуудал, хүссэн үр дүн, хийх ажлын хүрээ, хугацаа болон төсвийн нөхцөлийг цэгцэлнэ.</p></li><li><strong>Гүйцэтгэгчийн саналыг харьцуулж сонгоно.</strong><p>Үнэ, хугацаа, хийх арга, дэмжлэг болон эрсдэлийг ижил бүтэцтэй харьцуулж, захиалагч өөрөө сонголтоо хийнэ.</p></li><li><strong>Хамтын тодруулга заавал биш.</strong><p>Сонгогдсон гүйцэтгэгч шаардлагатай гэж үзвэл санал болгоно. Захиалагч зөвшөөрч ашиглах эсвэл алгасаж шууд тохиролцож болно.</p></li><li><strong>Хоёр тал хийх ажлаа баталгаажуулна.</strong><p>Хийх ажил, үе шат, хүлээлгэн өгөх үр дүн болон өөрчлөлтийн журмыг тохирсны дараа төсөл эхэлнэ.</p></li><li><strong>Гүйцэтгэл, хүлээн авалтыг нотолгоотой хөтөлнө.</strong><p>Гүйцэтгэгч хүргэсэн зүйлээ өгч, захиалагч хүлээн авах эсвэл засвар хүсэх шийдвэр гаргана.</p></li><li><strong>Дууссаны дараа үнэлгээ өгнө.</strong><p>Хоёр тал ажил дууссаныг баталсны дараа л бодит үр дүнд суурилсан үнэлгээ үүснэ.</p></li><li><strong>Одоогийн боломжийг үнэн зөв харуулна.</strong><p>Нийтийн хувилбар хүсэлтийн нооргийг энэ төхөөрөмжид хадгалж байна. Бодит санал, төлбөр, автомат гэрээ болон маргаан шийдвэрлэх ажиллагаа хараахан нээгдээгүй.</p></li></ol>
+          <div class="market-flow" aria-label="Ажил хэрэгжүүлэх бүрэн дараалал"><span>Хүсэлт</span><i>→</i><span>Шаардлага</span><i>→</i><span>Санал</span><i>→</i><span>Сонголт</span><i>→</i><span>Тохиролцоо</span><i>→</i><span>Гүйцэтгэл</span><i>→</i><span>Хүлээн авалт</span><i>→</i><span>Ашиглалтад оруулах</span><i>→</i><span>Үнэлгээ</span></div>
+        </section>
+        <section class="public-connectors hidden" id="publicConnectors" aria-labelledby="publicConnectorsTitle">
+          <div class="public-connectors-head"><div><span>OVERVA CONNECT</span><h1 id="publicConnectorsTitle">Гадаад мэдээллийн эх үүсвэр</h1><p>Хэрэгцээгээ тодорхойлох болон батлагдсан ажлын орчинд зөвшөөрөлтэй файл, хүснэгт ашиглаж болно. Холболт заавал биш бөгөөд эхний хувилбар зөвхөн унших эрх хүснэ.</p></div><button type="button" id="closePublicConnectors">← Миний ажлууд</button></div>
+          <div class="public-connector-grid" id="publicConnectorGrid"><p>Холболтын каталогийг ачаалж байна...</p></div>
+        </section>
       </div>
     </section>
+  </section>
 
-    <section class="statement shell" id="platform">
-      <p class="eyebrow">НЭГ САЛБАРТ БАРИГДАХГҮЙ</p>
-      <h2>Жижиг дэлгүүрээс үйлдвэр, уурхай, сургууль, эмнэлэг, төрийн байгууллага хүртэл.</h2>
-      <p>Байгууллага бүр хэрэгтэй модулиа сонгож ашиглана. OVERVA-ийн үндсэн цөм нийтлэг хэвээр, салбарын онцлог нь тохиргоо болон нэмэлт модулиар шийдэгдэнэ.</p>
-    </section>
-
-    <section class="layers shell" id="layers">
-      <div class="section-head"><div><p class="eyebrow">LAYERED ARCHITECTURE</p><h2>Нэг платформ. Дөрвөн давхарга.</h2></div><p>Бизнесийн бүртгэлээс бодит төхөөрөмжийн команд хүртэл нэг эрх, нэг өгөгдөл, нэг аудитын зарчмаар ажиллана.</p></div>
-      <div class="layer-grid">
-        <article><b>01</b><h3>Business Layer</h3><p>Finance & Accounting · CRM · HR · Inventory · Procurement · Records · Archive</p></article>
-        <article><b>02</b><h3>Operations Layer</h3><p>Work Management · Assets · Maintenance · Field Operations · GIS/GPS · Fleet · Safety · IoT</p></article>
-        <article><b>03</b><h3>Intelligence Layer</h3><p>Удирдлагын тойм · KPI · тайлан · AI/Analytics · автоматжуулалт · шийдвэрийн дэмжлэг</p></article>
-        <article><b>04</b><h3>Platform Foundation</h3><p>Tenant isolation · Data layer · Security · Immutable audit · Integration · API</p></article>
-      </div>
-    </section>
-
-    <section class="principles shell">
-      <article><span>01</span><h3>Тусгаарлагдсан өгөгдөл</h3><p>Байгууллага бүр өөрийн хэрэглэгч, эрх, өгөгдөл болон тохиргоотой.</p></article>
-      <article><span>02</span><h3>Хариуцлагатай удирдлага</h3><p>Нэвтрэлт, эрх, тохиргоо, команд болон чухал үйлдэл аудитын мөр үлдээнэ.</p></article>
-      <article><span>03</span><h3>Өсөхөд бэлэн</h3><p>Шаардлага нэмэгдэхэд модулиа нэмж, одоо ажиллаж буй цөмөө эвдэхгүй өргөжүүлнэ.</p></article>
-    </section>
-
-    <section class="trial shell" id="trial">
-      <div class="trial-copy">
-        <p class="eyebrow">БОДИТ TRIAL ОРЧИН</p>
-        <h2>Өөрийн байгууллагын ERP орчноо үүсгээд туршаарай.</h2>
-        <p>Бүртгэл дуусмагц тусгаарлагдсан байгууллага, owner эрхтэй хэрэглэгч болон 14 хоногийн trial эрх үүснэ. Хуурамч demo өгөгдөл нэмэгдэхгүй — та өөрийн туршилтын мэдээллээр ажиллана.</p>
-        <ul><li>Үндсэн OVERVA Core ба байгууллагын бүтэц</li><li>Сонгосон 6 хүртэлх ажлын модуль</li><li>10 хүртэл хэрэглэгчтэй Pilot багц</li><li>Platform админаас эрхийг цааш удирдах боломж</li></ul>
-      </div>
-      <form class="trial-form" id="trialForm" novalidate>
-        <div class="form-title"><span>14 ХОНОГ ҮНЭГҮЙ</span><h3>Шинэ байгууллага</h3></div>
-        <label>Байгууллагын нэр<input name="organizationName" required minlength="2" maxlength="200" placeholder="Жишээ Сервис ХХК"></label>
-        <label>Байгууллагын код<input name="organizationCode" required minlength="3" maxlength="50" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" placeholder="jishee-service"><small>Нэвтрэхэд ашиглана. Англи жижиг үсэг, тоо, зураас.</small></label>
-        <div class="form-grid"><label>Таны овог нэр<input name="fullName" required minlength="2" maxlength="200" autocomplete="name"></label><label>И-мэйл<input name="email" type="email" required maxlength="200" autocomplete="email"></label></div>
-        <div class="form-grid"><label>Хэрэглэгчийн нэр<input name="username" required minlength="3" maxlength="80" pattern="[a-zA-Z0-9._-]+" autocomplete="username"></label><label>Нууц үг<input name="password" type="password" required minlength="12" maxlength="200" autocomplete="new-password"><small>Доод тал нь 12 тэмдэгт.</small></label></div>
-        <fieldset><legend>Турших модулиуд <small>6 хүртэл сонгоно</small></legend><div class="module-options">
-          <label><input type="checkbox" name="modules" value="assets" checked> Хөрөнгө</label>
-          <label><input type="checkbox" name="modules" value="work-orders" checked> Ажлын удирдлага</label>
-          <label><input type="checkbox" name="modules" value="inventory" checked> Агуулах</label>
-          <label><input type="checkbox" name="modules" value="hr" checked> Хүний нөөц</label>
-          <label><input type="checkbox" name="modules" value="procurement"> Худалдан авалт</label>
-          <label><input type="checkbox" name="modules" value="finance"> Санхүү</label>
-          <label><input type="checkbox" name="modules" value="attendance"> Ирц</label>
-          <label><input type="checkbox" name="modules" value="records"> Бичиг хэрэг</label>
-          <label><input type="checkbox" name="modules" value="archive"> Архив</label>
-          <label><input type="checkbox" name="modules" value="executive"> Удирдлагын тойм</label>
-        </div></fieldset>
-        <label class="terms"><input name="acceptedTerms" type="checkbox" required> Би эрх бүхий туршилтын мэдээлэл ашиглаж, системийн аюулгүй ажиллагааг мөрдөнө.</label>
-        <label class="honeypot" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
-        <p class="form-error" id="trialError" role="alert"></p>
-        <button class="button submit" type="submit">Trial орчин үүсгэх</button>
-      </form>
-      <section class="trial-success hidden" id="trialSuccess" aria-live="polite">
-        <div class="success-mark">✓</div><p class="eyebrow">TRIAL ОРЧИН БЭЛЭН</p><h3 id="successName"></h3>
-        <p>Нэвтрэхдээ дараах байгууллагын кодыг ашиглана:</p><code id="successCode"></code>
-        <p id="successOwner"></p><a class="button" id="successLogin" href="https://app.overva.com">ERP системд нэвтрэх</a>
+  <main class="studio hidden" id="workspaceStudio" aria-label="OVERVA ажлын орчин">
+    <aside class="studio-sidebar">
+      <a class="brand" id="workspaceHomeLink" href="/" aria-label="OVERVA үндсэн нүүр"><span>OV</span><strong>OVERVA</strong></a>
+      <button class="back-to-home" id="workspaceHomeButton" type="button"><span>←</span> Миний ажлууд</button>
+      <button class="open-connectors" id="workspaceConnectorsButton" type="button"><span>⌁</span> Холболтууд</button>
+      <button class="new-work" id="newWorkButton" type="button"><span>＋</span> Шинэ хэрэгцээ</button>
+      <section class="workspace-switcher" aria-label="Одоогийн ажлын өрөө">
+        <span>АЖЛЫН ӨРӨӨ</span>
+        <label class="sr-only" for="workspaceSelector">Ажлын өрөө сонгох</label>
+        <select id="workspaceSelector" aria-label="Ажлын өрөө сонгох"></select>
+        <small id="sidebarStageCount">1/7 · Ойлгох</small>
       </section>
+      <nav class="journey-nav" aria-label="Ажлын зам">
+        <p>АЖЛЫН ЗАМ</p>
+        <div id="sidebarLifecycle"></div>
+      </nav>
+      <nav class="workspace-tools" aria-label="Одоогийн шатны хэрэгсэл">
+        <p>ЭНЭ ШАТНЫ ХЭРЭГСЭЛ</p>
+        <button class="active" type="button" data-sidebar-action="chat"><span>◇</span>Ярилцлага</button>
+        <button type="button" data-sidebar-action="material"><span>＋</span>Материал өгөх</button>
+        <button type="button" data-sidebar-action="preview"><span>▣</span>Preview шалгах</button>
+        <button type="button" data-sidebar-action="decisions"><span>✓</span>Баталсан шийдвэр</button>
+        <button type="button" data-sidebar-action="tests"><span>↻</span>Туршилтын түүх</button>
+      </nav>
+      <div class="sidebar-note">
+        <span>ДАРААГИЙН АЛХАМ</span>
+        <strong id="sidebarNextStage">Бүтээх шатанд орох</strong>
+        <p id="sidebarNextAction">Хэрэгцээ эсвэл нотолгооноос эхний таамаг гаргана.</p>
+      </div>
+      <div class="sidebar-footer">
+        <a href="https://app.overva.com">Нэвтрэх</a>
+        <button id="openTrialSide" type="button">Ажлын өрөөг хадгалах</button>
+      </div>
+    </aside>
+
+    <section class="chat-panel" aria-label="OVERVA зөвлөхтэй ярилцах">
+      <header class="panel-header">
+        <div><span class="status-dot"></span><strong>OVERVA зөвлөх</strong></div>
+        <span class="local-label">Туршилтын орчин · зөвхөн энэ төхөөрөмжид хадгална</span>
+      </header>
+      <div class="chat-stream" id="chatStream" aria-live="polite">
+        <article class="message assistant-message">
+          <div class="avatar">OV</div>
+          <div class="message-content">
+            <span>OVERVA</span>
+            <h1>Таны байгууллагын хэрэгцээг хамтдаа тодорхойлъё</h1>
+            <p>Одоогийн ажилд яг хаана хүндрэл гарч байгааг энгийнээр тайлбарлаарай. Би ойлгосноо буцааж хэлж, танаар батлуулаад, баруун талд шаардлага болон эхний preview-г гаргана.</p>
+            <div class="quick-prompts" aria-label="Жишээ ажлууд">
+              <button type="button" data-intent="discover">Байгууллагаа үгээр тайлбарлах</button>
+              <button type="button" data-open-source="file">Файл, Excel өгөх</button>
+              <button type="button" data-open-source="image">Зураг, схем харуулах</button>
+              <button type="button" data-intent="systems">Ашигладаг системээ танилцуулах</button>
+            </div>
+          </div>
+        </article>
+      </div>
+      <form class="chat-composer" id="intentForm">
+        <div class="source-menu hidden" id="sourceMenu">
+          <div><strong>OVERVA-д материал өгөх</strong><button id="closeSourceButton" type="button" aria-label="Материалын цэс хаах">×</button></div>
+          <button type="button" data-source-picker="file"><span>▤</span><div><strong>Файл, хүснэгт</strong><small>Excel, CSV, Word, PDF, Visio</small></div></button>
+          <button type="button" data-source-picker="image"><span>▧</span><div><strong>Зураг, схем</strong><small>Дэлгэцийн зураг, гараар зурсан зураг</small></div></button>
+          <button type="button" data-source-picker="systems"><span>◇</span><div><strong>Системүүдээ бичих</strong><small>ERP, CRM болон бусад хэрэгсэл</small></div></button>
+          <a href="/overva-organization-template.csv" download><span>↓</span><div><strong>OVERVA загвар татах</strong><small>Excel-д нээгдэх мэдээллийн загвар</small></div></a>
+        </div>
+        <label class="sr-only" for="intentInput">Хийлгэх ажлаа бичих</label>
+        <textarea id="intentInput" rows="3" placeholder="Хийлгэх ажлаа энд бичээд Enter дарна уу…"></textarea>
+        <div class="composer-actions">
+          <div><button class="source-trigger" id="openSourceButton" type="button">＋ Материал өгөх</button><span>Enter — илгээх · Shift + Enter — шинэ мөр</span></div>
+          <button type="submit" aria-label="Илгээх">↑</button>
+        </div>
+        <input class="hidden" id="sourceFileInput" type="file" accept=".xlsx,.xls,.csv,.docx,.doc,.pdf,.vsdx,.vsd,.txt">
+        <input class="hidden" id="sourceImageInput" type="file" accept="image/*,.svg">
+      </form>
+    </section>
+
+    <section class="preview-panel" aria-label="Бүтээгдэж буй ажлын урьдчилсан харагдац">
+      <header class="panel-header preview-header">
+        <div><strong>Урьдчилсан харагдац</strong><span class="preview-device">Дэлгэц</span></div>
+        <span class="build-state" id="previewStage">Эхлэхэд бэлэн</span>
+      </header>
+      <div class="preview-canvas" id="previewCanvas" aria-live="polite">
+        <div class="empty-preview" id="emptyPreview">
+          <div class="empty-mark">◇</div>
+          <h2>Энд батлах шаардлага, эхний preview гарна</h2>
+          <p>Зүүн талд байгууллагынхаа нэг асуудлыг тайлбарлана уу. OVERVA ойлгосноо шууд бүтээгдэхүүн гэж зарлахгүй; эхлээд танаар шалгуулж батална.</p>
+          <div class="empty-steps"><span>1 · Асуудлаа ярь</span><span>2 · Ойлголтыг шалга</span><span>3 · Preview турш</span></div>
+        </div>
+        <div class="product-preview hidden" id="productPreview">
+          <div class="product-topbar">
+            <div><span class="product-icon" id="productIcon">OV</span><div><small>ТАНЫ АЖЛЫН ОРЧИН</small><strong id="productTitle">Шинэ ажил</strong></div></div>
+            <span id="productBadge">Урьдчилсан</span>
+          </div>
+          <section class="delivery-progress" aria-label="Бүтээгдэхүүн хүргэх үе шат">
+            <div class="delivery-stagebar" id="deliveryStagebar"></div>
+            <div class="delivery-readiness">
+              <div><small>ОДООГИЙН ШАТ</small><strong id="deliveryCurrentStage">Ойлгох</strong><p id="deliveryNextStep">Хэрэгцээгээ тайлбарлаад эхэлнэ.</p></div>
+              <button id="publishReadinessButton" type="button" disabled>Production-д гаргах түгжээтэй</button>
+            </div>
+          </section>
+          <nav class="preview-app-nav" aria-label="Preview бүтээгдэхүүний цэс">
+            <button type="button" data-preview-tab="structure">Бүтэц</button>
+            <button type="button" data-preview-tab="workflow">Ажлын урсгал</button>
+            <button type="button" data-preview-tab="systems">Системүүд</button>
+            <button class="active" type="button" data-preview-tab="product">Бүтээгдэхүүн</button>
+          </nav>
+          <div class="product-body">
+            <div class="preview-context"><div><small>ТУРШИЛТЫН PREVIEW</small><h2 id="previewTitle">Шинэ ажлын орчин</h2></div><span id="previewActionStatus">Товчнуудыг дарж туршина уу</span></div>
+            <div class="product-workspace" id="productWorkspace"></div>
+            <p class="preview-safety">Preview доторх туршилтын үйлдэл үндсэн мэдээлэлд өөрчлөлт оруулахгүй.</p>
+          </div>
+        </div>
+      </div>
     </section>
   </main>
 
-  <footer class="shell"><div class="brand"><span>OV</span><strong>OVERVA</strong></div><p>One View. One Organization.</p><nav><a href="https://app.overva.com">ERP нэвтрэх</a><a href="https://status.overva.com/status.html">Системийн төлөв</a></nav></footer>
+  <dialog class="request-dialog" id="requestDialog">
+    <form method="dialog" class="dialog-close-form"><button id="requestDialogCloseButton" aria-label="Хүсэлтийн маягт хаах">×</button></form>
+    <div class="request-dialog-head"><span>ШИНЭ ЦАХИМ ХЭРЭГЦЭЭ</span><h2>Хийлгэх ажлаа бүтэцтэй хүсэлт болгоё</h2><p>Маягтыг бөглөхөд AI-тай заавал ярилцахгүй. Хүсвэл эцэст нь OVERVA-аар дутуу зүйлээ шалгуулж болно.</p></div>
+    <form class="request-form" id="requestForm">
+      <div class="request-attachment-actions"><span><strong>Материал байгаа бол хавсаргана</strong><small>Сонголттой · агуулга browser-оос гарахгүй</small></span><div><button type="button" data-request-source="file">＋ Файл, өгөгдөл</button><button type="button" data-request-source="image">▧ Зураг, схем</button></div></div>
+      <section class="request-material hidden" id="requestMaterialSummary" aria-live="polite">
+        <div class="request-material-row"><span class="request-material-icon" id="requestMaterialIcon">＋</span><div><small>ХҮСЭЛТЭД ХАВСАРГАХ МАТЕРИАЛ</small><strong id="requestMaterialName"></strong><p id="requestMaterialMeta"></p></div><button type="button" id="requestMaterialRemove">Хасах</button></div>
+        <p class="request-material-privacy">Файлын агуулгыг сервер эсвэл AI руу илгээхгүй. Энэ төхөөрөмжийн ноорогт зөвхөн нэр, төрөл, хэмжээ нь хадгалагдана.</p>
+      </section>
+      <section><div class="request-step"><b>01</b><div><strong>Ямар ажил хэрэгтэй вэ?</strong><small>Шийдлийн нэр мэдэхгүй байсан ч болно.</small></div></div><div class="request-choice-grid">
+        <label><input type="radio" name="requestType" value="Шинэ систем эсвэл апп" required><span>Шинэ систем эсвэл апп</span></label>
+        <label><input type="radio" name="requestType" value="Одоогийн систем сайжруулах"><span>Одоогийн систем сайжруулах</span></label>
+        <label><input type="radio" name="requestType" value="Системүүд холбох"><span>Системүүд холбох</span></label>
+        <label><input type="radio" name="requestType" value="Өгөгдөл шилжүүлэх"><span>Өгөгдөл шилжүүлэх</span></label>
+        <label><input type="radio" name="requestType" value="Зөвлөгөө, зураглал"><span>Зөвлөгөө, зураглал</span></label>
+      </div></section>
+      <section><div class="request-step"><b>02</b><div><strong>Чиглэл ба хэрэгтэй чадвар</strong><small>Гүйцэтгэгч ажлыг ойлгоход хэрэгтэй ангилал.</small></div></div><div class="request-form-grid"><label>Ажлын чиглэл<select name="businessArea" required><option value="">Сонгох</option><option>Агуулах, хөрөнгө</option><option>Дотоод хүсэлт, зөвшөөрөл</option><option>Засвар, үйлчилгээ</option><option>Харилцагч, борлуулалт</option><option>Хүний нөөц</option><option>Санхүү, тайлан</option><option>Худалдан авалт</option><option>Баримт бичиг</option><option>Үйлдвэрлэл</option><option>Бусад</option></select></label><fieldset><legend>Хэрэгтэй боломжууд (дор хаяж нэгийг сонгоно)</legend><div class="request-skill-grid"><label><input type="checkbox" name="capabilities" value="Бүртгэл, мастер өгөгдөл">Бүртгэл</label><label><input type="checkbox" name="capabilities" value="Ажлын урсгал, зөвшөөрөл">Урсгал</label><label><input type="checkbox" name="capabilities" value="Тайлан, хяналтын самбар">Тайлан</label><label><input type="checkbox" name="capabilities" value="Файл, Excel импорт">Excel оруулах</label><label><input type="checkbox" name="capabilities" value="Гар утас, талбайн ажил">Гар утас</label><label><input type="checkbox" name="capabilities" value="API, системийн холболт">Систем холбох</label><label><input type="checkbox" name="capabilities" value="Мэдэгдэл">Мэдэгдэл</label><label><input type="checkbox" name="capabilities" value="Эрх, аудит">Эрх, үйлдлийн түүх</label></div></fieldset></div></section>
+      <section><div class="request-step"><b>03</b><div><strong>Асуудал ба хүссэн үр дүн</strong><small>Одоогийн хүндрэл болон ажил дууссаныг яаж танихаа энгийнээр бичнэ.</small></div></div><label>Хүсэлтийн гарчиг<input name="title" required minlength="5" maxlength="160" placeholder="Жишээ: Агуулахын үлдэгдлийн систем"></label><label>Одоогийн асуудал<textarea name="problem" required minlength="10" rows="4" placeholder="Одоо ажлыг яаж хийдэг, хаана алдаа эсвэл хүлээлт гардаг вэ?"></textarea></label><label>Ямар үр дүн хүсэж байна?<textarea name="desiredOutcome" required minlength="10" rows="3" placeholder="Ажил дуусахад юу сайжирсан байх ёстой вэ?"></textarea></label><label>Ажил зөв болсон гэдгийг яаж шалгах вэ?<textarea name="acceptanceCriteria" required minlength="10" rows="3" placeholder="Жишээ: Нярав, нягтлан хоёрын үлдэгдэл ижил гарч, сарын тайлан Excel-гүй бэлэн болно."></textarea></label></section>
+      <section><div class="request-step"><b>04</b><div><strong>Төсөв, хугацаа, харагдах хүрээ</strong><small>Саналыг зөв харьцуулах үндэс.</small></div></div><div class="request-form-grid request-commercial"><label>Төсвийн хэлбэр<select name="budgetModel" required><option value="Үнийн санал авна">Үнийн санал авна</option><option value="Тогтсон төсөвтэй">Тогтсон төсөвтэй</option><option value="Төсвийн хүрээтэй">Төсвийн хүрээтэй</option></select></label><label>Төсвийн тайлбар<input name="budgetNote" maxlength="100" placeholder="Жишээ: 5–10 сая ₮ эсвэл тодорхойгүй"></label><label>Хүссэн хугацаа<select name="period" required><option value="Хөгжүүлэгчийн санал сонсоно">Хөгжүүлэгчийн санал сонсоно</option><option>2 долоо хоног хүртэл</option><option>1 сар хүртэл</option><option>1–3 сар</option><option>3 сараас дээш</option></select></label><label>Хэн харах вэ?<select name="visibility" required><option value="Баталгаажсан хэрэгжүүлэгчид">Баталгаажсан хэрэгжүүлэгчид</option><option value="Уригдсан хэрэгжүүлэгчид">Зөвхөн уригдсан хэрэгжүүлэгчид</option><option value="Нэрээ нууцалсан жишиг мэдээлэл">Нэрээ нууцалсан жишиг мэдээлэл</option><option value="Сонгосон нэг хэрэгжүүлэгч">Сонгосон нэг хэрэгжүүлэгч</option></select></label></div></section>
+      <label class="request-ai-option"><input type="checkbox" name="aiReview"><span><strong>OVERVA-аар дутуу зүйлээ шалгуулах</strong><small>Сонголттой. Сонговол хүсэлтээ батлахаас өмнө асуулт, таамгийг тусдаа шалгаж болно; сонгохгүй бол хүсэлт шууд ноорог хэлбэрээр хадгалагдана.</small></span></label>
+      <div class="request-local-note"><strong>Одоохондоо нийтлэхгүй.</strong> Энэ хүсэлт зөвхөн таны төхөөрөмжид ноорог хэлбэрээр хадгалагдана. “Хэн харах вэ?” сонголт нь ирээдүйд нийтлэх үеийн хүрээ бөгөөд одоо хэнд ч харагдахгүй. Гүйцэтгэгчийн бодит санал, төлбөр эсвэл гэрээ автоматаар үүсэхгүй.</div>
+      <p class="form-error" id="requestError" role="alert"></p>
+      <div class="request-actions"><button type="button" id="requestCancelButton">Болих</button><button class="primary-button" type="submit">Хүсэлтээ шалгаад үргэлжлүүлэх →</button></div>
+    </form>
+  </dialog>
+
+  <dialog class="trial-dialog" id="trialDialog">
+    <form method="dialog" class="dialog-close-form"><button aria-label="Хаах">×</button></form>
+    <div class="trial-intro"><span>АЖЛЫН ӨРӨӨГӨӨ ХАДГАЛАХ</span><h2>Энэ төхөөрөмж дээр хадгалаад үргэлжлүүлэх</h2><p>Ярилцлага, өгсөн материал, баталсан ойлголт болон preview туршилтыг нэг checkpoint болгон хадгална. Одоогоор байгууллага эсвэл хэрэглэгчийн эрх үүсгэхгүй.</p></div>
+    <section class="trial-summary" aria-label="OVERVA-ийн ойлгосон мэдээлэл">
+      <div><small>ОВЕРВА ИНГЭЖ ОЙЛГОСОН</small><strong id="trialSummaryName">Миний туршилтын орчин</strong><p id="trialSummarySource">Таны баталсан ажлын зураглалыг ашиглана.</p></div>
+      <div class="trial-summary-capabilities" id="trialSummaryCapabilities"></div>
+    </section>
+    <section class="save-readiness" aria-label="Дараагийн шатны бэлэн байдал"><small>ХҮРГЭЛТИЙН ТӨЛӨВ</small><strong id="saveLifecycleStage">Ойлгох</strong><p id="saveLifecycleMissing">Дараагийн шатны шаардлагыг энд харуулна.</p></section>
+    <form class="trial-form" id="trialForm" novalidate>
+      <label>Ажлын өрөөний нэр<input name="workspaceName" required minlength="2" maxlength="200" placeholder="Миний туршилтын орчин"></label>
+      <p class="form-error" id="trialError" role="alert"></p>
+      <div class="trial-actions"><button class="guest-button" id="continueGuestButton" type="button">Preview рүү буцах</button><button class="primary-button" type="submit">Энэ төхөөрөмжид хадгалах</button></div>
+    </form>
+    <section class="trial-success hidden" id="trialSuccess" aria-live="polite">
+      <div>✓</div><h3 id="successName">Ажлын өрөө хадгалагдлаа</h3><p id="successOwner">Энэ browser дээрх checkpoint шинэчлэгдсэн.</p><p class="local-only-note">app.overva.com-д байгууллага, хэрэглэгч эсвэл production өгөгдөл үүсгээгүй.</p><button class="primary-button" id="returnToPreviewButton" type="button">Preview рүү буцах</button>
+    </section>
+  </dialog>
 </body>
 </html>

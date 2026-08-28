@@ -16,6 +16,13 @@ const schema = z.object({
   OPENAI_MODEL: z.string().min(1).default("gpt-5.6-terra"),
   OPENAI_REASONING_EFFORT: z.enum(["none","low","medium","high","xhigh","max"]).default("medium"),
   OPENAI_BASE_URL: z.string().url().default("https://api.openai.com/v1"),
+  CONNECTOR_CALLBACK_BASE_URL: z.string().url().optional(),
+  CONNECTOR_APP_URL: z.string().url().optional(),
+  CONNECTOR_ENCRYPTION_KEY: z.string().min(32).optional(),
+  GOOGLE_OAUTH_CLIENT_ID: z.string().min(5).optional(),
+  GOOGLE_OAUTH_CLIENT_SECRET: z.string().min(8).optional(),
+  GITHUB_OAUTH_CLIENT_ID: z.string().min(5).optional(),
+  GITHUB_OAUTH_CLIENT_SECRET: z.string().min(8).optional(),
 });
 
 function secretValue(env, name) {
@@ -31,6 +38,9 @@ function loadConfig(env = process.env) {
     DATABASE_URL: secretValue(env, "DATABASE_URL"),
     JWT_SECRET: secretValue(env, "JWT_SECRET"),
     OPENAI_API_KEY: secretValue(env, "OPENAI_API_KEY"),
+    CONNECTOR_ENCRYPTION_KEY: secretValue(env, "CONNECTOR_ENCRYPTION_KEY"),
+    GOOGLE_OAUTH_CLIENT_SECRET: secretValue(env, "GOOGLE_OAUTH_CLIENT_SECRET"),
+    GITHUB_OAUTH_CLIENT_SECRET: secretValue(env, "GITHUB_OAUTH_CLIENT_SECRET"),
   };
   const parsed = schema.safeParse(resolved);
   if (!parsed.success) {
@@ -41,6 +51,10 @@ function loadConfig(env = process.env) {
   if (parsed.data.NODE_ENV === "production" && corsOrigins.some(origin => /^http:\/\/(localhost|127\.0\.0\.1)(:|$)/i.test(origin))) {
     throw new Error("Invalid OVERVA configuration: production CORS_ORIGINS cannot contain localhost HTTP origins");
   }
+  if (parsed.data.NODE_ENV === "production" && [parsed.data.CONNECTOR_CALLBACK_BASE_URL, parsed.data.CONNECTOR_APP_URL]
+    .filter(Boolean).some(url => !url.startsWith("https://"))) {
+    throw new Error("Invalid OVERVA configuration: production connector URLs must use HTTPS");
+  }
   return {
     ...parsed.data,
     corsOrigins,
@@ -50,6 +64,21 @@ function loadConfig(env = process.env) {
       model: parsed.data.OPENAI_MODEL,
       reasoningEffort: parsed.data.OPENAI_REASONING_EFFORT,
       baseUrl: parsed.data.OPENAI_BASE_URL.replace(/\/$/, ""),
+    },
+    connectors: {
+      callbackBaseUrl: parsed.data.CONNECTOR_CALLBACK_BASE_URL?.replace(/\/$/, "") || null,
+      appUrl: parsed.data.CONNECTOR_APP_URL?.replace(/\/$/, "") || null,
+      encryptionKey: parsed.data.CONNECTOR_ENCRYPTION_KEY || null,
+      providers: {
+        google: {
+          clientId: parsed.data.GOOGLE_OAUTH_CLIENT_ID || null,
+          clientSecret: parsed.data.GOOGLE_OAUTH_CLIENT_SECRET || null,
+        },
+        github: {
+          clientId: parsed.data.GITHUB_OAUTH_CLIENT_ID || null,
+          clientSecret: parsed.data.GITHUB_OAUTH_CLIENT_SECRET || null,
+        },
+      },
     },
   };
 }

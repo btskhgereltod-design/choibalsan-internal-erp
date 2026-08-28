@@ -10,7 +10,7 @@ const viewModules={assets:"assets","work-orders":"work-orders",lighting:"lightin
 
 test("primary admin keeps setup access and also receives the job-role workspace",()=>{
   const views=policy.allowedViews({role:"director",systemRoles:["owner"],permissions:["audit.read"],enabledModules:["structure","assets","work-orders","map","fleet"],viewModules});
-  assert.deepEqual(new Set(views),new Set(["dashboard","assets","work-orders","executive","reports","employees","users","settings","billing","audit"]));
+  assert.deepEqual(new Set(views),new Set(["dashboard","assets","work-orders","executive","reports","employees","users","settings","billing","audit","connectors"]));
 });
 
 test("primary admin sees all enabled standard organization workspaces",()=>{
@@ -72,6 +72,36 @@ test("disabled modules do not appear even when the job role normally uses them",
   assert.equal(views.includes("inventory"),true);
   assert.equal(views.includes("procurement"),false);
   assert.equal(views.includes("assets"),false);
+});
+
+test("active assignment workspace mapping adds an enabled standard workspace",()=>{
+  const views=policy.allowedViews({
+    role:"worker",
+    workspaceCodes:["finance"],
+    enabledModules:["finance"],
+    viewModules:{finance:"finance"}
+  });
+  assert.equal(views.includes("finance"),true);
+});
+
+test("assignment workspace mapping cannot bypass tenant module enablement",()=>{
+  const views=policy.allowedViews({
+    role:"worker",
+    workspaceCodes:["finance"],
+    enabledModules:[],
+    viewModules:{finance:"finance"}
+  });
+  assert.equal(views.includes("finance"),false);
+});
+
+test("assignment mapping cannot expose an advanced workspace",()=>{
+  const views=policy.allowedViews({
+    role:"worker",
+    workspaceCodes:["map"],
+    enabledModules:["map"],
+    viewModules:{map:"map"}
+  });
+  assert.equal(views.includes("map"),false);
 });
 
 test("safety officer receives the work-order approval workspace",()=>{

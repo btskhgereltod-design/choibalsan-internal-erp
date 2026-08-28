@@ -1,7 +1,7 @@
 "use strict";
 
 const crypto = require("node:crypto");
-const ExcelJS = require("exceljs");
+const {loadExcelWorkbook}=require("./excel-workbook");
 
 const MAX_ROWS = 5000;
 const MAX_COLUMNS = 100;
@@ -83,15 +83,13 @@ function cellValue(value) {
 
 async function parseImportFile(buffer, filename) {
   const lower = String(filename).toLowerCase();
-  let matrix;
+  let matrix,sheetName=null,compatibilityNormalized=false;
   if (lower.endsWith(".csv")) matrix = parseCsv(buffer.toString("utf8"));
   else if (lower.endsWith(".xlsx")) {
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(buffer);
-    const sheet = workbook.worksheets[0];
-    if (!sheet) throw Object.assign(new Error("Excel файл worksheet агуулаагүй байна"), { code:"IMPORT_FILE_INVALID" });
-    matrix = [];
-    sheet.eachRow({ includeEmpty:false }, row => matrix.push(row.values.slice(1).map(cellValue)));
+    const loaded=await loadExcelWorkbook(buffer),workbook=loaded.workbook;compatibilityNormalized=loaded.compatibilityNormalized;
+    const candidates=workbook.worksheets.map((sheet,index)=>{const values=[];sheet.eachRow({includeEmpty:false},row=>values.push(row.values.slice(1).map(cellValue)));const headers=(values[0]||[]).map(clean),mapping=deterministicMapping(headers),targets=new Set(Object.values(mapping));const score=targets.size+(targets.has("fullName")?20:0)+(targets.has("employeeNo")?5:0)+(/employee|staff|ажилтан|хүний нөөц|hr/i.test(sheet.name)?4:0);return {sheet,index,values,score};}).filter(item=>item.values.length>=2);
+    if(!candidates.length)throw Object.assign(new Error("Excel файл өгөгдөлтэй worksheet агуулаагүй байна"),{code:"IMPORT_FILE_INVALID"});
+    candidates.sort((a,b)=>b.score-a.score||a.index-b.index);matrix=candidates[0].values;sheetName=candidates[0].sheet.name;
   } else throw Object.assign(new Error("Зөвхөн .xlsx эсвэл .csv файл оруулна уу"), { code:"IMPORT_FILE_TYPE" });
   if (matrix.length < 2) throw Object.assign(new Error("Файл толгой мөр болон дор хаяж нэг өгөгдлийн мөртэй байна"), { code:"IMPORT_FILE_EMPTY" });
   const rawHeaders = matrix[0].slice(0, MAX_COLUMNS).map(clean);
@@ -102,7 +100,7 @@ async function parseImportFile(buffer, filename) {
     sourceData:Object.fromEntries(headers.map((header,column) => [header, cellValue(values[column])])),
   })).filter(item => Object.values(item.sourceData).some(value => clean(value)));
   if (!rows.length) throw Object.assign(new Error("Импортлох өгөгдөл олдсонгүй"), { code:"IMPORT_FILE_EMPTY" });
-  return { headers, rows, truncated:matrix.length - 1 > MAX_ROWS };
+  return { headers, rows, truncated:matrix.length - 1 > MAX_ROWS, sheetName, compatibilityNormalized };
 }
 
 function isoDate(value) {

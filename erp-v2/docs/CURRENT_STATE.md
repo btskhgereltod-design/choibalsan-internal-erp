@@ -1,6 +1,6 @@
 # OVERVA Current State
 
-Last updated: 2026-08-24
+Last updated: 2026-08-27
 
 This document answers one question: **what exists in the repository now?** It
 does not claim that every implemented foundation is complete or production-
@@ -28,6 +28,58 @@ validated at enterprise scale.
 - Server-derived tenant identity and tenant-scoped data access patterns.
 - Immutable audit foundation for critical actions.
 - Public trial provisioning and platform administration portal.
+- `overva.com` now opens as a production-deployed, full-screen Mongolian studio
+  with three primary regions: a deliberately minimal sidebar, a persistent
+  conversation stream, and a live product preview. The desktop document does
+  not scroll; chat and preview own their overflow independently. Enter submits
+  an intent, the browser-local deterministic advisor streams back its
+  interpretation and asks for confirmation, and the preview builds a concrete
+  import, structure, work-flow, or discovery view. Confirmed paths preselect
+  relevant trial modules. The v5 boundary keeps every explanation, question,
+  and confirmation in the conversation region; the preview contains only an
+  interactive product surface with its own tabs, selectable cards/steps, file
+  input, and test actions. Preview actions update only preview state and never
+  add chat narration or mutate canonical organization data. In v6 the entry
+  choices are input-oriented rather than module-oriented: describe the
+  organization, provide a file/Excel workbook, show an image/diagram, or
+  explain current systems. A material chooser accepts spreadsheet, document,
+  PDF, Visio, text, and image formats up to 10 MB; CSV structure and image
+  preview stay browser-local. An UTF-8-BOM CSV organization-intake template is
+  publicly downloadable and opens in Excel. The preview exposes Structure,
+  Work Flow, Systems, and Product views. This public interaction does not claim
+  to perform provider-backed content analysis and does not upload selected
+  files or store free text. In v7 the save dialog summarizes already established
+  context and asks only for workspace name, email, and password. Organization
+  code, owner identity, and the inferred module set are generated internally
+  for the unchanged provisioning API contract. A guest path allows students
+  and exploratory visitors to continue testing the browser-local preview
+  without creating a tenant. In v8 a dedicated browser-local conversation-
+  memory core keeps evidence, discussion, hypotheses, confirmed understanding,
+  plans, execution/verification, and checkpoint state distinct. Preview actions
+  remain test activity and cannot promote a hypothesis or represent canonical
+  execution. A returning visitor explicitly chooses whether to resume, while
+  Mongolian and Latin-Mongol memory questions can retrieve the relevant layer.
+  `CONVERSATION_MEMORY_CONTRACT_V1.md` and decision D-013 define the accepted
+  promotion rules and future tenant-scoped context-package boundary. In v9 a
+  separate seven-stage delivery lifecycle covers Understand → Build → Team
+  Preview → Scope → Commercial Agreement → Deployment → Live Operation. The
+  preview shows its current stage, next gate, and missing requirements. Saving
+  updates only a browser-local named checkpoint: the public studio no longer
+  calls `/api/public/trials`, asks for email/password, creates a tenant/user, or
+  links directly into `app.overva.com`. Scope, offer/contract, hosting, security,
+  data migration, acceptance, operational ownership, and backup readiness remain
+  explicit gates. `PRODUCT_DELIVERY_COMMERCIAL_CONTRACT_V1.md` and decision
+  D-014 define the accepted boundary; this lifecycle remains separate from
+  post-tenant organization growth events. Public HTML, cache-busted v9 assets,
+  container/domain health, lifecycle/save boundaries, and the full 176-test
+  suite were production-verified on 2026-08-26. In v10 the sidebar renders the
+  named workspace, current `x/7` stage, completed/current/locked journey steps,
+  the next unmet gate, and only working contextual tools for conversation,
+  materials, preview, confirmed decisions, and preview-test history. A locked
+  stage explains its requirements in conversation without changing preview.
+  Cache-busted v10 assets, container/domain health, sidebar markup/handlers, and
+  the continued absence of public trial provisioning were production-verified
+  on 2026-08-26.
 - Organization settings, enabled modules, plans, billing records, and tenant
   lifecycle foundations.
 
@@ -35,6 +87,23 @@ validated at enterprise scale.
 
 - Canonical organization, department, position, employee, and optional employee
   login-account separation.
+- Tenant-scoped job-definition-to-workspace access is implemented. An active
+  employee assignment resolves through position and job definition to the
+  relevant workspace codes; employee master data, login identity, and workspace
+  access remain separate concerns.
+- Tenant navigation combines enabled-module, permission, and job-workspace
+  policy. The dashboard remains the common entry point, while operational
+  workspaces appear only when the tenant has enabled them and the signed-in
+  person's assigned job allows them.
+- A source-owned, repeatable pilot configuration profile maps the current
+  Choibalsan jobs to relevant workspaces without hard-coding that organization's
+  structure as the OVERVA default. Camera access is included for the evidenced
+  director, chief engineer, network engineer, and safety responsibilities.
+- The current Choibalsan pilot profile applies 34 workspace mappings across
+  eight job definitions. It includes HR/attendance/report access for the human
+  resources job and safety/work-flow/lighting access for the HSE job; these are
+  ready for real-role user acceptance testing without granting blanket platform
+  or tenant-admin access.
 - Employee master data, extended HR profile, contracts, attendance, leave,
   skills/training/performance, recruitment/onboarding/offboarding foundations.
 - Organization blueprint interview and approval flow.
@@ -49,16 +118,38 @@ validated at enterprise scale.
 
 - Governed BA knowledge library and versioned OVERVA Requirements Method.
 - Guided organization discovery and AI-assisted blueprint foundation.
+- An evidence-backed Organization Discovery slice is implemented locally in
+  the existing Organization Blueprint workspace. Tenant-private pasted text,
+  interview notes, document excerpts, and system inventories are stored with a
+  SHA-256 provenance hash; deterministic analysis creates separate AS-IS
+  findings and `Native` / `Integrate` / `Later` capability proposals.
+- Evidence sources, findings, proposals, and human review decisions are
+  append-only and tenant-scoped. Accept/correct/reject decisions are audited;
+  neither analysis nor review applies modules, structure, or master data.
+- Migration `0053` and the related API/UI are deployed. Generic workbook
+  Dataset Discovery extends the same safe onboarding path in migration
+  `0054`: it classifies sheets as source/master/derived/report/instruction,
+  profiles columns and quality findings without retaining raw cell values, and
+  proposes target-domain readiness without exposing a canonical commit path.
+- A real 7-sheet sales/delivery workbook was processed locally: 1 source, 1
+  master, 1 derived, 3 report, and 1 instruction sheet were identified; 43
+  profile findings and 5 missing target contracts correctly blocked commit.
+  Migrations `0053`-`0054`, runtime grants, service health, and the public web/API
+  path were production-verified on 2026-08-26. The combined slices pass the full
+  173-test local suite.
 - Smart Import foundations for structured data and organization structure.
 - Organization Structure Smart Import now separates proposed action, validation,
   human review decision, and commit outcome in the PostgreSQL/API contract.
 - Row correction, acceptance, reasoned exclusion, approval blocking, commit
   reconciliation, tenant isolation, and immutable audit are implemented.
-- A privacy-safe dry run against a real 56-row employee workbook validated the
-  parser, mapping, and validation flow without database writes. Duplicate
-  employee identifiers block commit, while ambiguous dates and duplicate
-  emails are routed to human review. The production API was rebuilt and
-  health-checked after these normalization fixes.
+- A privacy-safe dry run against a real 15-sheet company workbook validated the
+  employee parser, mapping, and validation flow without database writes. Smart
+  Import selects `Employee_Master` instead of assuming the first worksheet and
+  normalizes compatible third-party SpreadsheetML namespace/table/merge
+  metadata. Of 58 employee rows, 56 were ready and 2 duplicate identifiers
+  correctly blocked commit. The production API/parser hash, compatibility path,
+  worksheet selection, public health endpoint, and cache-busted web asset were
+  verified on 2026-08-26.
 - Customer-journey evidence and Smart Import review migrations `0049` and `0050`
   are applied to the current production database; the API and web containers
   were rebuilt and verified after deployment.
@@ -82,13 +173,191 @@ validated at enterprise scale.
   attendance, HR operations, and safety foundations.
 - Map, GPS/fleet, IoT telemetry/commands, maintenance, field PWA, automation,
   integrations, API keys/webhooks, executive view, and AI director foundations.
+- OVERVA Connect V1 now has a read-only canonical business-event envelope
+  validator on the existing tenant-scoped integration-contract boundary. It
+  checks event and schema versions, provenance, subject, correlation, time, and
+  domain payload; returns a deterministic SHA-256 fingerprint; rejects client-
+  supplied tenant selection and unknown envelope fields; and neither retains
+  the payload nor mutates canonical data. `OVERVA_CONNECT_CONTRACT_V1.md` and
+  decision D-016 define the boundary. The full local suite passes 181 tests.
+  No real multi-system delivery, connector
+  certification, marketplace, or national standard is claimed by this slice.
+- Public workspace v12 is production-deployed. It
+  adds a distinct OVERVA Home above the existing Workspace Studio. Home searches
+  and renders browser-local workspace cards with current/next lifecycle context,
+  starts separate work from text, file/data, image/diagram, or system context,
+  and opens the seven-stage Studio only after a workspace is selected. Existing
+  stable workspace IDs, governed memory, preview, lifecycle, and no-provisioning
+  boundaries are preserved. `PUBLIC_PORTFOLIO_HOME_CONTRACT_V1.md` and decision
+  D-017 define this two-level navigation boundary. Before deployment, backup
+  `overva-20260827T023907Z` passed checksum, PostgreSQL archive-list, and uploads
+  archive verification. The 181-test local suite, production Docker build,
+  container health, Caddy loopback, external v12 HTML/CSS/JS assets,
+  `status.overva.com` health, no-provisioning boundary, and 1440x1000 production
+  headless Edge render were verified on 2026-08-27.
+- Public workspace v13 is production-deployed. The Workspace Studio sidebar now
+  exposes an explicit `Миний ажлууд` return control instead of relying on users
+  to infer that the OVERVA logo returns Home. It preserves the selected
+  workspace and its checkpoint, while the workspace selector and `Шинэ ажил`
+  retain their separate switch/create responsibilities. Desktop shows the full
+  label; narrow and mobile layouts retain a compact return icon. Backup
+  `overva-20260827T024651Z`, 181 tests, Docker builds, production v13 HTML/CSS/JS
+  markers, external health, and all service health checks passed on 2026-08-27.
+- Public workspace v14 is production-deployed. The portfolio Home no longer
+  repeats the same screen as `Нүүр` and `Бүх ажлын өрөө`, and it no longer
+  presents `Холболтын ажил` as global navigation that silently creates a new
+  workspace. The Home sidebar now has one action, `Шинэ ажил`; systems work
+  starts deliberately from the central `Одоогийн системээ холбох` prompt.
+  Existing browser-local checkpoints are preserved. Backup
+  `overva-20260827T025646Z`, 181 tests, Docker builds, production v14 markers,
+  public health, and all service health checks passed on 2026-08-27.
+- OVERVA Connect OAuth accounts V1 are production-deployed. A public catalog
+  and authenticated tenant Connect view
+  expose Google Drive, Google Sheets, and GitHub as explicit read-only
+  providers. OAuth state is one-time and tenant/user-bound; provider tokens are
+  AES-256-GCM encrypted; owner/administrator permission, connect/reconnect,
+  live read-only resource checks, disconnect token clearing, and append-only
+  audit evidence are implemented. Missing OAuth registrations appear as
+  unavailable instead of simulated success. Migration `0055`, v15 public Home,
+  authenticated Connect assets, external catalog/API health, and a 1440x1000
+  headless production render are verified. Google/GitHub OAuth registrations,
+  deployment secrets, and live provider consent remain to be configured and
+  verified before any provider can report `available=true`.
 - Choibalsan employee and lighting migration tooling with provenance controls.
+- The camera operations workspace is deployed and production-verified for the
+  Choibalsan pilot. Migration `0052` enables the module and four camera work
+  types; authenticated API data is tenant-scoped, camera workspace access is
+  enforced server-side, and organization-owner oversight is preserved.
+- The camera release passed a verified pre-deployment database/uploads backup,
+  164 automated tests, production migration and health checks, a 21-account
+  allow/deny authorization matrix, public static/API checks, and headless browser
+  checks for authorized navigation/render plus unauthorized hiding.
+- Public workspace v16 exposes `Холболтууд` directly inside Workspace Studio.
+  It opens the same public Google Drive, Google Sheets, and GitHub catalog
+  without creating or replacing a workspace. The former Home prompt is now
+  labelled `Системийн зураглал гаргах`, making its discovery-work purpose
+  distinct from real OAuth account authorization.
+- Public workspace v17 is production-deployed with the organization-first entry
+  question `Байгууллагынхаа ямар ажлыг цахимжуулах хэрэгтэй байна?`. Home now
+  explains four reviewable outcomes—problem definition, confirmed requirement,
+  first preview, and next step—before showing implementation options. External
+  connectors are presented as optional information sources, and the developer
+  network is labelled as a forming concierge pilot rather than an operating
+  automated marketplace. Empty Home submission is blocked instead of creating
+  a blank workspace. Generic Excel or warehouse language now starts governed
+  problem discovery rather than being misclassified as employee Smart Import.
+  The internal seven delivery gates remain unchanged.
+- Public workspace V18 request-intake slice is production-deployed. Home now
+  combines the accepted organization-first question with an educational board
+  of four clearly labelled `Жишиг хүсэлт` patterns and a structured request
+  form for work type, business area, required capabilities, problem, desired
+  outcome, budget context, period, and intended visibility. AI completeness
+  review is optional rather than a mandatory entry conversation. Submission
+  stores an unpublished browser-local draft and hands a standardized package to
+  a separate governed workspace for human review. It does not publish demand,
+  expose it to developers, collect proposals, rank vendors, accept payment, or
+  form a contract. JavaScript syntax, all 187 tests, production health, live V18
+  assets, and a headless Edge reference-request -> prefilled form -> unpublished
+  draft -> Workspace handoff were verified on 2026-08-27.
+- Public workspace V20 material-aware request intake is production-deployed.
+  The Home `Файл, өгөгдөл` and `Зураг, схем` actions no longer create a blank
+  workspace and send the person into the legacy Studio material flow. They keep
+  the person on Home, open the structured request form after selection, and
+  show the selected material's name, type, size, and browser-local privacy
+  boundary. Only confirmed form submission creates the unpublished request
+  draft and linked workspace. The draft and checkpoint retain metadata only;
+  file content is not uploaded or written to local storage. JavaScript syntax,
+  all 191 tests, a production image build, local file/image E2E, verified backup
+  `overva-20260827T071944Z`, external health/assets, and live production
+  file/image E2E passed on 2026-08-27.
+- Public workspace V21 market-board Home is production-deployed.
+  Home now leads with a compact, readable request list instead of a large
+  chat-first prompt. Its primary navigation is `Бүх хүсэлт`, `Миний хүсэлт`,
+  `Миний ажил`, and `Дүрэм`, with one explicit `Хүсэлт гаргах` action, search,
+  bounded categories, and four row-based reference requests. The reference
+  rows are visibly labelled `ЖИШИГ` and `Бодит захиалга биш`; they do not claim
+  live demand, proposals, payments, contracts, ratings, or arbitration.
+  `Миний хүсэлт` renders the existing separate browser-local draft registry,
+  `Миний ажил` renders existing workspace checkpoints, and the Rules view
+  explains both the intended request-to-production sequence and current
+  capability boundary. Structured request intake, optional AI review, material
+  metadata handling, unpublished draft creation, and the governed Workspace
+  Studio remain unchanged. JavaScript syntax, all 191 tests, production-image
+  build, and desktop Edge navigation/category/dialog E2E passed. Verified
+  pre-deployment backup `overva-20260827T074109Z`, production service health,
+  external V21 HTML/JS/CSS, status health, and loopback origin checks passed on
+  2026-08-27.
+
+- Public workspace V22 role-separated Market shell is production-deployed.
+  A visible `Захиалагч` / `Гүйцэтгэгч` switch now separates customer requests
+  and projects from provider opportunities, proposals, delivery jobs, and
+  execution rules. `Миний ажил` is renamed `Миний төслүүд` and explicitly means
+  customer workspaces. Provider views truthfully show empty concierge-pilot
+  states rather than fabricated proposals or jobs. The test-only Market model
+  now requires provider delivery evidence before customer acceptance and allows
+  one verified review per party only after closed production outcome. D-020 and
+  `MARKETPLACE_OPERATING_MODEL_V1.md` preserve the delivery-control and revenue
+  boundary. This does not add production Market identity, publication,
+  proposal, payment, escrow, or review persistence. JavaScript syntax, all 191
+  tests, the production image build, verified backup
+  `overva-20260827T081501Z`, production service health, and external V22
+  HTML/JS/CSS checks passed on 2026-08-27.
+
+- Public workspace V22.2 customer-language refinement is production-deployed. Existing
+  public workspace cards remain non-destructively preserved but now identify
+  themselves as test projects stored only on the current device. Customer
+  request, project, privacy, attachment, and Rules copy no longer depends on
+  unexplained browser-local, workspace, specification, proposal, escrow, or
+  production-capability jargon. The customer Rules path now visibly covers
+  request, confirmed requirement, proposal, selection, agreement, execution,
+  acceptance, operational launch, and review while continuing to state that
+  real proposals, payments, automatic contracts, and dispute resolution are
+  not yet live. JavaScript syntax and all 191 automated tests passed. Verified
+  backup `overva-20260827T084207Z`, production service health, external V22.2
+  assets, the full customer flow marker, and status health passed on 2026-08-27.
 
 ## In Progress
 
+- Extend the deployed V21 browser-local request-intake slice into a fully
+  structured, human-confirmed requirement artifact and measure first-pass
+  requirement accuracy with real organizations before server-side publication
+  or an operating procurement market is designed.
+- Validate the accepted D-019 market-entry strategy through an assisted,
+  concierge digital-needs pilot rather than building a broad automated
+  marketplace first. The target evidence is 10 qualified developer teams, 20
+  organization discovery conversations, 5 confirmed request packages,
+  approximately 3 qualified proposals per request, 3 selected deliveries, and
+  at least 1 accepted production outcome. None of these targets is currently
+  claimed as achieved.
+- Join product proof and market proof through the existing stable workspace:
+  Discovery -> confirmed Requirement -> Blueprint/Preview -> selected build or
+  developer path -> Pilot/Production -> attributable outcome. Marketplace
+  publication, commercial acceptance, and production remain separate human
+  gates.
+- Validate the first `inventory.goods-received` event contract with at least
+  two real source/target systems, including authorization, idempotency, retry,
+  reconciliation, rollback, and operational ownership evidence.
+- Persist attributable scope, commercial agreement, deployment choice, and
+  operations-readiness records behind the production-deployed v10 public
+  lifecycle before tenant provisioning is reconnected.
+- Pilot-test public workspace v12 with real returning and first-time visitors.
+  It includes the v11 browser-local
+  multi-workspace registry, non-destructive legacy checkpoint migration,
+  same-workspace/new-workspace decisions, and preliminary Latin-Mongol profile,
+  now routed through the separate Home and Workspace Studio surfaces.
+- Pilot UAT for the production-deployed evidence-backed capability-map, Dataset
+  Discovery, and employee Smart Import slices; real-file profiling and automated
+  regression/deployment checks are complete.
+- Extend the public guided-start pattern into an authenticated, role-aware
+  tenant setup guide with progress, impact preview, and explicit approval; do
+  not turn routine employee work into a permanent chat-first interface.
 - Customer journey evidence model for Discovery → Blueprint → Pilot → First
   Value → Go-live → Paid → Champion → Referral.
 - Platform-admin adoption/funnel presentation and manual milestone controls.
+- User-acceptance validation of job-relevant navigation with pilot users,
+  including checks for both missing and excessive workspace visibility.
+- Human pilot validation of camera terminology and day-to-day workflow value;
+  automated camera deployment and authorization verification are complete.
 - Continued normalization of imported Choibalsan operational data into general
   OVERVA domain concepts.
 - Validate the Organization Structure Smart Import with additional real,
@@ -96,13 +365,19 @@ validated at enterprise scale.
 
 ## Current Product Focus
 
-1. Make organization discovery and Smart Import easier and safer.
-2. Measure setup effort, abandonment, assistance, first value, and adoption.
-3. Turn real pilot problems into reusable patterns without hard-coding the
+1. Validate the digital-needs entry wedge: turn a real organization problem into
+   a confirmed requirement, useful preview, qualified delivery choice, and an
+   accepted production outcome.
+2. Run market proof as an assisted pilot before automating a broad marketplace.
+3. Make organization discovery and Smart Import easier and safer.
+4. Measure setup effort, abandonment, assistance, first value, and adoption.
+5. Turn real pilot problems into reusable patterns without hard-coding the
    pilot's terminology into the platform.
-4. Keep tenant-facing navigation role- and workspace-relevant.
-5. Improve the platform-admin view of system health, adoption, AI cost, data
+6. Keep tenant-facing navigation role- and workspace-relevant.
+7. Improve the platform-admin view of system health, adoption, AI cost, data
    quality, and operational risk.
+8. Test the Creator Studio / Client Review / Runtime hypothesis with real
+   self-builders, professional implementers, and business reviewers.
 
 ## Known Boundaries
 
@@ -112,6 +387,54 @@ validated at enterprise scale.
 - The current single-host deployment is a pilot architecture, not evidence of
   high-availability deployment.
 - AI must not silently apply consequential configuration or operational changes.
+- The ecosystem North Star and market-entry strategy are accepted, but a mature
+  marketplace, automated matching, contracting, escrow, pricing intelligence,
+  vendor certification, and cross-organization commerce are not implemented or
+  proven current capabilities.
+- A test-only in-memory marketplace boundary simulator now covers five isolated
+  customer organizations, ten isolated developer organizations, five request
+  journeys, proposals, scoped conversations, bilateral agreement, pilot,
+  acceptance, production, and closure. This is architecture evidence only; it
+  creates no production identities or orders and does not make the marketplace
+  an implemented capability. The boundary audit is recorded in
+  `docs/MARKETPLACE_BOUNDARY_AND_DEMO_AUDIT_V1.md`.
+- Public workspace V23 is production-deployed.
+- V23 corrects the pre-award boundary: `My Requests` stores request drafts and
+  their review state; `My Projects` remains empty until provider selection and
+  bilateral agreement; optional requirement-review workspaces live under a
+  separate `Trial Rooms` surface. A saved request no longer creates a project
+  or opens Studio automatically.
+- Legacy browser-local request/workspace links migrate non-destructively into
+  optional review-room links. Existing local checkpoints are retained and
+  relabelled as requirement-refinement trial rooms rather than customer
+  projects.
+- It remains browser-local and unauthenticated. Server-side Market identity,
+  publication, proposals, provider selection, agreements, payment, production
+  delivery control, and verified reviews are still absent.
+- Public workspace V24 is production-deployed. It removes `Trial Rooms` and the
+  provider rules page from primary navigation, while preserving legacy
+  checkpoints behind secondary help. Customer and provider Home copy is now
+  role-specific; provider sample
+  rows are explicitly separated from the truthful no-live-work state. Provider
+  proposals and delivery empty states use plain Mongolian and lead back to the
+  next relevant action instead of exposing backend terminology.
+- V24 introduces the accepted D-022 interaction boundary: after provider
+  selection, the provider may propose an optional `Joint Clarification`; the
+  customer may accept it or proceed directly to agreement. The clarification
+  surface is intended for inviting relevant customer participants and mapping
+  real workflow, actors, information, decisions, and acceptance outcomes. It is
+  not a coding room, project, or required gate. No server-side invitation,
+  proposal, selection, agreement, or clarification persistence is claimed by
+  this public-shell correction.
+- V24 passed JavaScript syntax, the focused 11-test public flow, all 191
+  repository tests, a production-equivalent image build, and local visual
+  review. Verified pre-deployment backup `overva-20260827T114821Z` contains the
+  database dump, uploads archive, metadata, and valid checksums/archive lists.
+  Only production `public-site` was recreated with the Cloudflare overlay; all
+  services remained healthy. Caddy loopback, external Home, V24 JavaScript/CSS,
+  and status health returned HTTP 200. Production HTML exposed the V24 assets,
+  optional clarification, provider delivery flow, and corrected three-item
+  primary navigation for each role.
 
 ## Do Not Rediscover as New Work
 

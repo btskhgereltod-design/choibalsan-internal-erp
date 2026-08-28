@@ -4,7 +4,9 @@ const test=require("node:test");
 const assert=require("node:assert/strict");
 const fs=require("node:fs");
 const path=require("node:path");
-const {deterministicMapping,parseCsv,validateRows,summarize,TARGET_FIELDS}=require("../src/services/smart-import");
+const ExcelJS=require("exceljs");
+const JSZip=require("jszip");
+const {deterministicMapping,parseCsv,parseImportFile,validateRows,summarize,TARGET_FIELDS}=require("../src/services/smart-import");
 const {safeSamples}=require("../src/services/openai-smart-import");
 const read=relative=>fs.readFileSync(path.join(__dirname,relative),"utf8");
 
@@ -19,6 +21,33 @@ test("employee Smart Import preserves and normalizes native Excel date cells",()
   const checked=validateRows(rows,{Name:"fullName",Start:"hireDate"},{});
   assert.equal(checked[0].normalizedData.hireDate,"2024-03-15");
   assert.doesNotMatch(checked[0].validation.warnings.join(" "),/огноо танигдсангүй/);
+});
+
+test("employee Smart Import selects the employee sheet from a multi-domain workbook",async()=>{
+  const workbook=new ExcelJS.Workbook(),sales=workbook.addWorksheet("Raw_Sales_Delivery"),employees=workbook.addWorksheet("Employee_Master");
+  sales.addRow(["Order ID","Sales Amount"]);sales.addRow(["O-1",100]);
+  employees.addRow(["Employee ID","Employee Name","Department","Position","Hire Date"]);
+  employees.addRow(["E-1","Test Employee","HR","Officer",new Date("2024-03-15T00:00:00.000Z")]);
+  const parsed=await parseImportFile(await workbook.xlsx.writeBuffer(),"company.xlsx");
+  assert.equal(parsed.sheetName,"Employee_Master");
+  assert.equal(parsed.rows.length,1);
+  assert.equal(deterministicMapping(parsed.headers)["Employee Name"],"fullName");
+});
+
+test("employee Smart Import normalizes x-prefixed SpreadsheetML exports",async()=>{
+  const workbook=new ExcelJS.Workbook(),sheet=workbook.addWorksheet("Employee_Master");
+  sheet.addRow(["Employee ID","Employee Name"]);sheet.addRow(["E-1","Test Employee"]);
+  const zip=await JSZip.loadAsync(await workbook.xlsx.writeBuffer());
+  for(const entry of Object.values(zip.files).filter(item=>!item.dir&&/^xl\/.+\.xml$/i.test(item.name))){
+    let xml=await entry.async("string");
+    xml=xml.replace(/xmlns="http:\/\/schemas\.openxmlformats\.org\/spreadsheetml\/2006\/main"/gu,'xmlns:x="http://schemas.openxmlformats.org/spreadsheetml/2006/main"')
+      .replace(/<(\/?)((?![A-Za-z0-9_]+:)[A-Za-z][\w-]*)\b/gu,"<$1x:$2");
+    zip.file(entry.name,xml);
+  }
+  const parsed=await parseImportFile(await zip.generateAsync({type:"nodebuffer"}),"prefixed.xlsx");
+  assert.equal(parsed.compatibilityNormalized,true);
+  assert.equal(parsed.sheetName,"Employee_Master");
+  assert.equal(parsed.rows[0].sourceData["Employee Name"],"Test Employee");
 });
 
 test("employee Smart Import validates calendar dates and does not guess ambiguous dates",()=>{
@@ -72,11 +101,13 @@ test("Smart Import foundation is tenant-scoped, immutable and human-approved",()
   assert.doesNotMatch(route,/SELECT row_number,source_data,normalized_data/);
 });
 
-test("Smart Import UI exposes staging, review, approval and commit",()=>{
+test("Smart Import UI exposes temporary storage, review, approval and commit in Mongolian",()=>{
   const ui=read("../../web/administration.js");
-  assert.match(ui,/Smart Import/);
-  assert.match(ui,/staging/);
+  assert.match(ui,/Ухаалаг импорт/);
+  assert.match(ui,/түр хадгалалтад/);
   assert.match(ui,/data-import-approve/);
   assert.match(ui,/data-import-commit/);
-  assert.match(ui,/user account автоматаар үүсэхгүй/);
+  assert.match(ui,/хэрэглэгчийн эрх автоматаар үүсэхгүй/);
+  assert.match(ui,/Employee ID":"Ажилтны дугаар/);
+  assert.match(ui,/fetch failed/i);
 });

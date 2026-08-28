@@ -52,6 +52,22 @@ Core promise:
 > The organization should not have to adapt itself to software. The software
 > should adapt to the organization.
 
+## Accepted North Star and Market Entry
+
+The durable horizon is a connected digital organization, production, and market
+ecosystem. Organizations keep isolated tenant, data, authorization, and audit
+boundaries while collaborating through explicit governed contracts.
+
+OVERVA initially enters through a narrower promise: help an organization define
+its digital need, turn it into a confirmed requirement and preview, find a
+trusted delivery path or developer, and govern the work through production
+outcome. Do not position the initial product primarily as another ERP, a module
+catalogue, or a generic AI app builder.
+
+`docs/MARKET_ENTRY_STRATEGY_V1.md` is the canonical scope guardrail. New large
+ecosystem ideas go to the future horizon unless evidence shows they are required
+for the next real pilot outcome.
+
 ## Product Philosophy
 
 - Begin with the customer's real work, problems, people, and data—not a large
@@ -155,6 +171,12 @@ These protections apply regardless of implementation choice:
    traceability, and an appropriate human approval path.
 
 ## Project Memory
+
+- `docs/MARKETPLACE_OPERATING_MODEL_V1.md` — accepted customer/provider split,
+  delivery control record, verified outcome, and revenue hypothesis boundary.
+
+- `docs/MARKET_ENTRY_STRATEGY_V1.md` — accepted North Star, entry wedge,
+  validation targets, and ninety-day scope guardrail.
 
 - `docs/OVERVA_VISION.md` — human-readable product and market direction.
 - `docs/CURRENT_STATE.md` — current implementation and active focus.

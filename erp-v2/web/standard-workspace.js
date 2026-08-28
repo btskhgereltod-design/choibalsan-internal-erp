@@ -9,7 +9,7 @@ state.unifiedDashboardError="";
 
 function refreshWorkspacePolicy(){
   state.systemRoles=state.user?.system_roles||state.systemRoles||[];
-  state.allowedViews=workspacePolicy.allowedViews({role:state.user?.role,systemRoles:state.systemRoles,permissions:state.permissions||[],enabledModules:state.enabledModules||[],viewModules});
+  state.allowedViews=workspacePolicy.allowedViews({role:state.user?.role,systemRoles:state.systemRoles,permissions:state.permissions||[],workspaceCodes:state.user?.workspace_codes||[],enabledModules:state.enabledModules||[],viewModules});
   const allowed=new Set(state.allowedViews),peopleView=allowed.has("hr")?"hr":"employees";
   state.peopleMasterView=peopleView;
   if(state.view==="employees"&&peopleView==="hr")state.view="hr";

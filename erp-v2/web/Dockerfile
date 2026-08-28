@@ -29,6 +29,8 @@ COPY executive.css /usr/share/nginx/html/executive.css
 COPY executive.js /usr/share/nginx/html/executive.js
 COPY integration-lab.css /usr/share/nginx/html/integration-lab.css
 COPY integration-lab.js /usr/share/nginx/html/integration-lab.js
+COPY connectors.css /usr/share/nginx/html/connectors.css
+COPY connectors.js /usr/share/nginx/html/connectors.js
 COPY automation.css /usr/share/nginx/html/automation.css
 COPY automation.js /usr/share/nginx/html/automation.js
 COPY ai-director.css /usr/share/nginx/html/ai-director.css

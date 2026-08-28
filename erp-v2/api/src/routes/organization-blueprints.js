@@ -1,6 +1,7 @@
 "use strict";
 
 const express = require("express");
+const crypto = require("node:crypto");
 const { z } = require("zod");
 const { loadConfig } = require("../config");
 const { getPool } = require("../db");
@@ -11,6 +12,7 @@ const { selectBlueprintCatalog } = require("../services/organization-blueprint")
 const { nextInterviewQuestion } = require("../services/requirements-method");
 const { normalizeInterviewAnswer } = require("../services/openai-requirements");
 const { ensureGrowthProfile, recordGrowthEvent } = require("../services/growth-journey");
+const { analyzeOrganizationEvidence } = require("../services/organization-evidence");
 
 const router = express.Router();
 const owner = requireSystemRoles("owner");
@@ -28,6 +30,15 @@ const profileSchema = z.object({
 });
 const answerSchema=z.object({questionCode:z.string().trim().min(2).max(100),answerText:z.string().trim().min(1).max(12000)});
 const confirmSchema=z.object({answerText:z.string().trim().min(1).max(12000).optional(),corrected:z.boolean().default(false)});
+const evidenceSchema=z.object({
+  sourceType:z.enum(["pasted_text","interview_note","document_excerpt","system_inventory"]).default("pasted_text"),
+  title:z.string().trim().min(2).max(240),content:z.string().trim().min(20).max(50000)
+});
+const capabilityReviewSchema=z.object({
+  decision:z.enum(["accepted","corrected","rejected"]),
+  selectedDisposition:z.enum(["native","integrate","later"]).nullable().optional(),
+  note:z.string().trim().max(2000).default("")
+});
 
 router.use(authenticate, owner);
 
@@ -85,6 +96,74 @@ router.get("/interviews/:id", asyncHandler(async(req,res)=>{
   const answers=await getPool().query(`SELECT id,question_code,answer_text,normalized_answer,confidence,confirmation_status,supersedes_answer_id,source,model,created_at
     FROM ai_interview_answers WHERE organization_id=$1 AND session_id=$2 ORDER BY created_at,id`,[req.user.organization_id,id.data]);
   res.json({item:session.rows[0],questions:questions.rows,answers:answers.rows,nextQuestion:nextInterviewQuestion(questions.rows,answers.rows)});
+}));
+
+router.get("/evidence", asyncHandler(async(req,res)=>{
+  const org=req.user.organization_id;
+  const [sources,proposals]=await Promise.all([
+    getPool().query(`SELECT id,source_type,title,content_sha256,analysis_mode,char_length(content)::int AS content_length,created_by,created_at
+      FROM organization_evidence_sources WHERE organization_id=$1 ORDER BY created_at DESC,id DESC LIMIT 50`,[org]),
+    getPool().query(`SELECT p.id,p.capability_code,p.capability_name,p.proposed_disposition,p.rationale,p.confidence,p.created_at,
+        f.finding_kind,f.statement,f.evidence_excerpt,f.source_id,s.title AS source_title,
+        review.decision,review.selected_disposition,review.note AS review_note,review.actor_user_id AS reviewed_by,review.created_at AS reviewed_at
+      FROM organization_capability_proposals p
+      JOIN organization_evidence_findings f ON f.organization_id=p.organization_id AND f.id=p.finding_id
+      JOIN organization_evidence_sources s ON s.organization_id=f.organization_id AND s.id=f.source_id
+      LEFT JOIN LATERAL (SELECT r.decision,r.selected_disposition,r.note,r.actor_user_id,r.created_at
+        FROM organization_capability_reviews r WHERE r.organization_id=p.organization_id AND r.proposal_id=p.id
+        ORDER BY r.created_at DESC,r.id DESC LIMIT 1) review ON true
+      WHERE p.organization_id=$1 ORDER BY p.created_at DESC,p.id DESC LIMIT 200`,[org])
+  ]);
+  res.json({sources:sources.rows,proposals:proposals.rows});
+}));
+
+router.post("/evidence", asyncHandler(async(req,res)=>{
+  const parsed=evidenceSchema.safeParse(req.body);
+  if(!parsed.success)return res.status(400).json({error:"Эх сурвалжийн мэдээлэл дутуу эсвэл буруу байна",issues:parsed.error.issues});
+  const org=req.user.organization_id,{sourceType,title,content}=parsed.data;
+  const [catalog,modules]=await Promise.all([
+    getPool().query(`SELECT code,name,signals,recommended_modules FROM organization_blueprint_catalog WHERE active=true ORDER BY code`),
+    getPool().query(`SELECT mc.code FROM module_catalog mc JOIN organization_modules om ON om.module_code=mc.code
+      WHERE om.organization_id=$1 AND om.enabled=true AND mc.active=true`,[org])
+  ]);
+  const analysis=analyzeOrganizationEvidence({content,catalog:catalog.rows,activeModules:modules.rows.map(item=>item.code)});
+  const client=await getPool().connect();
+  try{await client.query("BEGIN");
+    const source=(await client.query(`INSERT INTO organization_evidence_sources
+      (organization_id,source_type,title,content,content_sha256,created_by) VALUES($1,$2,$3,$4,$5,$6)
+      RETURNING id,source_type,title,content_sha256,analysis_mode,char_length(content)::int AS content_length,created_by,created_at`,
+      [org,sourceType,title,content,crypto.createHash("sha256").update(content,"utf8").digest("hex"),req.user.id])).rows[0];
+    const proposals=[];
+    for(const item of analysis){
+      const finding=(await client.query(`INSERT INTO organization_evidence_findings
+        (organization_id,source_id,finding_kind,statement,evidence_excerpt,confidence)
+        VALUES($1,$2,$3,$4,$5,$6) RETURNING id`,[org,source.id,item.findingKind,item.statement,item.evidenceExcerpt,item.confidence])).rows[0];
+      proposals.push((await client.query(`INSERT INTO organization_capability_proposals
+        (organization_id,finding_id,capability_code,capability_name,proposed_disposition,rationale,confidence)
+        VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`,[org,finding.id,item.capabilityCode,item.capabilityName,item.proposedDisposition,item.rationale,item.confidence])).rows[0]);
+    }
+    await writeAudit(req,"organization.evidence_analyzed","organization_evidence_source",source.id,{sourceType,contentSha256:source.content_sha256,proposalCount:proposals.length,analysisMode:"deterministic"},client);
+    await client.query("COMMIT");res.status(201).json({source,proposalCount:proposals.length});
+  }catch(error){await client.query("ROLLBACK").catch(()=>{});throw error;}finally{client.release();}
+}));
+
+router.post("/capability-proposals/:id/reviews", asyncHandler(async(req,res)=>{
+  const id=uuid.safeParse(req.params.id),parsed=capabilityReviewSchema.safeParse(req.body);
+  if(!id.success||!parsed.success)return res.status(400).json({error:"Capability review мэдээлэл буруу байна",issues:parsed.error?.issues});
+  const org=req.user.organization_id,v=parsed.data;
+  if(v.decision!=="rejected"&&!v.selectedDisposition)return res.status(400).json({error:"Батлах ангиллыг сонгоно уу"});
+  if(v.decision==="rejected"&&v.selectedDisposition)return res.status(400).json({error:"Татгалзсан саналд ангилал сонгохгүй"});
+  const client=await getPool().connect();
+  try{await client.query("BEGIN");
+    const proposal=await client.query(`SELECT id,proposed_disposition FROM organization_capability_proposals WHERE organization_id=$1 AND id=$2`,[org,id.data]);
+    if(!proposal.rowCount){await client.query("ROLLBACK");return res.status(404).json({error:"Capability санал олдсонгүй"});}
+    const decision=v.decision==="accepted"&&v.selectedDisposition!==proposal.rows[0].proposed_disposition?"corrected":v.decision;
+    const item=(await client.query(`INSERT INTO organization_capability_reviews
+      (organization_id,proposal_id,decision,selected_disposition,note,actor_user_id)
+      VALUES($1,$2,$3,$4,$5,$6) RETURNING *`,[org,id.data,decision,decision==="rejected"?null:v.selectedDisposition,v.note,req.user.id])).rows[0];
+    await writeAudit(req,"organization.capability_review","organization_capability_proposal",id.data,{decision,selectedDisposition:item.selected_disposition},client);
+    await client.query("COMMIT");res.status(201).json({item});
+  }catch(error){await client.query("ROLLBACK").catch(()=>{});throw error;}finally{client.release();}
 }));
 
 router.post("/interviews/:id/answers", asyncHandler(async(req,res)=>{

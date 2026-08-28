@@ -1,6 +1,6 @@
 # OVERVA Vision
 
-Last reviewed: 2026-08-24
+Last reviewed: 2026-08-27
 
 ## Purpose
 
@@ -14,6 +14,29 @@ one connected environment.
 OVERVA is broader than a fixed ERP package. It can connect business management,
 people, work, assets, documents, finance, safety, maps, devices, analytics, and
 external systems, but a customer should see only what is useful to its work.
+
+## Long-Term Ecosystem North Star
+
+OVERVA's durable horizon is a connected digital organization, production, and
+market ecosystem. An organization first understands and operates its own work,
+then may collaborate safely with developers, suppliers, research institutions,
+and markets.
+
+This is not one shared database or an immediate promise to build every market.
+Each organization retains its own tenant, data, authorization, and audit
+boundary. Cross-organization activity requires explicit contracts, permissions,
+and attributable evidence.
+
+The active entry position is narrower:
+
+> Help an organization define its digital need correctly, find a trusted
+> delivery path or developer, and govern the work through production outcome.
+
+OVERVA therefore does not initially lead as another ERP, a module catalogue, or
+a generic AI app builder. Guided discovery and the governed workspace are the
+entry experience; building and a future marketplace are delivery paths from the
+same confirmed requirement. `MARKET_ENTRY_STRATEGY_V1.md` defines the accepted
+validation scope and guardrails.
 
 ## Product Promise
 

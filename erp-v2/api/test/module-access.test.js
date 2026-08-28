@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { requireModule, requirePermissions, requireSystemRoles } = require("../src/middleware/auth");
+const { requireModule, requireWorkspace, requirePermissions, requireSystemRoles } = require("../src/middleware/auth");
 
 function response() {
   return {
@@ -25,6 +25,28 @@ test("disabled tenant module is rejected with a stable code", () => {
   assert.equal(res.statusCode, 403);
   assert.equal(res.body.code, "MODULE_DISABLED");
   assert.equal(res.body.module, "iot");
+});
+
+test("workspace middleware requires assignment access but preserves owner oversight", () => {
+  let continued = false;
+  requireWorkspace("camera")(
+    { user:{ workspace_codes:["camera"], system_roles:[] } }, response(), () => { continued = true; }
+  );
+  assert.equal(continued, true);
+
+  let ownerContinued = false;
+  requireWorkspace("camera")(
+    { user:{ workspace_codes:[], system_roles:["owner"] } }, response(), () => { ownerContinued = true; }
+  );
+  assert.equal(ownerContinued, true);
+
+  const denied = response();
+  requireWorkspace("camera")(
+    { user:{ workspace_codes:["work-orders"], system_roles:[] } }, denied, () => assert.fail("must not continue")
+  );
+  assert.equal(denied.statusCode, 403);
+  assert.equal(denied.body.code, "WORKSPACE_ACCESS_REQUIRED");
+  assert.equal(denied.body.workspace, "camera");
 });
 
 test("permission middleware requires every requested permission", () => {

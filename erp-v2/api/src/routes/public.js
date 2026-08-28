@@ -9,6 +9,8 @@ const { writeSecurityAudit } = require("../services/audit");
 const { provisionTenant } = require("../services/tenant-provisioning");
 const { ensureGrowthProfile, recordGrowthEvent } = require("../services/growth-journey");
 const { asyncHandler } = require("../utils/async-handler");
+const { loadConfig } = require("../config");
+const { publicCatalog } = require("../services/connectors");
 
 const router = express.Router();
 const TRIAL_DAYS = 14;
@@ -21,6 +23,8 @@ const reservedSlugs = new Set([
   "support", "help", "billing", "root", "system", "platform", "demo", "test",
 ]);
 const hash = value => crypto.createHash("sha256").update(String(value).trim().toLowerCase()).digest("hex");
+
+router.get("/connectors", (_req, res) => res.json({ items: publicCatalog(loadConfig()) }));
 
 const trialSchema = z.object({
   organizationName: z.string().trim().min(2).max(200),

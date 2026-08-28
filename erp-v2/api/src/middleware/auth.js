@@ -41,7 +41,22 @@ const authenticate = asyncHandler(async (req, res, next) => {
                     JOIN organization_roles r
                       ON r.organization_id=ur.organization_id AND r.id=ur.role_id
                    WHERE ur.organization_id=u.organization_id AND ur.user_id=u.id AND r.active=true
-                   ORDER BY r.code) AS system_roles
+                   ORDER BY r.code) AS system_roles,
+            ARRAY(SELECT DISTINCT jwa.workspace_code
+                    FROM employee_assignments ea
+                    JOIN positions p
+                      ON p.organization_id=ea.organization_id AND p.id=ea.position_id
+                    JOIN job_workspace_access jwa
+                      ON jwa.organization_id=p.organization_id AND jwa.job_id=p.job_id
+                   WHERE ea.organization_id=u.organization_id
+                     AND ea.employee_id=u.employee_id
+                     AND ea.status='active'
+                     AND ea.effective_from <= current_date
+                     AND (ea.effective_to IS NULL OR ea.effective_to >= current_date)
+                     AND p.active=true
+                     AND p.job_id IS NOT NULL
+                     AND jwa.active=true
+                   ORDER BY jwa.workspace_code) AS workspace_codes
        FROM users u
        JOIN organizations o ON o.id = u.organization_id
        JOIN subscriptions s ON s.organization_id=o.id
@@ -99,6 +114,22 @@ function requireModule(moduleCode) {
   };
 }
 
+function requireWorkspace(workspaceCode) {
+  return (req, res, next) => {
+    if (!req.user) return res.status(401).json({ error: "Authentication required" });
+    const workspaces = new Set(req.user.workspace_codes || []);
+    const systemRoles = new Set(req.user.system_roles || []);
+    if (!workspaces.has(workspaceCode) && !systemRoles.has("owner")) {
+      return res.status(403).json({
+        error: "Workspace access required",
+        code: "WORKSPACE_ACCESS_REQUIRED",
+        workspace: workspaceCode,
+      });
+    }
+    next();
+  };
+}
+
 function requirePermissions(...permissions) {
   const required = new Set(permissions);
   return (req, res, next) => {
@@ -121,4 +152,4 @@ function requireSystemRoles(...roles) {
   };
 }
 
-module.exports = { authenticate, authenticatePlatform, requireRoles, requireModule, requirePermissions, requireSystemRoles };
+module.exports = { authenticate, authenticatePlatform, requireRoles, requireModule, requireWorkspace, requirePermissions, requireSystemRoles };
