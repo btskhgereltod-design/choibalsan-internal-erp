@@ -54,8 +54,8 @@ test("public site starts with a portfolio Home and opens the governed workspace 
   assert.match(html, /class="preview-panel"/);
   assert.match(html, /id="portfolioHome"/);
   assert.match(html, /id="workspaceStudio"/);
-  assert.match(html, /Хэрэгтэй ажлаа ойлгомжтой хүсэлт болгох/);
-  assert.match(html, /Жишиг хүсэлтээс санаа авч/);
+  assert.match(html, /Зах дээрх ажлуудтай танилцах/);
+  assert.match(html, /Зочин нээлттэй ажлын бүтэц/);
   assert.match(html, /Хүсэлт гаргах/);
   assert.match(html, /id="homeIntentHelp"/);
   assert.match(html, /class="home-submit" type="submit" disabled/);
@@ -86,7 +86,7 @@ test("public site starts with a portfolio Home and opens the governed workspace 
   assert.match(html, /class="market-panel market-rules hidden"/);
   assert.match(html, /data-request-source="file"/);
   assert.match(html, /data-request-source="image"/);
-  assert.match(html, /Жишиг хүсэлт/);
+  assert.match(html, /жишиг хүсэлт/i);
   assert.match(html, /бодит нийтлэгдсэн захиалга биш/);
   assert.match(html, /data-request-template="inventory"/);
   assert.match(html, /data-request-template="approval"/);
@@ -144,8 +144,8 @@ test("public site starts with a portfolio Home and opens the governed workspace 
   assert.match(html, /бодит худалдаа биш/);
   assert.match(html, /Одоогоор бодит нийтлэл, хэрэглэгчийн бүртгэл нээгдээгүй/);
   assert.match(html, /data-forum-topic/);
-  assert.match(html, /site\.css\?v=28/);
-  assert.match(html, /site\.js\?v=28/);
+  assert.match(html, /site\.css\?v=30/);
+  assert.match(html, /site\.js\?v=30/);
   assert.match(html, /request-draft-registry\.js\?v=3/);
   assert.match(html, /conversation-memory\.js\?v=15/);
   assert.match(html, /workspace-lifecycle\.js\?v=14/);

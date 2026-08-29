@@ -94,16 +94,27 @@ break-glass recovery remain external operational authorities. Market customer,
 provider, and operator identities remain outside this Platform authorization
 model.
 
-The first local Market identity slice is an extraction-compatible boundary in
-the current single-host deployment. `market_identities`, `market_memberships`,
-`market_operator_assignments`, and `market_audit_events` have no foreign keys to
-tenant organizations/users or Platform administrators. `/api/market/*` accepts
-only an explicitly typed Market token and derives active memberships plus the
-separate operator assignment from PostgreSQL on every request. Tenant and
-Platform middleware reject that token; the Market middleware rejects tenant and
-Platform tokens. `customer` / `provider` view selection is authorized by an
-active participant membership and changes no authority. No person-level
-federation is implemented in this slice.
+The local Market identity slice is an extraction-compatible boundary in the
+current single-host deployment. `market_identities`, `market_memberships`,
+`market_provider_applications`, `market_operator_assignments`, and
+`market_audit_events` have no foreign keys to tenant organizations/users or
+Platform administrators. `/api/market/*` accepts only an explicitly typed
+Market token and derives active memberships plus the separate operator
+assignment from PostgreSQL on every request. Tenant and Platform middleware
+reject that token; the Market middleware rejects tenant and Platform tokens.
+
+Public browse is a neutral `guest` presentation, not a participant membership.
+Starting an order may create the self-issued active `customer` capacity. A
+Provider application grants no capacity: only a live Market operator other than
+the applicant can move it through `submitted -> under_review` and then approve
+or reject it with attributable reasons. The database rejects lifecycle skips;
+approval creates an active `provider` membership and rejection creates none.
+Customer membership creation is idempotent under concurrent order intents, and
+the database permits only one open Provider application per identity.
+`customer` / `provider` view selection is
+authorized by an active participant membership and changes no authority. No
+person-level federation, listing, proposal, payment, dispute, or forum backend
+is implemented in this slice.
 
 ## Tenant and Identity Model
 

@@ -55,6 +55,25 @@ test("migration creates separate Market identity, membership, operator, and appe
   assert.doesNotMatch(migration, /INSERT INTO market_operator_assignments/i);
 });
 
+test("migration 0059 makes provider capability application-driven and attributable", () => {
+  const migration = readApi("migrations/0059_market_action_driven_participation.sql");
+  assert.match(migration, /CREATE TABLE market_provider_applications/);
+  assert.match(migration, /status IN \('submitted','under_review','approved','rejected'\)/);
+  assert.match(migration, /CREATE UNIQUE INDEX market_provider_applications_open_idx/);
+  assert.match(migration, /decided_by_identity_id UUID REFERENCES market_identities/);
+  assert.match(migration, /provider_application_id UUID/);
+  assert.match(migration, /Submission grants no provider membership/);
+  assert.doesNotMatch(migration, /REFERENCES (users|platform_admins|organizations)/i);
+  assert.doesNotMatch(migration, /(?:UPDATE|DELETE FROM|DROP TABLE) market_memberships/i);
+});
+
+test("migration 0060 enforces the complete reviewed application lifecycle", () => {
+  const migration = readApi("migrations/0060_market_provider_application_lifecycle.sql");
+  assert.match(migration, /OLD\.status = 'submitted' AND NEW\.status = 'under_review'/);
+  assert.match(migration, /OLD\.status = 'under_review' AND NEW\.status IN \('approved','rejected'\)/);
+  assert.match(migration, /market_provider_application_transition_guard/);
+});
+
 test("Market middleware derives operator authority live and tenant auth rejects every typed token", () => {
   const middleware = readApi("src/middleware/auth.js");
   assert.match(middleware, /payload\.kind !== "market"/);
@@ -70,7 +89,15 @@ test("Market API enforces live membership switching and separately guarded opera
   assert.match(route, /authorityChanged: false/);
   assert.match(route, /router\.post\("\/operator\/memberships\/:id\/suspend", authenticateMarket, requireMarketOperator/);
   assert.match(route, /router\.post\("\/operator\/memberships\/:id\/activate", authenticateMarket, requireMarketOperator/);
-  assert.match(route, /supplierVerified: false/);
+  assert.match(route, /code: "MARKET_PROVIDER_APPLICATION_REQUIRED"/);
+  assert.match(route, /router\.post\("\/provider-applications", authenticateMarket/);
+  assert.match(route, /router\.post\("\/operator\/provider-applications\/:id\/start-review", authenticateMarket, requireMarketOperator/);
+  assert.match(route, /router\.post\("\/operator\/provider-applications\/:id\/approve", authenticateMarket, requireMarketOperator/);
+  assert.match(route, /router\.post\("\/operator\/provider-applications\/:id\/reject", authenticateMarket, requireMarketOperator/);
+  assert.match(route, /code: "MARKET_PROVIDER_SELF_REVIEW_DENIED"/);
+  assert.match(route, /market\.membership\.issue\.idempotent/);
+  assert.match(route, /market\.provider\.application\.review_started/);
+  assert.match(route, /issued_by_kind,membership_type|membership_type,status,issued_by_kind/);
   assert.doesNotMatch(route, /listing|proposal|payment|dispute|forum/i);
 });
 
@@ -82,17 +109,26 @@ test("public routing exposes only the bounded Market identity API, not a Market 
   assert.doesNotMatch(caddy, /market\.overva\.com/);
 });
 
-test("public V28 wires real Market identity membership switching while retaining truthful previews", () => {
+test("public V30 keeps guests neutral and gates customer/provider participation by action", () => {
   const html = readRepo("public-site/index.html");
   const client = readRepo("public-site/site.js");
-  assert.match(html, /site\.js\?v=28/);
+  assert.match(html, /site\.js\?v=30/);
   assert.match(html, /id="marketAuthDialog"/);
-  assert.match(html, /data-add-market-membership="customer"/);
-  assert.match(html, /data-add-market-membership="provider"/);
+  assert.match(html, /class="market-role-switch[^"]* hidden"/);
+  assert.match(html, /data-market-participation-action="customer"/);
+  assert.match(html, /data-market-participation-action="provider"/);
+  assert.match(html, /id="providerApplicationDialog"/);
+  assert.match(html, /Зочин нээлттэй ажлын бүтэц/);
   assert.match(html, /Байгууллагын Platform-д нэвтрэх/);
+  assert.doesNotMatch(html, /data-add-market-membership=/);
   assert.match(client, /fetch\(`\/api\/market\$\{path\}`/);
   assert.match(client, /marketApi\("\/view"/);
+  assert.match(client, /marketApi\("\/provider-applications"/);
+  assert.match(client, /function showGuestMarket\(\)/);
   assert.match(client, /marketIdentity\.active_memberships/);
-  assert.match(client, /if \(!marketIdentity\) \{\s*showMarketRole\(view\)/);
+  assert.match(client, /pendingMarketAction = "customer"/);
+  assert.doesNotMatch(client, /if \(!marketIdentity\) \{\s*showMarketRole\(view\)/);
+  assert.doesNotMatch(client, /initialParams[\s\S]{0,400}showMarketView/);
+  assert.doesNotMatch(client, /data-add-market-membership/);
   assert.doesNotMatch(client, /marketOperator\s*=|operatorAuthority\s*=/);
 });

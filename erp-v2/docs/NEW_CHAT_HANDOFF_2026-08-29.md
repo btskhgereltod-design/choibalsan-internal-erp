@@ -16,7 +16,7 @@ boundaries. Do not generalize legacy tenant behavior into OVERVA.
 
 ## Production truth
 
-- Public Home V28 and API V32 are deployed with migration `0058`; Web/Admin
+- Public Home V30 and API V34 are deployed with migration `0060`; Web/Admin
   remain V31.
 - V31 provides real Platform-only RBAC: 15 permissions, seven roles, 53 mappings,
   live permission derivation, and server-side route guards.
@@ -30,9 +30,48 @@ boundaries. Do not generalize legacy tenant behavior into OVERVA.
 - OVERVA Apps is a normal first-party supplier in the future Market and must
   receive no ranking, review, fee, enforcement, or data-access privilege.
 - Production now has isolated `market_*` identity, Customer/Provider
-  membership, operator-assignment, and append-only audit storage plus a typed
-  Market token. It still has no listings, proposals, freelance transaction
-  workflow, forum persistence, payments, disputes, or Apps operator system.
+  membership, Provider-application, operator-assignment, and append-only audit
+  storage plus a typed Market token. It still has no listings, proposals,
+  freelance transaction workflow, forum persistence, payments, disputes, or
+  Apps operator system.
+
+## V34 reviewed Provider lifecycle hardening — deployed
+
+- Migration `0060` enforces `submitted -> under_review -> approved/rejected`;
+  active/suspended remain membership states. Only a separately assigned live
+  Market operator can start review and decide, each with an attributable reason.
+- Concurrent Customer order intents create one membership and replay as
+  idempotent `200`; concurrent Provider submissions create one open application
+  and reject the duplicate. Existing membership rows are not rewritten.
+- All 223 tests and a clean `0001–0060` PostgreSQL/API smoke pass. Headless Edge
+  confirms a guest cannot expose Provider private navigation by editing the URL.
+- V34 was deployed after verified backup `overva-20260829T061635Z`. Production
+  is API V34 / Public V30 / migration `0060`; Web/Admin remain V31 and Market
+  storage remains at zero rows.
+
+## V33 action-driven Market participation — deployed
+
+- D-028 replaces only D-027's self-service participation detail. Guests now
+  have one neutral public-browse context; they are not shown Customer/Provider
+  switching or private work queues.
+- Starting an order after Market authentication creates Customer capacity from
+  that action. Provider self-issuance is rejected and replaced by a bounded
+  application containing a professional summary, skills, optional portfolio,
+  and rules acceptance.
+- Migration `0059` adds `market_provider_applications` plus attributable audit
+  links. A separately assigned live Market operator must approve or reject with
+  a reason, cannot self-review, and creates Provider membership only on
+  approval.
+- Public assets are cache-busted to V29. The same identity may still
+  hold both active capacities and switch presentation context without gaining
+  operator, Platform, tenant, founder, or system authority.
+- All 222 repository tests pass. A clean disposable PostgreSQL/API smoke passed
+  migrations `0001–0059`, Customer action, Provider submit/approve/reject,
+  operator self-review denial, view gates, suspension/reactivation,
+  cross-boundary token denial, and audit immutability. A 1440×1000 headless Edge
+  render confirmed the guest state.
+- V33 was deployed after verified backup `overva-20260829T060223Z`. Production
+  is API V33 / Public V29 / migration `0059`; Web/Admin remain V31.
 
 ## V32 Market identity and membership — deployed
 
@@ -69,54 +108,56 @@ boundaries. Do not generalize legacy tenant behavior into OVERVA.
 
 ## Deployment evidence and rollback
 
-- Verified backup: `erp-v2/backups-production/overva-20260829T034814Z`.
+- Verified backup: `erp-v2/backups-production/overva-20260829T060223Z`.
 - Current API image:
-  `sha256:dadac6b8c740509851343d80e145505eb0fd81ca49f6c6dd8555ecfa81eb592e`.
+  `sha256:a750213878a4380bcfb7267258526669299f6a135a2e07240b4b033cf308004d`.
 - Current Public image:
-  `sha256:6dd118b9ba3bce827820993f3e547505846d860072131971319ca0c06096a6c0`.
+  `sha256:54f2546b9a472b6b871a2a57eaef5b805148e5e70149a51057d5142bf71a16e9`.
 - Current Web image:
   `sha256:5c2ad3eec659945c60d51ae39bf3d596b0f55736b0bd88bcc17217abed83e737`.
 - Previous API image:
-  `sha256:3a007b5dbf115b5f0ae15861006b5d9143da62c26f63126296e52391393f050a`.
-- Previous Web image:
-  `sha256:2cc9a2a972fee7bc946935a0b28fde22c2af24cc60a3ce19c3d1214609310a96`.
-- Migration `0058` is additive. The pre-V32 application does not use the new
-  `market_*` tables, so a schema restore is not needed for an application-only
-  rollback, but any live
+  `sha256:dadac6b8c740509851343d80e145505eb0fd81ca49f6c6dd8555ecfa81eb592e`.
+- Previous Public image:
+  `sha256:6dd118b9ba3bce827820993f3e547505846d860072131971319ca0c06096a6c0`.
+- Migration `0059` is additive. The V32 application does not use Provider
+  application records, so a schema restore is not needed for an application-
+  only rollback, but any live
   restore still requires an approved outage and full database/uploads restore.
 - Every Compose command that may recreate Caddy must use both
   `docker-compose.production.yml` and `docker-compose.cloudflare.yml`.
 
 ## Verified state
 
-- Tests: 221 passed, 0 failed.
-- Production DB: latest migration `0058`; Platform counts remain `15|7|53` and
+- Tests: 222 passed, 0 failed.
+- Production DB: latest migration `0059`; Platform counts remain `15|7|53` and
   active founder assignments/effective permissions remain `2|15`.
-- Production Market zero-state is `0` identities, `0` memberships, `0` active
-  operators, and `0` audit events. Runtime can insert audit evidence but cannot
-  update, delete, or truncate it.
-- The V31 existing-admin smoke passed at schema `0057`; V32 leaves its
-  owner/founder roles and 15 live permissions unchanged.
+- Production Market zero-state is `0` identities, `0` memberships, `0` Provider
+  applications, `0` active operators, and `0` audit events. Runtime can insert
+  audit evidence but cannot update, delete, or truncate it.
+- Production reverified `15|7|53`, two active founder assignments, and 15
+  effective permissions after `0059`; V33 changes no Platform authority.
 - All seven production services healthy.
-- External Public V28 CSS/JS, API, public Home, and tenant app health returned
-  HTTP 200. `/api/market/auth/me` returns the expected unauthenticated HTTP 401
-  through both local Caddy and the Cloudflare edge.
+- External Public V29 CSS/JS, API, public Home, tenant app, admin redirect, and
+  status health passed. `/api/market/auth/me` returns the expected
+  unauthenticated HTTP 401 through both local Caddy and the Cloudflare edge.
 - Windows AC/DC sleep and hibernate are `Never`; keep-awake PID 1276 had a
   current heartbeat. This does not protect against power loss or forced reboot.
 
 ## Working-tree caution
 
-The V27–V32 implementation and documents are still uncommitted. There are also
-pre-existing unrelated deletions under `.tmp/pdfreader` and
-`erp-v2/.tools/pdfreader`; do not restore, delete, stage, or include them unless
-the user explicitly asks. Inspect `git status --short` before editing and
-preserve all unrelated work.
+V27–V32 is committed as `514983b`. The deployed V33–V34 changes are
+uncommitted.
+`OVERVA.code-workspace` is a separate user workspace file and must not be
+included unless explicitly requested. Restricted-path Git status may falsely
+show deletions under `.tmp/pdfreader` and `erp-v2/.tools/pdfreader`; escalated
+Git inspection confirmed they are not real working-tree changes. Do not restore,
+delete, stage, or include them. Inspect status before editing and preserve all
+unrelated work.
 
 ## Recommended next bounded step
 
-Choose and design the next Market vertical slice explicitly before coding. Keep
-the now-live Market identity/membership boundary fixed, provision no Market
-operator merely from founder or Platform authority, and do not bundle listings,
+Choose the next Market vertical slice explicitly, provision no Market operator
+merely from founder or Platform authority, and do not bundle listings,
 proposals, payments, disputes, or forum work into one release.
 
 ### V32 acceptance evidence
@@ -144,10 +185,11 @@ proposals, payments, disputes, or forum work into one release.
 > `erp-v2/docs/CURRENT_STATE.md`, `erp-v2/docs/DECISIONS.md`,
 > `erp-v2/docs/ARCHITECTURE.md`, дараа нь
 > `erp-v2/docs/NEW_CHAT_HANDOFF_2026-08-29.md`-ийг бүрэн унш. Production Public
-> V28, API V32, Web/Admin V31, migration 0058 дээр байгаа. Market identity болон
-> Customer/Provider membership-ийн эхний bounded slice deployed; production-д
-> Market identity/operator одоогоор 0. View солих нь зөвхөн active membership-д
-> тулгуурлаж эрх нэмэхгүй, Market operator болон Platform founder/tenant эрх
+> V29, API V33, Web/Admin V31, migration 0059 дээр байгаа. Market identity,
+> action-driven Customer capacity болон reviewed Provider application slice
+> deployed; production-д Market identity/provider application/operator
+> одоогоор 0. View солих нь зөвхөн active membership-д тулгуурлаж эрх нэмэхгүй,
+> Market operator болон Platform founder/tenant эрх
 > тусдаа хэвээр. Дараагийн Market slice-ийг эхлээд тусад нь bounded design хий;
 > listings, proposals, payments, disputes, forum backend-уудыг нэг дор бүү
 > өргөжүүл. Өмнөх болон хамааралгүй working-tree өөрчлөлтүүдийг хадгал. Deploy-г

@@ -46,18 +46,51 @@ async function run() {
       token: participantToken, method: "POST", body: { view: "provider" },
     })).status, 403);
 
-    assert.equal((await request(baseUrl, "/api/market/memberships", {
-      token: participantToken, method: "POST", body: { membershipType: "customer" },
-    })).status, 201);
-    const both = await request(baseUrl, "/api/market/memberships", {
+    const customerMembershipRequests = await Promise.all([
+      request(baseUrl, "/api/market/memberships", {
+        token: participantToken, method: "POST", body: { membershipType: "customer" },
+      }),
+      request(baseUrl, "/api/market/memberships", {
+        token: participantToken, method: "POST", body: { membershipType: "customer" },
+      }),
+    ]);
+    assert.deepEqual(customerMembershipRequests.map(item => item.status).sort(), [200, 201]);
+    assert.equal(customerMembershipRequests.find(item => item.status === 200).data.idempotent, true);
+    const customerMembershipCount = await getPool().query(
+      `SELECT count(*)::int AS count FROM market_memberships
+        WHERE market_identity_id=$1 AND membership_type='customer'`,
+      [participantId]
+    );
+    assert.equal(customerMembershipCount.rows[0].count, 1);
+    const providerSelfIssue = await request(baseUrl, "/api/market/memberships", {
       token: participantToken, method: "POST", body: { membershipType: "provider" },
     });
-    assert.equal(both.status, 201);
-    assert.deepEqual(both.data.identity.active_memberships, ["customer", "provider"]);
-    assert.equal(both.data.identity.has_operator_authority, false);
+    assert.equal(providerSelfIssue.status, 409);
+    assert.equal(providerSelfIssue.data.code, "MARKET_PROVIDER_APPLICATION_REQUIRED");
+    const providerApplicationBody = {
+      professionalSummary: "I design and deliver audited PostgreSQL and JavaScript business systems.",
+      skills: ["PostgreSQL", "JavaScript"],
+      portfolioUrl: "https://example.test/portfolio",
+      rulesAccepted: true,
+    };
+    const concurrentApplications = await Promise.all([
+      request(baseUrl, "/api/market/provider-applications", {
+        token: participantToken, method: "POST", body: providerApplicationBody,
+      }),
+      request(baseUrl, "/api/market/provider-applications", {
+        token: participantToken, method: "POST", body: providerApplicationBody,
+      }),
+    ]);
+    assert.deepEqual(concurrentApplications.map(item => item.status).sort(), [201, 409]);
+    const application = concurrentApplications.find(item => item.status === 201);
+    assert.equal(concurrentApplications.find(item => item.status === 409).data.code, "MARKET_PROVIDER_APPLICATION_OPEN");
+    assert.equal(application.status, 201);
+    assert.equal(application.data.identity.provider_application.status, "submitted");
+    assert.deepEqual(application.data.identity.active_memberships, ["customer"]);
+    assert.equal(application.data.identity.has_operator_authority, false);
     assert.equal((await request(baseUrl, "/api/market/view", {
       token: participantToken, method: "POST", body: { view: "provider" },
-    })).status, 200);
+    })).status, 403);
 
     assert.equal((await request(baseUrl, "/api/market/auth/me", {
       token: signAccessToken("00000000-0000-4000-8000-000000000001"),
@@ -85,7 +118,72 @@ async function run() {
     assert.equal(operatorLogin.status, 200);
     assert.equal(operatorLogin.data.identity.has_operator_authority, true);
     const operatorToken = operatorLogin.data.token;
-    const providerMembership = both.data.identity.memberships.find(item => item.membership_type === "provider");
+
+    const operatorApplication = await request(baseUrl, "/api/market/provider-applications", {
+      token: operatorToken,
+      method: "POST",
+      body: {
+        professionalSummary: "Operator self-review must remain forbidden even with a complete provider profile.",
+        skills: ["Market operations"],
+        rulesAccepted: true,
+      },
+    });
+    assert.equal(operatorApplication.status, 201);
+    const selfReview = await request(baseUrl, `/api/market/operator/provider-applications/${operatorApplication.data.identity.provider_application.id}/start-review`, {
+      token: operatorToken, method: "POST", body: { reason: "This self-review must be denied" },
+    });
+    assert.equal(selfReview.status, 403);
+    assert.equal(selfReview.data.code, "MARKET_PROVIDER_SELF_REVIEW_DENIED");
+
+    const rejectedIdentity = await request(baseUrl, "/api/market/auth/register", {
+      method: "POST",
+      body: { email: `rejected-${unique}@example.test`, password: "Rejected-test-password-2026", displayName: "Rejected Applicant" },
+    });
+    assert.equal(rejectedIdentity.status, 201);
+    const rejectedApplication = await request(baseUrl, "/api/market/provider-applications", {
+      token: rejectedIdentity.data.token,
+      method: "POST",
+      body: {
+        professionalSummary: "This disposable profile exercises an attributable provider rejection decision.",
+        skills: ["Disposable testing"],
+        rulesAccepted: true,
+      },
+    });
+    assert.equal(rejectedApplication.status, 201);
+    assert.equal((await request(baseUrl, `/api/market/operator/provider-applications/${rejectedApplication.data.identity.provider_application.id}/reject`, {
+      token: rejectedIdentity.data.token, method: "POST", body: { reason: "Participant cannot reject this application" },
+    })).status, 403);
+    const rejectedReview = await request(baseUrl, `/api/market/operator/provider-applications/${rejectedApplication.data.identity.provider_application.id}/start-review`, {
+      token: operatorToken, method: "POST", body: { reason: "Begin attributable rejection review" },
+    });
+    assert.equal(rejectedReview.status, 200);
+    assert.equal(rejectedReview.data.identity.provider_application.status, "under_review");
+    const rejected = await request(baseUrl, `/api/market/operator/provider-applications/${rejectedApplication.data.identity.provider_application.id}/reject`, {
+      token: operatorToken, method: "POST", body: { reason: "Disposable rejection path verification" },
+    });
+    assert.equal(rejected.status, 200);
+    assert.equal(rejected.data.identity.provider_application.status, "rejected");
+    assert.deepEqual(rejected.data.identity.active_memberships, []);
+
+    assert.equal((await request(baseUrl, `/api/market/operator/provider-applications/${application.data.identity.provider_application.id}/approve`, {
+      token: participantToken, method: "POST", body: { reason: "Participant cannot approve this application" },
+    })).status, 403);
+    const approvedReview = await request(baseUrl, `/api/market/operator/provider-applications/${application.data.identity.provider_application.id}/start-review`, {
+      token: operatorToken, method: "POST", body: { reason: "Begin attributable provider review" },
+    });
+    assert.equal(approvedReview.status, 200);
+    assert.equal(approvedReview.data.identity.provider_application.status, "under_review");
+    const approved = await request(baseUrl, `/api/market/operator/provider-applications/${application.data.identity.provider_application.id}/approve`, {
+      token: operatorToken, method: "POST", body: { reason: "Verified skills and provider profile" },
+    });
+    assert.equal(approved.status, 200);
+    assert.equal(approved.data.identity.provider_application.status, "approved");
+    assert.deepEqual(approved.data.identity.active_memberships, ["customer", "provider"]);
+    assert.equal(approved.data.identity.has_operator_authority, false);
+    assert.equal((await request(baseUrl, "/api/market/view", {
+      token: participantToken, method: "POST", body: { view: "provider" },
+    })).status, 200);
+    const providerMembership = approved.data.identity.memberships.find(item => item.membership_type === "provider");
 
     assert.equal((await request(baseUrl, `/api/market/operator/memberships/${providerMembership.id}/suspend`, {
       token: participantToken, method: "POST", body: { reason: "Participant cannot suspend own membership" },
@@ -114,12 +212,24 @@ async function run() {
     const eventTypes = evidence.rows.map(item => `${item.event_type}:${item.outcome}`);
     for (const expected of [
       "market.identity.registered:success",
+      "market.provider.application.submitted:success",
+      "market.provider.application.review_started:success",
+      "market.provider.application.approved:success",
       "market.membership.issued:success",
       "market.membership.activated:success",
       "market.membership.suspended:success",
       "market.view.switch:denied",
       "market.view.switched:success",
     ]) assert.ok(eventTypes.includes(expected), `missing ${expected}`);
+
+    const rejectedEvidence = await getPool().query(
+      `SELECT event_type,outcome FROM market_audit_events
+        WHERE market_identity_id=$1 ORDER BY id`,
+      [rejectedIdentity.data.identity.id]
+    );
+    const rejectedEventTypes = rejectedEvidence.rows.map(item => `${item.event_type}:${item.outcome}`);
+    assert.ok(rejectedEventTypes.includes("market.provider.application.review_started:success"));
+    assert.ok(rejectedEventTypes.includes("market.provider.application.rejected:success"));
 
     const targetOperator = await getPool().query(
       "SELECT count(*)::int AS count FROM market_operator_assignments WHERE market_identity_id=$1",
@@ -132,10 +242,10 @@ async function run() {
     );
 
     const latest = await getPool().query("SELECT max(version) AS version FROM schema_migrations");
-    assert.equal(latest.rows[0].version, "0058");
+    assert.equal(latest.rows[0].version, "0060");
     console.log("[market identity integration] passed", {
       migration: latest.rows[0].version,
-      memberships: both.data.identity.active_memberships,
+      memberships: approved.data.identity.active_memberships,
       evidenceEvents: evidence.rowCount,
       participantOperatorAssignments: targetOperator.rows[0].count,
     });

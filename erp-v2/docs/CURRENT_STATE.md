@@ -18,6 +18,68 @@ validated at enterprise scale.
   restore guidance, health monitoring, and restart policies exist.
 - Database and internal service ports are not intended to be public.
 
+### Production release V34 — complete reviewed Provider lifecycle
+
+- Migration `0060` enforces `submitted -> under_review -> approved/rejected`
+  for Provider applications at the database boundary. Active/suspended remain
+  separate membership states. A live Market operator must explicitly start
+  review with a reason before deciding an application, and self-review remains
+  forbidden.
+- Customer capacity creation is idempotent: concurrent order intents produce
+  one Customer membership and return `201` plus an idempotent `200` replay.
+  Concurrent Provider submissions produce one open application and reject the
+  duplicate with `MARKET_PROVIDER_APPLICATION_OPEN`.
+- Submitted, review-started, approved, rejected, membership activation, and
+  suspension transitions create attributable append-only Market evidence.
+  Participant, tenant, and Platform tokens cannot call operator transitions.
+  Guest private-role URLs remain in the neutral guest presentation.
+- All 223 repository tests pass. A clean PostgreSQL/API integration run applied
+  `0001–0060` and passed concurrent Customer/Provider requests, operator-only
+  lifecycle transitions, both decisions, suspension/reactivation, state guards,
+  boundary denial, and audit immutability. Headless Edge confirmed a guest
+  cannot expose Provider private navigation through a hand-written URL.
+- V34 was production-deployed after verified backup
+  `overva-20260829T061635Z`. Production is API V34, Public V30, Web/Admin V31,
+  and schema `0060`; it remains at zero Market identities, memberships,
+  applications, operators, and events. All seven services, local Caddy, external
+  Home/API, Market `401`, and Public V30 assets passed. Deployed API image is
+  `sha256:50165a48b14af0be442f7186f18c76820959ded82eb4a6fcb5009e4771067188`;
+  Public image is
+  `sha256:0f8f65450bd9ebc43d087d463ab3585ef47c81d0626969f1b36b427c1f092719`.
+
+### Production release V33 — action-driven Market participation
+
+- Migration `0059` adds isolated Provider applications and links their
+  attributable lifecycle to the append-only Market audit journal. API V33,
+  Public V29, and schema `0059` are production-deployed; Web/Admin remain V31.
+- Public V29 starts every unauthenticated visitor in one neutral guest browse
+  context. Customer/Provider role switching, private navigation, and work queues
+  are not shown to guests. Ordering prompts Market authentication and then
+  creates Customer capacity from the order intent.
+- Provider self-issuance is blocked. A registered identity submits a profile,
+  skills, optional portfolio URL, and rules acceptance. Only a separately
+  assigned live Market operator can approve or reject it with a reason; an
+  operator cannot review their own application. Approval creates the active
+  Provider membership, rejection does not.
+- One identity can still hold both active capacities and switch views without
+  gaining authority. Platform founder, tenant, Market operator, and participant
+  boundaries remain separate. Listing, proposal, payment, dispute, forum,
+  ranking, and transaction backends remain absent.
+- All 222 repository tests pass. A clean disposable PostgreSQL run applied
+  `0001–0059` and passed Customer order intent, Provider submission,
+  approve/reject, self-review denial, view authorization,
+  suspension/reactivation, cross-token denial, and immutable Market evidence.
+  A 1440×1000 headless Edge render confirmed the neutral guest UI.
+- V33 was production-deployed after verified backup
+  `overva-20260829T060223Z`. Production remains at zero Market identities,
+  memberships, Provider applications, active operators, and audit events. API
+  image `sha256:a750213878a4380bcfb7267258526669299f6a135a2e07240b4b033cf308004d`
+  and Public image
+  `sha256:54f2546b9a472b6b871a2a57eaef5b805148e5e70149a51057d5142bf71a16e9`
+  are deployed. All seven services are healthy; local Caddy and external Public
+  V29, API, Market-auth boundary, tenant app, admin redirect, and status checks
+  passed.
+
 ### Production release V30 — Platform admin RBAC
 
 - V30 is production-deployed. Migration `0056` adds 13 Platform-only
@@ -72,8 +134,9 @@ validated at enterprise scale.
 ### Production release V32 — Market identity and membership
 
 - Migration `0058` and `/api/market/*` implement the first bounded Market
-  identity slice in production. API is V32, Public Home is V28, and the current
-  production schema is `0058`.
+  identity slice in production. At that release API was V32, Public Home was
+  V28, and production schema was `0058`; V33 above supersedes its participant
+  activation and guest-presentation behavior.
 - Market login identity, participant memberships, operator assignments, token
   context, routes, and append-only audit evidence use isolated `market_*`
   records with no tenant-user, organization, employee, Platform-admin, or
@@ -581,9 +644,10 @@ validated at enterprise scale.
   optional review-room links. Existing local checkpoints remain recoverable as
   earlier experiments rather than customer projects.
 - Workspace/request preview data remains browser-local. Server-side Market
-  identity and Customer/Provider memberships now exist, while publication,
-  proposals, provider selection, agreements, payment, production delivery
-  control, and verified reviews are still absent.
+  identity and Customer membership exist; production also has the reviewed
+  Provider-application path. Publication, proposals, provider selection,
+  agreements, payment, production delivery control, and verified reviews are
+  still absent.
 - Market and Platform are accepted as separate future data and authorization
   boundaries. `OVERVA Apps` is a normal supplier; operator-only and
   competitor-private data must be inaccessible to it.

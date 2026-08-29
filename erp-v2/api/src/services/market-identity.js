@@ -25,15 +25,16 @@ function subjectHash(value) {
 }
 
 async function writeMarketAudit({ client = getPool(), marketIdentityId = null, membershipId = null,
-  operatorAssignmentId = null, actorType, actorIdentityId = null, eventType, outcome,
+  operatorAssignmentId = null, providerApplicationId = null, actorType, actorIdentityId = null, eventType, outcome,
   subject = null, detail = {}, ipAddress = null }) {
   await client.query(
     `INSERT INTO market_audit_events
-       (market_identity_id,membership_id,operator_assignment_id,actor_type,actor_identity_id,
-        event_type,outcome,subject_hash,detail,ip_address)
-     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10)`,
-    [marketIdentityId, membershipId, operatorAssignmentId, actorType, actorIdentityId,
-      eventType, outcome, subject ? subjectHash(subject) : null, JSON.stringify(detail), ipAddress]
+       (market_identity_id,membership_id,operator_assignment_id,provider_application_id,
+        actor_type,actor_identity_id,event_type,outcome,subject_hash,detail,ip_address)
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11)`,
+    [marketIdentityId, membershipId, operatorAssignmentId, providerApplicationId,
+      actorType, actorIdentityId, eventType, outcome, subject ? subjectHash(subject) : null,
+      JSON.stringify(detail), ipAddress]
   );
 }
 
@@ -54,7 +55,22 @@ async function loadMarketIdentity(identityId, client = getPool()) {
             COALESCE((SELECT array_agg(assignment.role_code ORDER BY assignment.role_code)
                         FROM market_operator_assignments assignment
                        WHERE assignment.market_identity_id=identity.id
-                         AND assignment.revoked_at IS NULL),'{}'::text[]) AS operator_roles
+                         AND assignment.revoked_at IS NULL),'{}'::text[]) AS operator_roles,
+            (SELECT jsonb_build_object(
+                      'id',application.id,
+                      'status',application.status,
+                      'professional_summary',application.professional_summary,
+                      'skill_tags',application.skill_tags,
+                      'portfolio_url',application.portfolio_url,
+                      'submitted_at',application.submitted_at,
+                      'reviewed_at',application.reviewed_at,
+                      'decided_at',application.decided_at,
+                      'decision_reason',application.decision_reason
+                    )
+               FROM market_provider_applications application
+              WHERE application.market_identity_id=identity.id
+              ORDER BY application.submitted_at DESC
+              LIMIT 1) AS provider_application
        FROM market_identities identity
       WHERE identity.id=$1 AND identity.active=true`,
     [identityId]

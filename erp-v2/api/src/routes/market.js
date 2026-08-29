@@ -23,6 +23,12 @@ const loginSchema = z.object({
   email: z.string().trim().email().max(200),
   password: z.string().min(8).max(200),
 });
+const providerApplicationSchema = z.object({
+  professionalSummary: z.string().trim().min(40).max(2000),
+  skills: z.array(z.string().trim().min(2).max(60)).min(1).max(12),
+  portfolioUrl: z.union([z.string().trim().url().max(500), z.literal("")]).optional(),
+  rulesAccepted: z.literal(true),
+});
 const authLimiter = rateLimit({
   windowMs: 5 * 60 * 1000,
   limit: 30,
@@ -99,6 +105,12 @@ router.post("/auth/logout", authenticateMarket, asyncHandler(async(req, res) => 
 router.post("/memberships", authenticateMarket, asyncHandler(async(req, res) => {
   const parsed = z.object({ membershipType: participantView }).safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Customer or provider membership is required" });
+  if (parsed.data.membershipType === "provider") {
+    return res.status(409).json({
+      error: "Provider capability requires a reviewed application",
+      code: "MARKET_PROVIDER_APPLICATION_REQUIRED",
+    });
+  }
   const client = await getPool().connect();
   try {
     await client.query("BEGIN");
@@ -109,6 +121,17 @@ router.post("/memberships", authenticateMarket, asyncHandler(async(req, res) => 
       [req.marketIdentity.id, parsed.data.membershipType]
     );
     if (existing.rowCount) {
+      if (existing.rows[0].status === "active") {
+        await writeMarketAudit({
+          client, marketIdentityId: req.marketIdentity.id, membershipId: existing.rows[0].id,
+          actorType: "market_identity", actorIdentityId: req.marketIdentity.id,
+          eventType: "market.membership.issue.idempotent", outcome: "success",
+          detail: { membershipType: parsed.data.membershipType, currentStatus: "active" },
+          ipAddress: req.ip || null,
+        });
+        await client.query("COMMIT");
+        return res.json({ identity: await loadMarketIdentity(req.marketIdentity.id), idempotent: true });
+      }
       await writeMarketAudit({
         client, marketIdentityId: req.marketIdentity.id, membershipId: existing.rows[0].id,
         actorType: "market_identity", actorIdentityId: req.marketIdentity.id,
@@ -140,14 +163,76 @@ router.post("/memberships", authenticateMarket, asyncHandler(async(req, res) => 
       client, marketIdentityId: req.marketIdentity.id, membershipId,
       actorType: "market_identity", actorIdentityId: req.marketIdentity.id,
       eventType: "market.membership.issued", outcome: "success",
-      detail: { membershipType: parsed.data.membershipType, status: "active", supplierVerified: false },
+      detail: { membershipType: parsed.data.membershipType, status: "active", action: "order-intent" },
       ipAddress: req.ip || null,
     });
     await writeMarketAudit({
       client, marketIdentityId: req.marketIdentity.id, membershipId,
       actorType: "market_identity", actorIdentityId: req.marketIdentity.id,
       eventType: "market.membership.activated", outcome: "success",
-      detail: { membershipType: parsed.data.membershipType, activation: "self-service-participation" },
+      detail: { membershipType: parsed.data.membershipType, activation: "customer-order-intent" },
+      ipAddress: req.ip || null,
+    });
+    await client.query("COMMIT");
+    res.status(201).json({ identity: await loadMarketIdentity(req.marketIdentity.id) });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}));
+
+router.post("/provider-applications", authenticateMarket, asyncHandler(async(req, res) => {
+  const parsed = providerApplicationSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({
+    error: "Provider summary, skills, accepted rules, and an optional valid portfolio URL are required",
+  });
+  const skills = [...new Set(parsed.data.skills.map(item => item.trim()))];
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT id FROM market_identities WHERE id=$1 FOR UPDATE", [req.marketIdentity.id]);
+    const membership = await client.query(
+      `SELECT status FROM market_memberships
+        WHERE market_identity_id=$1 AND membership_type='provider'`,
+      [req.marketIdentity.id]
+    );
+    if (membership.rowCount) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        error: membership.rows[0].status === "active"
+          ? "Provider capability is already active"
+          : "Suspended provider capability requires Market operator activation",
+        code: membership.rows[0].status === "active"
+          ? "MARKET_PROVIDER_MEMBERSHIP_EXISTS"
+          : "MARKET_MEMBERSHIP_SUSPENDED",
+      });
+    }
+    const open = await client.query(
+      `SELECT id,status FROM market_provider_applications
+        WHERE market_identity_id=$1 AND status IN ('submitted','under_review')
+        FOR UPDATE`,
+      [req.marketIdentity.id]
+    );
+    if (open.rowCount) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        error: "Provider application is already awaiting review",
+        code: "MARKET_PROVIDER_APPLICATION_OPEN",
+      });
+    }
+    const created = await client.query(
+      `INSERT INTO market_provider_applications
+         (market_identity_id,professional_summary,skill_tags,portfolio_url,rules_accepted_at)
+       VALUES($1,$2,$3,$4,now()) RETURNING id`,
+      [req.marketIdentity.id, parsed.data.professionalSummary, skills, parsed.data.portfolioUrl || null]
+    );
+    await writeMarketAudit({
+      client, marketIdentityId: req.marketIdentity.id, providerApplicationId: created.rows[0].id,
+      actorType: "market_identity", actorIdentityId: req.marketIdentity.id,
+      eventType: "market.provider.application.submitted", outcome: "success",
+      detail: { status: "submitted", skillCount: skills.length, rulesAccepted: true },
       ipAddress: req.ip || null,
     });
     await client.query("COMMIT");
@@ -218,6 +303,213 @@ async function activeOperatorAssignment(client, identityId) {
   );
   return result.rows[0]?.id || null;
 }
+
+router.post("/operator/provider-applications/:id/start-review", authenticateMarket, requireMarketOperator,
+  asyncHandler(async(req, res) => {
+    const id = uuid.safeParse(req.params.id);
+    const parsed = reasonSchema.safeParse(req.body);
+    if (!id.success || !parsed.success) return res.status(400).json({ error: "Application and 12+ character review reason are required" });
+    const client = await getPool().connect();
+    try {
+      await client.query("BEGIN");
+      const assignmentId = await activeOperatorAssignment(client, req.marketIdentity.id);
+      if (!assignmentId) {
+        await client.query("ROLLBACK");
+        return res.status(403).json({ error: "Market operator assignment required", code: "MARKET_OPERATOR_REQUIRED" });
+      }
+      const application = await client.query(
+        `SELECT id,market_identity_id,status FROM market_provider_applications
+          WHERE id=$1 FOR UPDATE`,
+        [id.data]
+      );
+      if (!application.rowCount || application.rows[0].status !== "submitted") {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: "Only a submitted provider application can enter review", code: "MARKET_PROVIDER_APPLICATION_NOT_SUBMITTED" });
+      }
+      const item = application.rows[0];
+      if (item.market_identity_id === req.marketIdentity.id) {
+        await writeMarketAudit({
+          client, marketIdentityId: item.market_identity_id, providerApplicationId: item.id,
+          operatorAssignmentId: assignmentId, actorType: "market_operator",
+          actorIdentityId: req.marketIdentity.id, eventType: "market.provider.application.review",
+          outcome: "denied", detail: { reason: "operator_self_review_forbidden" }, ipAddress: req.ip || null,
+        });
+        await client.query("COMMIT");
+        return res.status(403).json({ error: "A Market operator cannot review their own provider application", code: "MARKET_PROVIDER_SELF_REVIEW_DENIED" });
+      }
+      await client.query(
+        `UPDATE market_provider_applications
+            SET status='under_review',reviewed_at=now(),updated_at=now()
+          WHERE id=$1`,
+        [item.id]
+      );
+      await writeMarketAudit({
+        client, marketIdentityId: item.market_identity_id, providerApplicationId: item.id,
+        operatorAssignmentId: assignmentId, actorType: "market_operator",
+        actorIdentityId: req.marketIdentity.id, eventType: "market.provider.application.review_started",
+        outcome: "success", detail: { reason: parsed.data.reason, from: "submitted", to: "under_review" },
+        ipAddress: req.ip || null,
+      });
+      await client.query("COMMIT");
+      res.json({ identity: await loadMarketIdentity(item.market_identity_id) });
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  })
+);
+
+router.post("/operator/provider-applications/:id/approve", authenticateMarket, requireMarketOperator,
+  asyncHandler(async(req, res) => {
+    const id = uuid.safeParse(req.params.id);
+    const parsed = reasonSchema.safeParse(req.body);
+    if (!id.success || !parsed.success) return res.status(400).json({ error: "Application and 12+ character reason are required" });
+    const client = await getPool().connect();
+    try {
+      await client.query("BEGIN");
+      const assignmentId = await activeOperatorAssignment(client, req.marketIdentity.id);
+      if (!assignmentId) {
+        await client.query("ROLLBACK");
+        return res.status(403).json({ error: "Market operator assignment required", code: "MARKET_OPERATOR_REQUIRED" });
+      }
+      const application = await client.query(
+        `SELECT id,market_identity_id,status FROM market_provider_applications
+          WHERE id=$1 FOR UPDATE`,
+        [id.data]
+      );
+      if (!application.rowCount || application.rows[0].status !== "under_review") {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: "Only an application under review can be approved", code: "MARKET_PROVIDER_APPLICATION_NOT_UNDER_REVIEW" });
+      }
+      const item = application.rows[0];
+      if (item.market_identity_id === req.marketIdentity.id) {
+        await writeMarketAudit({
+          client, marketIdentityId: item.market_identity_id, providerApplicationId: item.id,
+          operatorAssignmentId: assignmentId, actorType: "market_operator",
+          actorIdentityId: req.marketIdentity.id, eventType: "market.provider.application.approve",
+          outcome: "denied", detail: { reason: "operator_self_review_forbidden" }, ipAddress: req.ip || null,
+        });
+        await client.query("COMMIT");
+        return res.status(403).json({ error: "A Market operator cannot approve their own provider application", code: "MARKET_PROVIDER_SELF_REVIEW_DENIED" });
+      }
+      const existing = await client.query(
+        `SELECT id,status FROM market_memberships
+          WHERE market_identity_id=$1 AND membership_type='provider' FOR UPDATE`,
+        [item.market_identity_id]
+      );
+      if (existing.rowCount) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: "Provider membership already exists", code: "MARKET_PROVIDER_MEMBERSHIP_EXISTS" });
+      }
+      await client.query(
+        `UPDATE market_provider_applications
+            SET status='approved',reviewed_at=COALESCE(reviewed_at,now()),decided_at=now(),
+                decided_by_identity_id=$2,decision_reason=$3,updated_at=now()
+          WHERE id=$1`,
+        [item.id, req.marketIdentity.id, parsed.data.reason]
+      );
+      const membership = await client.query(
+        `INSERT INTO market_memberships
+           (market_identity_id,membership_type,status,issued_by_kind,issued_by_identity_id)
+         VALUES($1,'provider','active','market_operator',$2) RETURNING id`,
+        [item.market_identity_id, req.marketIdentity.id]
+      );
+      await client.query(
+        `UPDATE market_identities SET selected_view=COALESCE(selected_view,'provider'),updated_at=now()
+          WHERE id=$1`,
+        [item.market_identity_id]
+      );
+      await writeMarketAudit({
+        client, marketIdentityId: item.market_identity_id, membershipId: membership.rows[0].id,
+        providerApplicationId: item.id, operatorAssignmentId: assignmentId,
+        actorType: "market_operator", actorIdentityId: req.marketIdentity.id,
+        eventType: "market.provider.application.approved", outcome: "success",
+        detail: { reason: parsed.data.reason, providerMembershipCreated: true }, ipAddress: req.ip || null,
+      });
+      await writeMarketAudit({
+        client, marketIdentityId: item.market_identity_id, membershipId: membership.rows[0].id,
+        providerApplicationId: item.id, operatorAssignmentId: assignmentId,
+        actorType: "market_operator", actorIdentityId: req.marketIdentity.id,
+        eventType: "market.membership.issued", outcome: "success",
+        detail: { membershipType: "provider", issuedBy: "approved-provider-application" }, ipAddress: req.ip || null,
+      });
+      await writeMarketAudit({
+        client, marketIdentityId: item.market_identity_id, membershipId: membership.rows[0].id,
+        providerApplicationId: item.id, operatorAssignmentId: assignmentId,
+        actorType: "market_operator", actorIdentityId: req.marketIdentity.id,
+        eventType: "market.membership.activated", outcome: "success",
+        detail: { membershipType: "provider", activation: "approved-provider-application" }, ipAddress: req.ip || null,
+      });
+      await client.query("COMMIT");
+      res.json({ identity: await loadMarketIdentity(item.market_identity_id) });
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  })
+);
+
+router.post("/operator/provider-applications/:id/reject", authenticateMarket, requireMarketOperator,
+  asyncHandler(async(req, res) => {
+    const id = uuid.safeParse(req.params.id);
+    const parsed = reasonSchema.safeParse(req.body);
+    if (!id.success || !parsed.success) return res.status(400).json({ error: "Application and 12+ character reason are required" });
+    const client = await getPool().connect();
+    try {
+      await client.query("BEGIN");
+      const assignmentId = await activeOperatorAssignment(client, req.marketIdentity.id);
+      if (!assignmentId) {
+        await client.query("ROLLBACK");
+        return res.status(403).json({ error: "Market operator assignment required", code: "MARKET_OPERATOR_REQUIRED" });
+      }
+      const application = await client.query(
+        `SELECT id,market_identity_id,status FROM market_provider_applications
+          WHERE id=$1 FOR UPDATE`,
+        [id.data]
+      );
+      if (!application.rowCount || application.rows[0].status !== "under_review") {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: "Only an application under review can be rejected", code: "MARKET_PROVIDER_APPLICATION_NOT_UNDER_REVIEW" });
+      }
+      const item = application.rows[0];
+      if (item.market_identity_id === req.marketIdentity.id) {
+        await writeMarketAudit({
+          client, marketIdentityId: item.market_identity_id, providerApplicationId: item.id,
+          operatorAssignmentId: assignmentId, actorType: "market_operator",
+          actorIdentityId: req.marketIdentity.id, eventType: "market.provider.application.reject",
+          outcome: "denied", detail: { reason: "operator_self_review_forbidden" }, ipAddress: req.ip || null,
+        });
+        await client.query("COMMIT");
+        return res.status(403).json({ error: "A Market operator cannot reject their own provider application", code: "MARKET_PROVIDER_SELF_REVIEW_DENIED" });
+      }
+      await client.query(
+        `UPDATE market_provider_applications
+            SET status='rejected',reviewed_at=COALESCE(reviewed_at,now()),decided_at=now(),
+                decided_by_identity_id=$2,decision_reason=$3,updated_at=now()
+          WHERE id=$1`,
+        [item.id, req.marketIdentity.id, parsed.data.reason]
+      );
+      await writeMarketAudit({
+        client, marketIdentityId: item.market_identity_id, providerApplicationId: item.id,
+        operatorAssignmentId: assignmentId, actorType: "market_operator",
+        actorIdentityId: req.marketIdentity.id, eventType: "market.provider.application.rejected",
+        outcome: "success", detail: { reason: parsed.data.reason, providerMembershipCreated: false },
+        ipAddress: req.ip || null,
+      });
+      await client.query("COMMIT");
+      res.json({ identity: await loadMarketIdentity(item.market_identity_id) });
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  })
+);
 
 router.post("/operator/memberships/:id/suspend", authenticateMarket, requireMarketOperator,
   asyncHandler(async(req, res) => {

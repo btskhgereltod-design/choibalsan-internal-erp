@@ -6,13 +6,13 @@
   <meta name="description" content="OVERVA — байгууллагын цахим хэрэгцээг бүтэцтэй хүсэлт болгож, тохирох хэрэгжүүлэх замыг сонгон, ажлыг pilot-аас production хүртэл хяналттай хүргэх орчин.">
   <meta name="color-scheme" content="light">
   <title>OVERVA — Байгууллагын цахим хэрэгцээний зах</title>
-  <link rel="stylesheet" href="/site.css?v=28">
+  <link rel="stylesheet" href="/site.css?v=30">
   <script src="/conversation-memory.js?v=15" defer></script>
   <script src="/workspace-lifecycle.js?v=14" defer></script>
   <script src="/workspace-registry.js?v=14" defer></script>
   <script src="/workspace-intake.js?v=14.1" defer></script>
   <script src="/request-draft-registry.js?v=3" defer></script>
-  <script src="/site.js?v=28" defer></script>
+  <script src="/site.js?v=30" defer></script>
 </head>
 <body>
   <section class="portfolio-home products-area" id="portfolioHome" aria-label="OVERVA үндсэн нүүр">
@@ -25,12 +25,12 @@
       </nav>
       <div class="market-area-sidebar" data-market-area-sidebar="products"><strong>МАРКЕТ</strong><p>OVERVA Apps болон бусад нийлүүлэгчийн бэлэн бүтээгдэхүүнийг ижил нөхцөлөөр харьцуулна.</p><button type="button" disabled>＋ Бүтээгдэхүүн нэмэх · Удахгүй</button></div>
       <div class="market-area-sidebar hidden" data-market-area-sidebar="community"><strong>ФОРУМ</strong><p>Хэрэглэгч, хөгжүүлэгчид асуулт асууж, шийдэл болон туршлагаа хуваалцана.</p><button type="button" disabled>＋ Сэдэв нээх · Удахгүй</button></div>
-      <div class="market-role-switch freelance-only" aria-label="Захиалгат ажил ба үйлчилгээ ашиглах горим">
+      <div class="market-role-switch freelance-only hidden" aria-label="Идэвхтэй Market орчин солих">
         <button class="active" type="button" data-market-role="customer">Захиалагч</button>
         <button type="button" data-market-role="provider">Гүйцэтгэгч</button>
       </div>
       <button class="new-work freelance-only" id="homeNewWorkButton" type="button"><span>＋</span> Хүсэлт гаргах</button>
-      <nav class="market-side-nav freelance-only" data-market-role-nav="customer" aria-label="Захиалагчийн хэсэг">
+      <nav class="market-side-nav freelance-only hidden" data-market-role-nav="customer" aria-label="Захиалагчийн хэсэг">
         <button class="active" type="button" data-market-view="all"><span>▤</span> Бүх хүсэлт</button>
         <button type="button" data-market-view="mine"><span>♙</span> Миний хүсэлт</button>
         <button type="button" data-market-view="projects"><span>◇</span> Миний төслүүд</button>
@@ -40,13 +40,13 @@
         <button type="button" data-market-view="proposals"><span>♙</span> Миний саналууд</button>
         <button type="button" data-market-view="deliveries"><span>◇</span> Гүйцэтгэх ажлууд</button>
       </nav>
-      <div class="market-side-guides freelance-only" data-market-role-guide="customer"><strong>ТУСЛАМЖ</strong><button type="button" data-market-view="rules">Үйлчилгээ хэрхэн явах вэ?</button><button type="button" data-market-view="labs">Өмнөх туршилтуудаа харах</button></div>
+      <div class="market-side-guides freelance-only hidden" data-market-role-guide="customer"><strong>ТУСЛАМЖ</strong><button type="button" data-market-view="rules">Үйлчилгээ хэрхэн явах вэ?</button><button type="button" data-market-view="labs">Өмнөх туршилтуудаа харах</button></div>
       <div class="market-side-guides freelance-only hidden" data-market-role-guide="provider"><strong>ТУСЛАМЖ</strong><button type="button" data-market-view="provider-rules">Ажил хэрхэн явах вэ?</button></div>
-      <div class="portfolio-privacy freelance-only"><strong>Таны хүсэлтийн ноорог</strong><p>Нэвтрээгүй үед хүсэлтийн ноорог зөвхөн энэ төхөөрөмжид хадгалагдана. Бусад хүнд харагдахгүй.</p></div>
+      <div class="portfolio-privacy freelance-only hidden" id="marketCustomerPrivacy"><strong>Таны хүсэлтийн ноорог</strong><p>Market-д нэвтэрсэн захиалагчийн ноорог энэ төхөөрөмжид хадгалагдана. Одоохондоо нийтлэгдэхгүй.</p></div>
       <button class="portfolio-nav-button" id="homeConnectorsButton" type="button"><span>⌁</span> Холболтууд</button>
       <section class="market-identity-card" id="marketIdentityCard" aria-live="polite">
-        <div id="marketIdentityGuest"><strong>Market identity</strong><small>Захиалагч / Гүйцэтгэгч membership бодитоор ашиглах</small><button type="button" id="marketAuthOpen">Market-д нэвтрэх</button></div>
-        <div class="hidden" id="marketIdentitySession"><strong id="marketIdentityName"></strong><small id="marketIdentityMemberships"></small><div><button type="button" data-add-market-membership="customer">＋ Захиалагч</button><button type="button" data-add-market-membership="provider">＋ Гүйцэтгэгч</button></div><button class="market-logout" type="button" id="marketLogout">Гарах</button></div>
+        <div id="marketIdentityGuest"><strong>Зочин</strong><small>Нээлттэй захыг үзэж болно. Захиалах эсвэл санал өгөхийн тулд Market-д бүртгүүлнэ.</small><button type="button" id="marketAuthOpen">Market-д нэвтрэх</button></div>
+        <div class="hidden" id="marketIdentitySession"><strong id="marketIdentityName"></strong><small id="marketIdentityMemberships"></small><div><button type="button" data-market-participation-action="customer">Ажил захиалах</button><button type="button" data-market-participation-action="provider">Гүйцэтгэгчээр бүртгүүлэх</button></div><button class="market-logout" type="button" id="marketLogout">Гарах</button></div>
       </section>
       <a class="portfolio-login" href="https://app.overva.com">Байгууллагын Platform-д нэвтрэх</a>
     </aside>
@@ -81,7 +81,7 @@
         </section>
         <section class="portfolio-hero market-panel" data-portfolio-work-view data-market-panel="all">
           <span id="marketHeroEyebrow">БАЙГУУЛЛАГЫН ЦАХИМ ХЭРЭГЦЭЭНИЙ ЗАХ</span>
-          <div class="market-hero-row"><div><h1 id="marketHeroTitle">Хэрэгтэй ажлаа ойлгомжтой хүсэлт болгох</h1><p class="portfolio-hero-copy" id="marketHeroCopy">Жишиг хүсэлтээс санаа авч, хийх ажил болон хүлээн авах үр дүнгээ нэг дор бичнэ.</p></div><button class="market-create-button" id="marketCreateRequestButton" type="button">＋ Хүсэлт гаргах</button></div>
+          <div class="market-hero-row"><div><h1 id="marketHeroTitle">Зах дээрх ажлуудтай танилцах</h1><p class="portfolio-hero-copy" id="marketHeroCopy">Зочин нээлттэй ажлын бүтэц, ангилал болон зах хэрхэн ажиллахыг үзнэ. Захиалах эсвэл санал өгөхийн тулд бүртгүүлнэ.</p></div><div class="market-hero-actions"><button class="market-secondary-button" id="marketProviderApplyButton" type="button">Гүйцэтгэгчээр бүртгүүлэх</button><button class="market-create-button" id="marketCreateRequestButton" type="button">＋ Ажил захиалах</button></div></div>
           <form class="home-intent-form hidden" id="homeIntentForm">
             <strong class="home-intent-question">Байгууллагынхаа ямар ажлыг цахимжуулах хэрэгтэй байна?</strong>
             <label class="sr-only" for="homeIntentInput">Цахимжуулах хэрэгцээгээ тайлбарлах</label>
@@ -286,7 +286,7 @@
 
   <dialog class="market-auth-dialog" id="marketAuthDialog">
     <form method="dialog" class="dialog-close-form"><button aria-label="Market нэвтрэх цонх хаах">×</button></form>
-    <div class="market-auth-head"><span>OVERVA MARKET IDENTITY</span><h2>Market-д тусдаа нэвтрэх</h2><p>Энэ identity нь байгууллагын tenant болон Platform admin эрхээс тусдаа. Membership нэмэх нь Market operator эрх өгөхгүй.</p></div>
+    <div class="market-auth-head"><span>OVERVA MARKET IDENTITY</span><h2>Market-д тусдаа нэвтрэх</h2><p>Нэг identity захиалга үүсгэж болно. Гүйцэтгэгчээр санал өгөх эрх тусдаа хүсэлт, хяналтаар идэвхжинэ. Market operator эрх аль алинаас тусдаа.</p></div>
     <div class="market-auth-tabs"><button class="active" type="button" data-market-auth-tab="login">Нэвтрэх</button><button type="button" data-market-auth-tab="register">Шинээр бүртгүүлэх</button></div>
     <form class="market-auth-form" id="marketLoginForm">
       <label>Имэйл<input name="email" type="email" autocomplete="email" required maxlength="200"></label>
@@ -300,6 +300,19 @@
       <label>Нууц үг<input name="password" type="password" autocomplete="new-password" required minlength="12" maxlength="200"><small>12-оос дээш тэмдэгт</small></label>
       <p class="form-error" id="marketRegisterError" role="alert"></p>
       <button class="primary-button" type="submit">Market identity үүсгэх</button>
+    </form>
+  </dialog>
+
+  <dialog class="market-auth-dialog" id="providerApplicationDialog">
+    <form method="dialog" class="dialog-close-form"><button aria-label="Хаах">×</button></form>
+    <div class="market-auth-head"><span>ГҮЙЦЭТГЭГЧИЙН ХҮСЭЛТ</span><h2>Ур чадвараа баталгаажуулалтад өгөх</h2><p>Хүсэлт илгээснээр гүйцэтгэгчийн эрх шууд үүсэхгүй. Market operator шалгаж зөвшөөрсний дараа л ажилд санал өгөх боломж нээгдэнэ.</p></div>
+    <form class="market-auth-form" id="providerApplicationForm">
+      <label>Туршлага, хийх ажлын чиглэл<textarea name="professionalSummary" required minlength="40" maxlength="2000" rows="5" placeholder="Хийж байсан ажил, гол ур чадвар, ямар төрлийн захиалга гүйцэтгэхээ 40-өөс дээш тэмдэгтээр тайлбарлана."></textarea></label>
+      <label>Ур чадварууд<input name="skills" required maxlength="500" placeholder="Жишээ: JavaScript, PostgreSQL, UI дизайн"><small>Таслалаар тусгаарлаж 1–12 ур чадвар бичнэ.</small></label>
+      <label>Portfolio холбоос · сонголттой<input name="portfolioUrl" type="url" maxlength="500" placeholder="https://..."></label>
+      <label class="provider-rules-accept"><input name="rulesAccepted" type="checkbox" required><span>Market-ийн дүрэм, хяналт болон шийдвэрийн журмыг зөвшөөрч байна.</span></label>
+      <p class="form-error" id="providerApplicationError" role="alert"></p>
+      <button class="primary-button" type="submit">Хүсэлтээ шалгуулахаар илгээх</button>
     </form>
   </dialog>
 

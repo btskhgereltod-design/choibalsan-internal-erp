@@ -135,8 +135,12 @@ const requestDownloadButton = document.getElementById("requestDownloadButton");
 const marketAuthDialog = document.getElementById("marketAuthDialog");
 const marketLoginForm = document.getElementById("marketLoginForm");
 const marketRegisterForm = document.getElementById("marketRegisterForm");
+const providerApplicationDialog = document.getElementById("providerApplicationDialog");
+const providerApplicationForm = document.getElementById("providerApplicationForm");
 const MARKET_TOKEN_KEY = "overva.market.token.v1";
 let marketIdentity = null;
+let pendingMarketAction = "";
+let pendingRequestSeed = null;
 const HOME_INTENT_HELP = "Асуудлаа нэг өгүүлбэрээр бичнэ үү. Дараагийн маягт төрөл, төсөв, хугацаа болон харагдах хүрээг цэгцэлнэ.";
 const LEGACY_WORKSPACE_STORAGE_KEY = "overva.public.workspace.v2";
 const WORKSPACE_REGISTRY_KEY = "overva.public.workspaces.v1";
@@ -155,7 +159,7 @@ let activeSourceUrl = "";
 let pendingRequestMaterial = null;
 let activeMarketView = "all";
 let activeMarketCategory = "all";
-let activeMarketRole = "customer";
+let activeMarketRole = "guest";
 let activeMarketArea = "products";
 let activeProductCategory = "all";
 let activeRequestDraftId = null;
@@ -372,7 +376,9 @@ function showMarketArea(area = "products") {
   } else {
     searchInput.placeholder = activeMarketRole === "provider"
       ? "Ажил, чиглэл, шаардлагатай чадвар хайх…"
-      : "Хүсэлт, чиглэл, хэрэгтэй боломж хайх…";
+      : activeMarketRole === "customer"
+        ? "Хүсэлт, чиглэл, хэрэгтэй боломж хайх…"
+        : "Нээлттэй ажил, чиглэл, хэрэгтэй чадвар хайх…";
     showMarketView("all");
   }
   document.querySelector(".portfolio-scroll").scrollTo({ top:0, behavior:"smooth" });
@@ -391,14 +397,18 @@ function filterMarketRequests(searchText = "") {
   document.getElementById("marketVisibleCount").textContent = String(visibleCount);
   document.getElementById("marketVisibleSummary").textContent = activeMarketRole === "provider"
     ? `${visibleCount} жишээ · Нээлттэй бодит ажил биш`
-    : `${visibleCount} жишиг хүсэлт · Бодит захиалга биш`;
+    : activeMarketRole === "customer"
+      ? `${visibleCount} жишиг хүсэлт · Бодит захиалга биш`
+      : `${visibleCount} нийтийн жишээ · Бодит захиалга биш`;
   document.getElementById("marketFilterEmpty").classList.toggle("hidden", visibleCount > 0);
 }
 
 function showMarketView(view = "all") {
   const allowedViews = activeMarketRole === "provider"
     ? ["all","proposals","deliveries","provider-rules"]
-    : ["all","mine","projects","labs","rules","request-detail"];
+    : activeMarketRole === "customer"
+      ? ["all","mine","projects","labs","rules","request-detail"]
+      : ["all"];
   activeMarketView = allowedViews.includes(view) ? view : "all";
   document.querySelectorAll("[data-market-panel]").forEach(panel => panel.classList.toggle("hidden", panel.dataset.marketPanel !== activeMarketView));
   document.querySelectorAll("[data-market-view]").forEach(button => button.classList.toggle("active", button.dataset.marketView === activeMarketView));
@@ -408,12 +418,40 @@ function showMarketView(view = "all") {
   document.querySelector(".portfolio-scroll").scrollTo({ top:0, behavior:"smooth" });
 }
 
+function showGuestMarket() {
+  activeMarketRole = "guest";
+  portfolioHome.classList.remove("provider-mode");
+  document.querySelector(".market-role-switch").classList.add("hidden");
+  document.querySelectorAll("[data-market-role-nav],[data-market-role-guide]").forEach(element => element.classList.add("hidden"));
+  document.getElementById("marketCustomerPrivacy").classList.add("hidden");
+  document.getElementById("homeNewWorkButton").classList.remove("hidden");
+  document.getElementById("marketHeroEyebrow").textContent = "ЗАХИАЛГАТ АЖИЛ БА ҮЙЛЧИЛГЭЭ";
+  document.getElementById("marketHeroTitle").textContent = "Зах дээрх ажлуудтай танилцах";
+  document.getElementById("marketHeroCopy").textContent = "Зочин нээлттэй ажлын бүтэц, ангилал болон зах хэрхэн ажиллахыг үзнэ. Захиалах эсвэл санал өгөхийн тулд бүртгүүлнэ.";
+  if (activeMarketArea === "freelance") {
+    document.getElementById("homeSearchInput").placeholder = "Нээлттэй ажил, чиглэл, хэрэгтэй чадвар хайх…";
+  }
+  showMarketView("all");
+}
+
 function showMarketRole(role = "customer") {
-  activeMarketRole = role === "provider" ? "provider" : "customer";
+  const view = role === "provider" ? "provider" : "customer";
+  const active = new Set(marketIdentity?.active_memberships || []);
+  if (!marketIdentity || !active.has(view)) {
+    showGuestMarket();
+    return false;
+  }
+  activeMarketRole = view;
   portfolioHome.classList.toggle("provider-mode", activeMarketRole === "provider");
-  document.querySelectorAll("[data-market-role]").forEach(button => button.classList.toggle("active", button.dataset.marketRole === activeMarketRole));
+  const roleSwitch = document.querySelector(".market-role-switch");
+  roleSwitch.classList.toggle("hidden", active.size !== 2);
+  document.querySelectorAll("[data-market-role]").forEach(button => {
+    button.classList.toggle("hidden", !active.has(button.dataset.marketRole));
+    button.classList.toggle("active", button.dataset.marketRole === activeMarketRole);
+  });
   document.querySelectorAll("[data-market-role-nav]").forEach(nav => nav.classList.toggle("hidden", nav.dataset.marketRoleNav !== activeMarketRole));
   document.querySelectorAll("[data-market-role-guide]").forEach(guide => guide.classList.toggle("hidden", guide.dataset.marketRoleGuide !== activeMarketRole));
+  document.getElementById("marketCustomerPrivacy").classList.toggle("hidden", activeMarketRole !== "customer");
   document.getElementById("homeNewWorkButton").classList.toggle("hidden", activeMarketRole === "provider");
   document.getElementById("marketHeroEyebrow").textContent = activeMarketRole === "provider" ? "ГҮЙЦЭТГЭГЧИД" : "БАЙГУУЛЛАГЫН ЦАХИМ ХЭРЭГЦЭЭНИЙ ЗАХ";
   document.getElementById("marketHeroTitle").textContent = activeMarketRole === "provider" ? "Тохирох ажлаа олох" : "Хэрэгтэй ажлаа ойлгомжтой хүсэлт болгох";
@@ -424,6 +462,7 @@ function showMarketRole(role = "customer") {
     ? "Ажил, чиглэл, шаардлагатай чадвар хайх…"
     : "Хүсэлт, чиглэл, хэрэгтэй боломж хайх…";
   showMarketView("all");
+  return true;
 }
 
 function marketToken() {
@@ -459,28 +498,47 @@ function renderMarketIdentity() {
   session.classList.toggle("hidden", !marketIdentity);
   const active = new Set(marketIdentity?.active_memberships || []);
   document.querySelectorAll("[data-market-role]").forEach(button => {
-    button.classList.toggle("membership-required", Boolean(marketIdentity) && !active.has(button.dataset.marketRole));
-    button.title = marketIdentity && !active.has(button.dataset.marketRole) ? "Идэвхтэй membership шаардлагатай" : "";
+    button.classList.toggle("hidden", !active.has(button.dataset.marketRole));
+    button.title = "";
   });
-  if (!marketIdentity) return;
+  if (!marketIdentity) {
+    document.getElementById("marketProviderApplyButton").disabled = false;
+    document.getElementById("marketProviderApplyButton").textContent = "Гүйцэтгэгчээр бүртгүүлэх";
+    showGuestMarket();
+    return;
+  }
+  const providerApplication = marketIdentity.provider_application;
+  const providerAwaitingReview = ["submitted","under_review"].includes(providerApplication?.status);
   document.getElementById("marketIdentityName").textContent = marketIdentity.display_name;
-  document.getElementById("marketIdentityMemberships").textContent = active.size
-    ? `${active.has("customer") ? "Захиалагч" : ""}${active.size === 2 ? " · " : ""}${active.has("provider") ? "Гүйцэтгэгч" : ""} · operator эрхээс тусдаа`
-    : "Membership хараахан алга · operator эрхгүй";
-  document.querySelectorAll("[data-add-market-membership]").forEach(button => {
-    button.classList.toggle("hidden", active.has(button.dataset.addMarketMembership));
+  const capacityLabels = [active.has("customer") ? "Захиалга үүсгэх эрхтэй" : "", active.has("provider") ? "Баталгаажсан гүйцэтгэгч" : ""].filter(Boolean);
+  if (providerAwaitingReview) capacityLabels.push("Гүйцэтгэгчийн хүсэлт шалгагдаж байна");
+  if (providerApplication?.status === "rejected") capacityLabels.push("Гүйцэтгэгчийн хүсэлт буцаагдсан");
+  document.getElementById("marketIdentityMemberships").textContent = capacityLabels.length
+    ? `${capacityLabels.join(" · ")} · operator эрхээс тусдаа`
+    : "Бүртгэлтэй хэрэглэгч · оролцооны эрх хараахан үүсээгүй";
+  document.querySelectorAll("[data-market-participation-action]").forEach(button => {
+    const action = button.dataset.marketParticipationAction;
+    button.classList.toggle("hidden", action === "customer" ? active.has("customer") : active.has("provider") || providerAwaitingReview);
   });
+  const providerButton = document.getElementById("marketProviderApplyButton");
+  providerButton.disabled = active.has("provider") || providerAwaitingReview;
+  providerButton.textContent = active.has("provider") ? "Гүйцэтгэгчийн эрх идэвхтэй" : providerAwaitingReview ? "Хүсэлт шалгагдаж байна" : "Гүйцэтгэгчээр бүртгүүлэх";
+  const preferred = active.has(marketIdentity.selected_view) ? marketIdentity.selected_view
+    : active.has("customer") ? "customer" : active.has("provider") ? "provider" : "";
+  if (preferred) showMarketRole(preferred);
+  else showGuestMarket();
 }
 
 async function requestMarketRole(role) {
   const view = role === "provider" ? "provider" : "customer";
   if (!marketIdentity) {
-    showMarketRole(view);
+    pendingMarketAction = view;
+    marketAuthDialog.showModal();
     return;
   }
   if (!(marketIdentity.active_memberships || []).includes(view)) {
     document.getElementById("marketIdentityMemberships").textContent = `${view === "provider" ? "Гүйцэтгэгч" : "Захиалагч"} membership идэвхтэй байх шаардлагатай.`;
-    document.querySelector(`[data-add-market-membership="${view}"]`)?.focus();
+    document.querySelector(`[data-market-participation-action="${view}"]`)?.focus();
     return;
   }
   try {
@@ -499,9 +557,6 @@ async function restoreMarketIdentity() {
     const data = await marketApi("/auth/me");
     marketIdentity = data.identity;
     renderMarketIdentity();
-    if (marketIdentity.selected_view && marketIdentity.active_memberships.includes(marketIdentity.selected_view)) {
-      showMarketRole(marketIdentity.selected_view);
-    }
   } catch {
     marketIdentity = null;
     storeMarketToken();
@@ -576,7 +631,7 @@ function requestMaterialFromFile(file, kind) {
   });
 }
 
-function openRequestDialog(seed = {}) {
+function showRequestDialog(seed = {}) {
   requestForm.reset();
   requestError.textContent = "";
   renderRequestMaterial(seed.material || null);
@@ -592,6 +647,54 @@ function openRequestDialog(seed = {}) {
   requestDialog.showModal();
   requestDialog.scrollTop = 0;
   window.setTimeout(() => { requestDialog.scrollTop = 0; requestDialog.querySelector(".request-dialog-head h2")?.focus?.({ preventScroll:true }); }, 0);
+}
+
+async function openRequestDialog(seed = {}) {
+  if (!marketIdentity) {
+    pendingMarketAction = "customer";
+    pendingRequestSeed = seed;
+    marketAuthDialog.showModal();
+    return;
+  }
+  try {
+    if (!(marketIdentity.active_memberships || []).includes("customer")) {
+      const data = await marketApi("/memberships", { method:"POST", body:JSON.stringify({ membershipType:"customer" }) });
+      marketIdentity = data.identity;
+      renderMarketIdentity();
+    }
+    await requestMarketRole("customer");
+    showRequestDialog(seed);
+  } catch (error) {
+    document.getElementById("marketIdentityMemberships").textContent = error.message;
+  }
+}
+
+function openProviderApplication() {
+  if (!marketIdentity) {
+    pendingMarketAction = "provider";
+    marketAuthDialog.showModal();
+    return;
+  }
+  if ((marketIdentity.active_memberships || []).includes("provider")) {
+    requestMarketRole("provider");
+    return;
+  }
+  if (["submitted","under_review"].includes(marketIdentity.provider_application?.status)) {
+    document.getElementById("marketIdentityMemberships").textContent = "Гүйцэтгэгчийн хүсэлт Market operator-ын шалгалтад байна.";
+    return;
+  }
+  providerApplicationForm.reset();
+  document.getElementById("providerApplicationError").textContent = "";
+  providerApplicationDialog.showModal();
+}
+
+function continuePendingMarketAction() {
+  const action = pendingMarketAction;
+  const seed = pendingRequestSeed || {};
+  pendingMarketAction = "";
+  pendingRequestSeed = null;
+  if (action === "customer") openRequestDialog(seed);
+  if (action === "provider") openProviderApplication();
 }
 
 function compileRequestPackage(formData, material = null) {
@@ -1196,10 +1299,15 @@ document.getElementById("workspaceHomeLink").addEventListener("click", event => 
 document.getElementById("workspaceHomeButton").addEventListener("click", showPortfolioHome);
 document.getElementById("homeNewWorkButton").addEventListener("click", () => openRequestDialog());
 document.getElementById("marketCreateRequestButton").addEventListener("click", () => openRequestDialog());
+document.getElementById("marketProviderApplyButton").addEventListener("click", openProviderApplication);
 document.querySelectorAll("[data-open-request]").forEach(button => button.addEventListener("click", () => openRequestDialog()));
 document.querySelectorAll("[data-market-view]").forEach(button => button.addEventListener("click", () => showMarketView(button.dataset.marketView)));
 document.querySelectorAll("[data-market-role]").forEach(button => button.addEventListener("click", () => requestMarketRole(button.dataset.marketRole)));
-document.getElementById("marketAuthOpen").addEventListener("click", () => marketAuthDialog.showModal());
+document.getElementById("marketAuthOpen").addEventListener("click", () => {
+  pendingMarketAction = "";
+  pendingRequestSeed = null;
+  marketAuthDialog.showModal();
+});
 document.querySelectorAll("[data-market-auth-tab]").forEach(button => button.addEventListener("click", () => {
   const register = button.dataset.marketAuthTab === "register";
   document.querySelectorAll("[data-market-auth-tab]").forEach(item => item.classList.toggle("active", item === button));
@@ -1218,7 +1326,7 @@ marketLoginForm.addEventListener("submit", async event => {
     renderMarketIdentity();
     marketLoginForm.reset();
     marketAuthDialog.close();
-    if (marketIdentity.selected_view) showMarketRole(marketIdentity.selected_view);
+    continuePendingMarketAction();
   } catch (error) { errorElement.textContent = error.message; }
 });
 marketRegisterForm.addEventListener("submit", async event => {
@@ -1233,25 +1341,43 @@ marketRegisterForm.addEventListener("submit", async event => {
     renderMarketIdentity();
     marketRegisterForm.reset();
     marketAuthDialog.close();
+    continuePendingMarketAction();
   } catch (error) { errorElement.textContent = error.message; }
 });
-document.querySelectorAll("[data-add-market-membership]").forEach(button => button.addEventListener("click", async() => {
+document.querySelectorAll("[data-market-participation-action]").forEach(button => button.addEventListener("click", () => {
+  if (button.dataset.marketParticipationAction === "provider") openProviderApplication();
+  else openRequestDialog();
+}));
+providerApplicationForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  const errorElement = document.getElementById("providerApplicationError");
+  errorElement.textContent = "";
+  const values = Object.fromEntries(new FormData(providerApplicationForm));
+  const skills = [...new Set(String(values.skills || "").split(",").map(value => value.trim()).filter(Boolean))];
   try {
-    const membershipType = button.dataset.addMarketMembership;
-    const data = await marketApi("/memberships", { method:"POST", body:JSON.stringify({ membershipType }) });
+    const data = await marketApi("/provider-applications", {
+      method:"POST",
+      body:JSON.stringify({
+        professionalSummary:values.professionalSummary,
+        skills,
+        portfolioUrl:values.portfolioUrl || undefined,
+        rulesAccepted:values.rulesAccepted === "on"
+      })
+    });
     marketIdentity = data.identity;
     renderMarketIdentity();
-    await requestMarketRole(membershipType);
+    providerApplicationForm.reset();
+    providerApplicationDialog.close();
   } catch (error) {
-    if (error.status === 401) { marketIdentity = null; storeMarketToken(); renderMarketIdentity(); }
+    errorElement.textContent = error.message;
   }
-}));
+});
 document.getElementById("marketLogout").addEventListener("click", async() => {
   try { await marketApi("/auth/logout", { method:"POST" }); } catch { /* Local session still ends. */ }
   marketIdentity = null;
   storeMarketToken();
   renderMarketIdentity();
-  showMarketRole("customer");
+  showGuestMarket();
 });
 document.querySelectorAll("[data-market-area]").forEach(button => button.addEventListener("click", () => showMarketArea(button.dataset.marketArea)));
 document.querySelectorAll("[data-product-category]").forEach(button => button.addEventListener("click", () => {
@@ -1450,9 +1576,5 @@ renderPortfolioHome();
 renderDeliveryLifecycle(storedCheckpoint);
 const initialParams = new URLSearchParams(location.search);
 if (initialParams.get("view") === "connectors") showPublicConnectors();
-else if (initialParams.get("role") === "provider") {
-  showMarketArea("freelance");
-  showMarketRole("provider");
-  if (["proposals","deliveries"].includes(initialParams.get("section"))) showMarketView(initialParams.get("section"));
-} else showMarketArea(initialParams.get("area") || "products");
+else showMarketArea(initialParams.get("area") || (initialParams.get("role") === "provider" ? "freelance" : "products"));
 restoreMarketIdentity();

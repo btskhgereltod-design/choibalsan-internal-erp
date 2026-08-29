@@ -320,3 +320,16 @@ button { cursor:pointer; }
 }
 @media (max-width:780px) { .portfolio-sidebar .brand { flex:0 0 auto; }.market-primary-nav { display:grid; flex:1 1 auto; grid-template-columns:repeat(3,minmax(0,1fr)); gap:3px; margin:0; }.market-primary-nav button { display:block; overflow:hidden; padding:7px 4px; font-size:0; text-align:center; white-space:nowrap; }.market-primary-nav button > span,.market-primary-nav button small { display:none; }.market-primary-nav button strong { font-size:9px; }.market-role-switch { display:none; }.freelance-area .portfolio-sidebar .brand { display:none; }.freelance-area .market-role-switch { display:grid; flex:0 0 124px; order:3; width:124px; }.product-market-grid { grid-template-columns:1fr; }.market-area-hero h1 { font-size:24px; }.forum-topic-list article { grid-template-columns:auto minmax(0,1fr); }.forum-topic-list small { grid-column:2; }.portfolio-home:not(.freelance-area) .portfolio-sidebar .new-work { display:none !important; } }
 @media (max-width:780px) { [data-market-area="freelance"] strong { font-size:0; }[data-market-area="freelance"] strong::after { font-size:9px; content:"Захиалга"; }.market-governance-note { align-items:stretch; flex-direction:column; gap:12px; }.market-governance-note button { width:100%; } }
+
+.market-auth-form textarea { padding:10px; border:1px solid #d3dde8; border-radius:8px; font:inherit; line-height:1.5; resize:vertical; }
+.market-auth-form .provider-rules-accept { display:flex; align-items:flex-start; gap:8px; line-height:1.45; }
+.market-auth-form .provider-rules-accept input { width:auto; margin-top:2px; padding:0; }
+.market-hero-actions { display:flex; flex:0 0 auto; gap:8px; }
+.market-secondary-button { min-height:38px; padding:0 15px; border:1px solid #b9cff1; border-radius:7px; background:#fff; color:#175fcf; font-size:10px; font-weight:850; }
+.market-create-button:disabled,.market-secondary-button:disabled { cursor:not-allowed; opacity:.55; }
+
+@media (max-width:780px) {
+  .market-identity-card [data-market-participation-action] { display:none; }
+  .market-hero-actions { width:100%; flex-direction:column; }
+  .market-hero-actions .market-create-button,.market-hero-actions .market-secondary-button { width:100%; }
+}

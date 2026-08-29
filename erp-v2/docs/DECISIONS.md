@@ -385,6 +385,42 @@ supplier-verification record is introduced. Rollback disables the Market route
 and public identity controls while leaving the additive tables intact; V31
 Platform and tenant operation remain compatible.
 
+### D-028 — Market participation is action-driven; provider capability requires review
+
+Accepted: 2026-08-29
+
+D-027's identity and authority boundaries remain accepted, but its statement
+that both participant memberships are self-service is replaced. A visitor has
+one neutral public-browse context, not an unauthenticated Customer or Provider
+view. Registration creates only a Market identity. Starting an order may create
+an active `customer` capacity because the user has taken a customer action;
+registration alone does not label the person a Customer.
+
+Provider capability has a higher trust threshold. A registered identity must
+submit a professional summary, bounded skill list, optional portfolio link, and
+explicit rules acceptance. Submission grants no Provider view or proposal
+authority. A separately assigned live Market operator must approve the
+application with an attributable reason before an active `provider` membership
+is created. The operator cannot decide their own application. Rejection creates
+no membership, and a suspended provider remains subject to the existing
+operator-only reactivation boundary.
+
+One identity may still hold both active capacities and switch between their
+work queues. That switch remains presentation context only and adds no
+membership, Market operator, Platform founder, tenant, or infrastructure
+authority. The model follows the observed MQL5 distinction between public
+browsing, order-driven customer participation, and reviewed seller/developer
+participation, while keeping OVERVA's own governance vocabulary and boundaries.
+
+Migration `0059` adds only provider applications and attributable audit links;
+`0060` completes the same accepted boundary by enforcing
+`submitted -> under_review -> approved/rejected` and preventing lifecycle
+skips. Active/suspended remain membership states. These migrations introduce no
+listing, proposal, payment, dispute, forum, ranking, or transaction backend.
+Application rollback may return to compatible earlier API/Public images while
+leaving the additive records intact; deployment requires a separate explicit
+request.
+
 ## Active Hypotheses
 
 ### H-001 — Customer journey

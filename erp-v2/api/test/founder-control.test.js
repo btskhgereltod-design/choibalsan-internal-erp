@@ -61,9 +61,11 @@ test("Founder Control UI states real, preview, planned, and external boundaries 
 test("public customer/provider toggle remains a participant view and not a super-admin grant", () => {
   const site = readRepo("public-site/site.js");
   const html = readRepo("public-site/index.html");
-  assert.match(site, /let activeMarketRole = "customer"/);
+  assert.match(site, /let activeMarketRole = "guest"/);
+  assert.match(site, /if \(!marketIdentity \|\| !active\.has\(view\)\)/);
   assert.match(site, /role === "provider" \? "provider" : "customer"/);
   assert.match(html, /data-market-role="customer"/);
   assert.match(html, /data-market-role="provider"/);
+  assert.match(html, /market-role-switch[^"]* hidden/);
   assert.doesNotMatch(site, /super[_-]?admin/i);
 });
