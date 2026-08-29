@@ -6,13 +6,13 @@
   <meta name="description" content="OVERVA — байгууллагын цахим хэрэгцээг бүтэцтэй хүсэлт болгож, тохирох хэрэгжүүлэх замыг сонгон, ажлыг pilot-аас production хүртэл хяналттай хүргэх орчин.">
   <meta name="color-scheme" content="light">
   <title>OVERVA — Байгууллагын цахим хэрэгцээний зах</title>
-  <link rel="stylesheet" href="/site.css?v=30">
+  <link rel="stylesheet" href="/site.css?v=31">
   <script src="/conversation-memory.js?v=15" defer></script>
   <script src="/workspace-lifecycle.js?v=14" defer></script>
   <script src="/workspace-registry.js?v=14" defer></script>
   <script src="/workspace-intake.js?v=14.1" defer></script>
   <script src="/request-draft-registry.js?v=3" defer></script>
-  <script src="/site.js?v=30" defer></script>
+  <script src="/site.js?v=31" defer></script>
 </head>
 <body>
   <section class="portfolio-home products-area" id="portfolioHome" aria-label="OVERVA үндсэн нүүр">
@@ -37,6 +37,7 @@
       </nav>
       <nav class="market-side-nav freelance-only hidden" data-market-role-nav="provider" aria-label="Гүйцэтгэгчийн хэсэг">
         <button class="active" type="button" data-market-view="all"><span>▤</span> Ажил олох</button>
+        <button type="button" data-market-view="storefront"><span>▦</span> Миний лангуу</button>
         <button type="button" data-market-view="proposals"><span>♙</span> Миний саналууд</button>
         <button type="button" data-market-view="deliveries"><span>◇</span> Гүйцэтгэх ажлууд</button>
       </nav>
@@ -67,6 +68,11 @@
             <article class="product-market-card" data-product-card data-product-category-row="agents"><div class="product-cover agent-cover"><span>AI</span><small>ЖИШИГ</small></div><div class="product-card-body"><span class="vendor-label">Нийлүүлэгчийн жишээ</span><h2>Баримт шалгах AI агент</h2><p>Баримтын бүрдэл, зөрүүг санал болгож, хүний шийдвэрийг хүлээдэг агентын жишээ.</p><div><span>AI агентууд</span><strong>Үнэ тогтоогоогүй</strong></div><button type="button" disabled>Дэлгэрэнгүй · Удахгүй</button></div></article>
           </div>
           <div class="market-empty hidden" id="productMarketEmpty">Энэ хайлт, ангилалд тохирох жишиг бүтээгдэхүүн олдсонгүй.</div>
+          <section class="market-storefront-section" aria-labelledby="marketStorefrontTitle">
+            <div class="portfolio-section-title"><div><span>ИДЭВХТЭЙ НИЙЛҮҮЛЭГЧИД</span><h2 id="marketStorefrontTitle">Цахим лангуунууд</h2><p>Market operator-ын баталсан Provider-уудын идэвхтэй үйлчилгээний лангуу. Лангууны төлбөр нь OVERVA үйлчилгээний эрх бөгөөд захиалагч, гүйцэтгэгчийн ажлын төлбөр биш.</p></div></div>
+            <div class="market-storefront-grid" id="marketStorefrontGrid"></div>
+            <div class="market-empty" id="marketStorefrontEmpty">Идэвхтэй цахим лангуу хараахан алга.</div>
+          </section>
           <aside class="market-governance-note" aria-label="Маркетын засаглал"><div><span>МАРКЕТЫН ЗАСАГЛАЛ</span><strong>Нийлүүлэгч бүрт ижил дүрэм</strong><p>Бүтээгдэхүүний үнэн зөв байдал, техникийн болон аюулгүй байдлын шалгуур, лиценз, хувилбарын нийцтэй байдал, шимтгэлийн ил тод байдал, гомдол ба давж заалдах зам адил байна.</p></div><button type="button" disabled>Дүрэм үзэх · Удахгүй</button></aside>
         </section>
         <section class="market-area-panel forum-home hidden" data-market-area-panel="community" aria-labelledby="forumTitle">
@@ -137,6 +143,20 @@
         <section class="portfolio-workspaces market-panel hidden" data-portfolio-work-view data-market-panel="labs" aria-labelledby="workspaceGridTitle">
           <div class="portfolio-section-title"><div><span>ӨМНӨХ ТУРШИЛТУУД</span><h2 id="workspaceGridTitle">Өмнө хадгалсан туршилтын ажлууд</h2><p>Хуучин AI яриа, загвар болон шалгалтыг устгалгүй энд хадгалсан. Энэ хэсэг заавал ашиглах шат биш, бодит төсөл ч биш.</p></div><button id="showAllWorkspacesButton" type="button">Бүгдийг харах</button></div>
           <div class="workspace-card-grid" id="homeWorkspaceGrid"></div>
+        </section>
+        <section class="market-panel storefront-manager hidden" data-portfolio-work-view data-market-panel="storefront" aria-labelledby="storefrontManagerTitle">
+          <div class="market-page-head"><div><span>PROVIDER ЦАХИМ ЛАНГУУ</span><h1 id="storefrontManagerTitle">Миний лангуу</h1><p>Өөрийн үйлчилгээний танилцуулгыг бэлдэж, тохирох plan-аар OVERVA Market-д идэвхжүүлнэ. Энэ subscription нь зөвхөн лангуу ашиглах эрх; ажлын үнэ, төлбөр, тооцоог OVERVA дамжуулахгүй.</p></div><strong id="storefrontManagerState">Ноорог</strong></div>
+          <p class="storefront-manager-status" id="storefrontManagerStatus" aria-live="polite"></p>
+          <form class="storefront-profile-form" id="storefrontProfileForm">
+            <label>Лангууны холбоосын нэр<input name="slug" required minlength="3" maxlength="60" pattern="[a-z0-9][a-z0-9-]{2,59}" placeholder="example-studio"><small>Зөвхөн жижиг латин үсэг, тоо, зураас.</small></label>
+            <label>Харагдах нэр<input name="displayName" required minlength="2" maxlength="120" placeholder="Example Studio"></label>
+            <label class="wide">Товч уриа<input name="tagline" required minlength="10" maxlength="180" placeholder="Байгууллагын ажлыг ойлгомжтой цахимжуулна"></label>
+            <label class="wide">Танилцуулга<textarea name="description" required minlength="40" maxlength="3000" rows="5" placeholder="Туршлага, үйлчилгээний чиглэл, ажиллах арга барилаа тодорхой бичнэ үү."></textarea></label>
+            <label class="wide">Нийтийн холбоо барих мэдээлэл<input name="publicContact" maxlength="300" placeholder="И-мэйл, утас эсвэл веб холбоос"><small>Оруулсан тохиолдолд лангуу дээр нийтэд харагдана.</small></label>
+            <button class="market-create-button" type="submit">Лангуугаа хадгалах</button>
+          </form>
+          <div class="storefront-plan-section"><div><span>ҮЙЛЧИЛГЭЭНИЙ PLAN</span><h2>Лангуу идэвхжүүлэх</h2><p>Төлбөрийн лавлагаа нь OVERVA-ийн лангууны үйлчилгээний төлбөрийг operator шалгахад ашиглагдана.</p></div><label>Төлбөрийн лавлагаа<input id="storefrontPaymentReference" maxlength="200" placeholder="Гүйлгээний утга эсвэл нэхэмжлэхийн дугаар"></label></div>
+          <div class="storefront-plan-grid" id="storefrontPlanGrid"></div>
         </section>
         <section class="market-panel market-role-empty hidden" data-portfolio-work-view data-market-panel="proposals">
           <div class="market-page-head"><div><span>МИНИЙ САНАЛУУД</span><h1>Санал өгсөн ажлууд</h1><p>Таны өгсөн, захиалагчийн шалгаж байгаа, сонгосон болон татгалзсан саналууд энд тусдаа харагдана.</p></div><strong>Одоогоор санал алга</strong></div>

@@ -144,8 +144,8 @@ test("public site starts with a portfolio Home and opens the governed workspace 
   assert.match(html, /бодит худалдаа биш/);
   assert.match(html, /Одоогоор бодит нийтлэл, хэрэглэгчийн бүртгэл нээгдээгүй/);
   assert.match(html, /data-forum-topic/);
-  assert.match(html, /site\.css\?v=30/);
-  assert.match(html, /site\.js\?v=30/);
+  assert.match(html, /site\.css\?v=31/);
+  assert.match(html, /site\.js\?v=31/);
   assert.match(html, /request-draft-registry\.js\?v=3/);
   assert.match(html, /conversation-memory\.js\?v=15/);
   assert.match(html, /workspace-lifecycle\.js\?v=14/);

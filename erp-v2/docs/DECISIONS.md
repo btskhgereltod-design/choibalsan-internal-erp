@@ -421,6 +421,32 @@ Application rollback may return to compatible earlier API/Public images while
 leaving the additive records intact; deployment requires a separate explicit
 request.
 
+### D-029 — Market monetizes bounded service access, not participant transactions
+
+Accepted: 2026-08-29
+
+OVERVA Market's initial commercial model sells its own bounded services:
+Provider digital-storefront subscriptions, future paid request/ad publication,
+featured placement, and premium storefront capability. OVERVA does not receive,
+hold, split, settle, refund, or guarantee money exchanged between a Customer and
+a Provider. Therefore storefront subscriptions and their external payment
+references are evidence of payment for OVERVA service access only and must not
+be reused as engagement price, escrow, payout, commission, or dispute records.
+
+A public storefront exists only for an approved active Provider with an active,
+unexpired service subscription. Plans are operator-configured and versioned;
+subscription activation and expiry plus storefront suspension and visibility
+are separate attributable states. Entitlements are copied as immutable snapshots so
+later plan edits cannot silently change an existing grant. Provider membership
+suspension hides the storefront, while membership reactivation does not by
+itself republish it.
+
+Migration `0061` implements only this Digital Storefront foundation. Listing,
+proposal, selection, engagement, completion, review, moderation, payment,
+dispute, forum, and social-like backends remain out of scope. A later review may
+be authored only by the actual Customer tied to a completed engagement; guests,
+unrelated identities, and the Provider themself must never create trust scores.
+
 ## Active Hypotheses
 
 ### H-001 — Customer journey

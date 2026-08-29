@@ -16,7 +16,7 @@ boundaries. Do not generalize legacy tenant behavior into OVERVA.
 
 ## Production truth
 
-- Public Home V30 and API V34 are deployed with migration `0060`; Web/Admin
+- Public Home V31 and API V35 are deployed with migration `0061`; Web/Admin
   remain V31.
 - V31 provides real Platform-only RBAC: 15 permissions, seven roles, 53 mappings,
   live permission derivation, and server-side route guards.
@@ -34,6 +34,29 @@ boundaries. Do not generalize legacy tenant behavior into OVERVA.
   storage plus a typed Market token. It still has no listings, proposals,
   freelance transaction workflow, forum persistence, payments, disputes, or
   Apps operator system.
+
+## V35 Digital Storefront foundation — deployed
+
+- D-029 fixes the commercial boundary: OVERVA sells storefront subscriptions
+  and later publication/visibility services, but does not intermediate
+  Customer/Provider job money.
+- Migration `0061` adds versioned plans, one Provider storefront, service
+  subscriptions, entitlement snapshots, transition guards, no-delete controls,
+  and audit links. Active storefront publication requires an active Provider
+  membership plus an active unexpired subscription.
+- Public V31 adds a truthful active-storefront list and an active-Provider-only
+  “Миний лангуу” manager. Plan creation and subscription/storefront transitions
+  that require judgment remain operator-only API actions; expiry is a system
+  transition and the admin Market screen is still a blueprint.
+- All 225 tests and a clean `0001–0061` PostgreSQL/API smoke pass. V35 was
+  deployed after verified backup `overva-20260829T080218Z`. Production is API
+  V35 / Public V31 / Web/Admin V31 / schema `0061`; new storefront storage is
+  at zero rows, all seven services are healthy, external checks pass, public
+  storefront browse returns `[]`, and a guest private-storefront call returns
+  `401`.
+- Do not expand listing, proposal, engagement, review, payment, dispute, forum,
+  or ranking backends as part of this slice. Reviews later require a completed
+  engagement and its actual Customer; no guest, unrelated, or self-rating.
 
 ## V34 reviewed Provider lifecycle hardening — deployed
 

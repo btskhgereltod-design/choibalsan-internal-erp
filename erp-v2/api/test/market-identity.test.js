@@ -74,6 +74,33 @@ test("migration 0060 enforces the complete reviewed application lifecycle", () =
   assert.match(migration, /market_provider_application_transition_guard/);
 });
 
+test("migration 0061 adds storefront service access without transaction settlement", () => {
+  const migration = readApi("migrations/0061_market_storefront_foundation.sql");
+  assert.match(migration, /CREATE TABLE market_storefront_plans/);
+  assert.match(migration, /CREATE TABLE market_storefronts/);
+  assert.match(migration, /CREATE TABLE market_storefront_subscriptions/);
+  assert.match(migration, /CREATE TABLE market_storefront_entitlements/);
+  assert.match(migration, /market_storefront_subscriptions_open_idx/);
+  assert.match(migration, /market_storefront_subscriptions_no_delete/);
+  assert.match(migration, /market_storefronts_transition_guard/);
+  assert.match(migration, /market_storefront_subscriptions_transition_guard/);
+  assert.match(migration, /OLD\.status='pending' AND NEW\.status IN \('active','cancelled'\)/);
+  assert.match(migration, /not buyer\/provider transaction payments/);
+  assert.doesNotMatch(migration, /CREATE TABLE market_(listings|proposals|payments|disputes)/i);
+});
+
+test("storefront API separates public browse, Provider ownership, and operator transitions", () => {
+  const route = readApi("src/routes/market-storefront.js");
+  assert.match(route, /router\.get\("\/storefronts"/);
+  assert.match(route, /router\.post\("\/storefront", authenticateMarket/);
+  assert.match(route, /membership\.membership_type='provider' AND membership\.status='active'/);
+  assert.match(route, /router\.post\("\/operator\/storefront-plans", authenticateMarket, requireMarketOperator/);
+  assert.match(route, /router\.post\("\/operator\/storefront-subscriptions\/:id\/activate", authenticateMarket, requireMarketOperator/);
+  assert.match(route, /MARKET_STOREFRONT_SUBSCRIPTION_OPEN/);
+  assert.match(route, /market\.storefront\.subscription\.activated/);
+  assert.doesNotMatch(route, /escrow|payout|commission|settlement/i);
+});
+
 test("Market middleware derives operator authority live and tenant auth rejects every typed token", () => {
   const middleware = readApi("src/middleware/auth.js");
   assert.match(middleware, /payload\.kind !== "market"/);
@@ -109,21 +136,26 @@ test("public routing exposes only the bounded Market identity API, not a Market 
   assert.doesNotMatch(caddy, /market\.overva\.com/);
 });
 
-test("public V30 keeps guests neutral and gates customer/provider participation by action", () => {
+test("public V31 keeps guests neutral and gates participant and storefront actions", () => {
   const html = readRepo("public-site/index.html");
   const client = readRepo("public-site/site.js");
-  assert.match(html, /site\.js\?v=30/);
+  assert.match(html, /site\.js\?v=31/);
   assert.match(html, /id="marketAuthDialog"/);
   assert.match(html, /class="market-role-switch[^"]* hidden"/);
   assert.match(html, /data-market-participation-action="customer"/);
   assert.match(html, /data-market-participation-action="provider"/);
   assert.match(html, /id="providerApplicationDialog"/);
+  assert.match(html, /data-market-panel="storefront"/);
+  assert.match(html, /id="marketStorefrontGrid"/);
+  assert.match(html, /захиалагч, гүйцэтгэгчийн ажлын төлбөр биш/);
   assert.match(html, /Зочин нээлттэй ажлын бүтэц/);
   assert.match(html, /Байгууллагын Platform-д нэвтрэх/);
   assert.doesNotMatch(html, /data-add-market-membership=/);
   assert.match(client, /fetch\(`\/api\/market\$\{path\}`/);
   assert.match(client, /marketApi\("\/view"/);
   assert.match(client, /marketApi\("\/provider-applications"/);
+  assert.match(client, /marketApi\("\/storefront\/subscriptions"/);
+  assert.match(client, /function loadPublicStorefronts\(\)/);
   assert.match(client, /function showGuestMarket\(\)/);
   assert.match(client, /marketIdentity\.active_memberships/);
   assert.match(client, /pendingMarketAction = "customer"/);

@@ -137,6 +137,13 @@ const marketLoginForm = document.getElementById("marketLoginForm");
 const marketRegisterForm = document.getElementById("marketRegisterForm");
 const providerApplicationDialog = document.getElementById("providerApplicationDialog");
 const providerApplicationForm = document.getElementById("providerApplicationForm");
+const storefrontProfileForm = document.getElementById("storefrontProfileForm");
+const storefrontManagerStatus = document.getElementById("storefrontManagerStatus");
+const storefrontManagerState = document.getElementById("storefrontManagerState");
+const storefrontPlanGrid = document.getElementById("storefrontPlanGrid");
+const storefrontPaymentReference = document.getElementById("storefrontPaymentReference");
+const marketStorefrontGrid = document.getElementById("marketStorefrontGrid");
+const marketStorefrontEmpty = document.getElementById("marketStorefrontEmpty");
 const MARKET_TOKEN_KEY = "overva.market.token.v1";
 let marketIdentity = null;
 let pendingMarketAction = "";
@@ -163,6 +170,8 @@ let activeMarketRole = "guest";
 let activeMarketArea = "products";
 let activeProductCategory = "all";
 let activeRequestDraftId = null;
+let storefrontProfile = null;
+let storefrontPlans = [];
 
 function scrollChat() { chatStream.scrollTop = chatStream.scrollHeight; }
 
@@ -405,7 +414,7 @@ function filterMarketRequests(searchText = "") {
 
 function showMarketView(view = "all") {
   const allowedViews = activeMarketRole === "provider"
-    ? ["all","proposals","deliveries","provider-rules"]
+    ? ["all","storefront","proposals","deliveries","provider-rules"]
     : activeMarketRole === "customer"
       ? ["all","mine","projects","labs","rules","request-detail"]
       : ["all"];
@@ -414,6 +423,7 @@ function showMarketView(view = "all") {
   document.querySelectorAll("[data-market-view]").forEach(button => button.classList.toggle("active", button.dataset.marketView === activeMarketView));
   if (activeMarketView === "mine") renderMyRequests();
   if (activeMarketView === "labs") renderPortfolioHome(document.getElementById("homeSearchInput").value, { includeCreate:false });
+  if (activeMarketView === "storefront") loadStorefrontManager();
   if (activeMarketView === "all") filterMarketRequests(document.getElementById("homeSearchInput").value);
   document.querySelector(".portfolio-scroll").scrollTo({ top:0, behavior:"smooth" });
 }
@@ -489,6 +499,122 @@ async function marketApi(path, options = {}) {
     throw error;
   }
   return data;
+}
+
+function formatMnt(value) {
+  return `${Number(value || 0).toLocaleString("mn-MN")} ₮`;
+}
+
+function renderPublicStorefronts(items = []) {
+  marketStorefrontGrid.replaceChildren();
+  marketStorefrontEmpty.classList.toggle("hidden", items.length > 0);
+  items.forEach(item => {
+    const card = document.createElement("article");
+    card.className = "market-storefront-card";
+    const badge = document.createElement("span");
+    badge.textContent = `${item.plan_name} · Идэвхтэй`;
+    const name = document.createElement("h3");
+    name.textContent = item.display_name;
+    const tagline = document.createElement("strong");
+    tagline.textContent = item.tagline;
+    const description = document.createElement("p");
+    description.textContent = item.description;
+    card.append(badge, name, tagline, description);
+    if (item.public_contact) {
+      const contact = document.createElement("small");
+      contact.textContent = `Холбоо барих: ${item.public_contact}`;
+      card.append(contact);
+    }
+    marketStorefrontGrid.append(card);
+  });
+}
+
+async function loadPublicStorefronts() {
+  try {
+    const data = await marketApi("/storefronts");
+    renderPublicStorefronts(data.items || []);
+  } catch {
+    marketStorefrontGrid.replaceChildren();
+    marketStorefrontEmpty.classList.remove("hidden");
+    marketStorefrontEmpty.textContent = "Цахим лангууны мэдээллийг одоогоор ачаалж чадсангүй.";
+  }
+}
+
+function setStorefrontManagerStatus(message = "", error = false) {
+  storefrontManagerStatus.textContent = message;
+  storefrontManagerStatus.classList.toggle("error", error);
+}
+
+function fillStorefrontProfile(item) {
+  storefrontProfile = item || null;
+  storefrontProfileForm.elements.slug.value = item?.slug || "";
+  storefrontProfileForm.elements.displayName.value = item?.display_name || marketIdentity?.display_name || "";
+  storefrontProfileForm.elements.tagline.value = item?.tagline || "";
+  storefrontProfileForm.elements.description.value = item?.description || "";
+  storefrontProfileForm.elements.publicContact.value = item?.public_contact || "";
+  storefrontManagerState.textContent = item
+    ? item.status === "active" ? "Идэвхтэй" : item.status === "suspended" ? "Түр зогсоосон" : item.status === "expired" ? "Хугацаа дууссан" : "Ноорог"
+    : "Үүсгээгүй";
+  storefrontProfileForm.querySelector("button[type=submit]").textContent = item ? "Лангуугаа шинэчлэх" : "Лангуугаа хадгалах";
+}
+
+function renderStorefrontPlans() {
+  storefrontPlanGrid.replaceChildren();
+  if (!storefrontPlans.length) {
+    const empty = document.createElement("div");
+    empty.className = "market-empty";
+    empty.textContent = "Market operator үйлчилгээний plan хараахан тохируулаагүй байна.";
+    storefrontPlanGrid.append(empty);
+    return;
+  }
+  const openStatus = storefrontProfile?.subscription?.status;
+  storefrontPlans.forEach(plan => {
+    const card = document.createElement("article");
+    card.className = "storefront-plan-card";
+    const title = document.createElement("h3");
+    title.textContent = plan.name;
+    const description = document.createElement("p");
+    description.textContent = plan.description;
+    const price = document.createElement("strong");
+    price.textContent = `${formatMnt(plan.price_mnt)} / ${plan.billing_period_days} хоног`;
+    const grants = document.createElement("small");
+    grants.textContent = Object.keys(plan.entitlement_snapshot || {}).join(" · ") || "Үйлчилгээний эрх";
+    const action = document.createElement("button");
+    action.type = "button";
+    action.dataset.storefrontPlan = plan.id;
+    action.disabled = !storefrontProfile || ["pending","active","suspended"].includes(openStatus);
+    action.textContent = openStatus === "pending" ? "Operator шалгаж байна"
+      : openStatus === "active" ? "Subscription идэвхтэй"
+        : openStatus === "suspended" ? "Subscription түр зогссон"
+          : !storefrontProfile ? "Эхлээд лангуугаа хадгална" : "Энэ plan-ыг хүсэх";
+    card.append(title, description, price, grants, action);
+    storefrontPlanGrid.append(card);
+  });
+}
+
+async function loadStorefrontManager() {
+  if (!marketIdentity || !(marketIdentity.active_memberships || []).includes("provider")) {
+    showMarketView("all");
+    return;
+  }
+  setStorefrontManagerStatus("Лангууны мэдээллийг ачаалж байна…");
+  try {
+    const [profileData, plansData] = await Promise.all([
+      marketApi("/storefront/me"),
+      marketApi("/storefront-plans")
+    ]);
+    storefrontPlans = plansData.items || [];
+    fillStorefrontProfile(profileData.item);
+    renderStorefrontPlans();
+    const subscription = storefrontProfile?.subscription;
+    setStorefrontManagerStatus(subscription?.status === "pending"
+      ? "Subscription хүсэлтийг Market operator шалгаж байна. Батлагдсаны дараа лангуу нийтэд гарна."
+      : subscription?.status === "active"
+        ? `Лангуу ${new Date(subscription.expires_at).toLocaleDateString("mn-MN")} хүртэл идэвхтэй.`
+        : storefrontProfile ? "Лангуу ноорог төлөвтэй. Идэвхжүүлэх plan сонгоно уу." : "Эхлээд лангууныхаа мэдээллийг хадгална уу.");
+  } catch (error) {
+    setStorefrontManagerStatus(error.message, true);
+  }
 }
 
 function renderMarketIdentity() {
@@ -1372,9 +1498,51 @@ providerApplicationForm.addEventListener("submit", async event => {
     errorElement.textContent = error.message;
   }
 });
+storefrontProfileForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  setStorefrontManagerStatus("Лангууг хадгалж байна…");
+  const values = Object.fromEntries(new FormData(storefrontProfileForm));
+  try {
+    const data = await marketApi("/storefront", {
+      method: storefrontProfile ? "PATCH" : "POST",
+      body: JSON.stringify(values)
+    });
+    fillStorefrontProfile(data.item);
+    renderStorefrontPlans();
+    setStorefrontManagerStatus("Лангууны мэдээлэл хадгалагдлаа. Plan сонгосны дараа operator идэвхжүүлнэ.");
+  } catch (error) {
+    setStorefrontManagerStatus(error.message, true);
+  }
+});
+storefrontPlanGrid.addEventListener("click", async event => {
+  const button = event.target.closest("[data-storefront-plan]");
+  if (!button || button.disabled) return;
+  const externalPaymentReference = storefrontPaymentReference.value.trim();
+  if (externalPaymentReference.length < 4) {
+    setStorefrontManagerStatus("Төлбөрийн лавлагааг дор хаяж 4 тэмдэгтээр оруулна уу.", true);
+    storefrontPaymentReference.focus();
+    return;
+  }
+  button.disabled = true;
+  setStorefrontManagerStatus("Subscription хүсэлтийг илгээж байна…");
+  try {
+    const data = await marketApi("/storefront/subscriptions", {
+      method:"POST",
+      body:JSON.stringify({ planId:button.dataset.storefrontPlan, externalPaymentReference })
+    });
+    fillStorefrontProfile(data.item);
+    renderStorefrontPlans();
+    setStorefrontManagerStatus("Хүсэлт бүртгэгдлээ. Market operator төлбөрийн лавлагааг шалгаж идэвхжүүлнэ.");
+  } catch (error) {
+    setStorefrontManagerStatus(error.message, true);
+    renderStorefrontPlans();
+  }
+});
 document.getElementById("marketLogout").addEventListener("click", async() => {
   try { await marketApi("/auth/logout", { method:"POST" }); } catch { /* Local session still ends. */ }
   marketIdentity = null;
+  storefrontProfile = null;
+  storefrontPlans = [];
   storeMarketToken();
   renderMarketIdentity();
   showGuestMarket();
@@ -1577,4 +1745,5 @@ renderDeliveryLifecycle(storedCheckpoint);
 const initialParams = new URLSearchParams(location.search);
 if (initialParams.get("view") === "connectors") showPublicConnectors();
 else showMarketArea(initialParams.get("area") || (initialParams.get("role") === "provider" ? "freelance" : "products"));
+loadPublicStorefronts();
 restoreMarketIdentity();

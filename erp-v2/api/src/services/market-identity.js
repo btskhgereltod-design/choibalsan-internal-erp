@@ -25,16 +25,18 @@ function subjectHash(value) {
 }
 
 async function writeMarketAudit({ client = getPool(), marketIdentityId = null, membershipId = null,
-  operatorAssignmentId = null, providerApplicationId = null, actorType, actorIdentityId = null, eventType, outcome,
+  operatorAssignmentId = null, providerApplicationId = null, storefrontPlanId = null, storefrontId = null,
+  storefrontSubscriptionId = null, actorType, actorIdentityId = null, eventType, outcome,
   subject = null, detail = {}, ipAddress = null }) {
   await client.query(
     `INSERT INTO market_audit_events
        (market_identity_id,membership_id,operator_assignment_id,provider_application_id,
+        storefront_plan_id,storefront_id,storefront_subscription_id,
         actor_type,actor_identity_id,event_type,outcome,subject_hash,detail,ip_address)
-     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11)`,
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14)`,
     [marketIdentityId, membershipId, operatorAssignmentId, providerApplicationId,
-      actorType, actorIdentityId, eventType, outcome, subject ? subjectHash(subject) : null,
-      JSON.stringify(detail), ipAddress]
+      storefrontPlanId, storefrontId, storefrontSubscriptionId, actorType, actorIdentityId,
+      eventType, outcome, subject ? subjectHash(subject) : null, JSON.stringify(detail), ipAddress]
   );
 }
 

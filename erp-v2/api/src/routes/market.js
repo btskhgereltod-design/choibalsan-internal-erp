@@ -543,6 +543,24 @@ router.post("/operator/memberships/:id/suspend", authenticateMarket, requireMark
           WHERE identity.id=$1 AND identity.selected_view=$2`,
         [item.market_identity_id, item.membership_type]
       );
+      if (item.membership_type === "provider") {
+        const storefront = await client.query(
+          `UPDATE market_storefronts
+              SET status='suspended',suspended_at=now(),suspension_reason=$2,updated_at=now()
+            WHERE provider_membership_id=$1 AND status IN ('draft','active','expired')
+            RETURNING id`,
+          [item.id, parsed.data.reason]
+        );
+        if (storefront.rowCount) {
+          await writeMarketAudit({
+            client, marketIdentityId: item.market_identity_id, membershipId: item.id,
+            storefrontId: storefront.rows[0].id, operatorAssignmentId: assignmentId,
+            actorType: "market_operator", actorIdentityId: req.marketIdentity.id,
+            eventType: "market.storefront.suspended", outcome: "success",
+            detail: { reason: parsed.data.reason, source: "provider-membership-suspension" }, ipAddress: req.ip || null,
+          });
+        }
+      }
       await writeMarketAudit({
         client, marketIdentityId: item.market_identity_id, membershipId: item.id,
         operatorAssignmentId: assignmentId, actorType: "market_operator",
@@ -601,5 +619,7 @@ router.post("/operator/memberships/:id/activate", authenticateMarket, requireMar
     }
   })
 );
+
+router.use("/", require("./market-storefront"));
 
 module.exports = router;

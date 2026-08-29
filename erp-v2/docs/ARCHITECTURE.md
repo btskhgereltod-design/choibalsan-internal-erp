@@ -112,9 +112,19 @@ approval creates an active `provider` membership and rejection creates none.
 Customer membership creation is idempotent under concurrent order intents, and
 the database permits only one open Provider application per identity.
 `customer` / `provider` view selection is
-authorized by an active participant membership and changes no authority. No
-person-level federation, listing, proposal, payment, dispute, or forum backend
-is implemented in this slice.
+authorized by an active participant membership and changes no authority.
+
+The additive Digital Storefront foundation extends that isolated boundary with
+`market_storefront_plans`, `market_storefronts`,
+`market_storefront_subscriptions`, and `market_storefront_entitlements`. An
+active reviewed Provider owns at most one storefront. Public reads require an
+active Provider membership, active storefront, and active unexpired service
+subscription. Plan terms and entitlements are snapshotted at subscription
+request time; operator-only activation creates dated grants, and lifecycle
+transitions create Market audit evidence. These subscriptions sell access to
+OVERVA's storefront service only and create no authority over Customer/Provider
+job money. No person-level federation, listing, proposal, engagement, review,
+transaction payment, dispute, or forum backend is implemented in this slice.
 
 ## Tenant and Identity Model
 

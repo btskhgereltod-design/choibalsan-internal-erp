@@ -119,6 +119,21 @@ async function run() {
     assert.equal(operatorLogin.data.identity.has_operator_authority, true);
     const operatorToken = operatorLogin.data.token;
 
+    const storefrontPlan = await request(baseUrl, "/api/market/operator/storefront-plans", {
+      token: operatorToken,
+      method: "POST",
+      body: {
+        code: "standard",
+        name: "Standard storefront",
+        description: "Disposable configurable storefront plan for integration verification.",
+        priceMnt: 200000,
+        billingPeriodDays: 30,
+        entitlements: { "storefront.active": true, "profile.links": 5 },
+        reason: "Publish disposable storefront test plan",
+      },
+    });
+    assert.equal(storefrontPlan.status, 201);
+
     const operatorApplication = await request(baseUrl, "/api/market/provider-applications", {
       token: operatorToken,
       method: "POST",
@@ -180,6 +195,51 @@ async function run() {
     assert.equal(approved.data.identity.provider_application.status, "approved");
     assert.deepEqual(approved.data.identity.active_memberships, ["customer", "provider"]);
     assert.equal(approved.data.identity.has_operator_authority, false);
+
+    const storefrontBody = {
+      slug: `dual-${unique}`,
+      displayName: "Dual Participant Studio",
+      tagline: "Governed business systems and integration services",
+      description: "A disposable public storefront used to verify Provider ownership, subscription access, and operator controls.",
+      publicContact: "contact@example.test",
+    };
+    const storefront = await request(baseUrl, "/api/market/storefront", {
+      token: participantToken, method: "POST", body: storefrontBody,
+    });
+    assert.equal(storefront.status, 201);
+    assert.equal(storefront.data.item.status, "draft");
+    const duplicateStorefront = await request(baseUrl, "/api/market/storefront", {
+      token: participantToken, method: "POST", body: storefrontBody,
+    });
+    assert.equal(duplicateStorefront.status, 200);
+    assert.equal(duplicateStorefront.data.idempotent, true);
+
+    const subscriptionBody = {
+      planId: storefrontPlan.data.item.id,
+      externalPaymentReference: `bank-transfer-${unique}`,
+    };
+    const subscriptionRequests = await Promise.all([
+      request(baseUrl, "/api/market/storefront/subscriptions", {
+        token: participantToken, method: "POST", body: subscriptionBody,
+      }),
+      request(baseUrl, "/api/market/storefront/subscriptions", {
+        token: participantToken, method: "POST", body: subscriptionBody,
+      }),
+    ]);
+    assert.deepEqual(subscriptionRequests.map(item => item.status).sort(), [200, 201]);
+    const subscriptionId = subscriptionRequests.find(item => item.status === 201).data.item.subscription.id;
+    assert.equal((await request(baseUrl, `/api/market/operator/storefront-subscriptions/${subscriptionId}/activate`, {
+      token: participantToken, method: "POST", body: { reason: "Participant cannot activate subscription" },
+    })).status, 403);
+    const activatedStorefront = await request(baseUrl, `/api/market/operator/storefront-subscriptions/${subscriptionId}/activate`, {
+      token: operatorToken, method: "POST", body: { reason: "External payment evidence verified" },
+    });
+    assert.equal(activatedStorefront.status, 200);
+    assert.equal(activatedStorefront.data.item.status, "active");
+    assert.equal((await request(baseUrl, `/api/market/operator/storefront-subscriptions/${subscriptionId}/activate`, {
+      token: operatorToken, method: "POST", body: { reason: "Idempotent activation verification" },
+    })).data.idempotent, true);
+    assert.equal((await request(baseUrl, "/api/market/storefronts")).data.items.length, 1);
     assert.equal((await request(baseUrl, "/api/market/view", {
       token: participantToken, method: "POST", body: { view: "provider" },
     })).status, 200);
@@ -191,6 +251,8 @@ async function run() {
     assert.equal((await request(baseUrl, `/api/market/operator/memberships/${providerMembership.id}/suspend`, {
       token: operatorToken, method: "POST", body: { reason: "Disposable integration suspension check" },
     })).status, 200);
+    assert.equal((await request(baseUrl, "/api/market/storefront/me", { token: participantToken })).data.item.status, "suspended");
+    assert.equal((await request(baseUrl, "/api/market/storefronts")).data.items.length, 0);
     assert.equal((await request(baseUrl, "/api/market/view", {
       token: participantToken, method: "POST", body: { view: "provider" },
     })).status, 403);
@@ -200,9 +262,22 @@ async function run() {
     assert.equal((await request(baseUrl, `/api/market/operator/memberships/${providerMembership.id}/activate`, {
       token: operatorToken, method: "POST", body: { reason: "Disposable integration activation check" },
     })).status, 200);
+    assert.equal((await request(baseUrl, "/api/market/storefront/me", { token: participantToken })).data.item.status, "suspended");
+    assert.equal((await request(baseUrl, `/api/market/operator/storefronts/${storefront.data.item.id}/reactivate`, {
+      token: operatorToken, method: "POST", body: { reason: "Provider membership restored after review" },
+    })).status, 200);
+    assert.equal((await request(baseUrl, "/api/market/storefronts")).data.items.length, 1);
     assert.equal((await request(baseUrl, "/api/market/view", {
       token: participantToken, method: "POST", body: { view: "provider" },
     })).status, 200);
+    await assert.rejects(
+      getPool().query("UPDATE market_storefronts SET status='draft' WHERE id=$1", [storefront.data.item.id]),
+      /invalid market storefront transition/
+    );
+    await assert.rejects(
+      getPool().query("UPDATE market_storefront_subscriptions SET status='pending' WHERE id=$1", [subscriptionId]),
+      /invalid market storefront subscription transition/
+    );
 
     const evidence = await getPool().query(
       `SELECT event_type,outcome FROM market_audit_events
@@ -218,6 +293,11 @@ async function run() {
       "market.membership.issued:success",
       "market.membership.activated:success",
       "market.membership.suspended:success",
+      "market.storefront.created:success",
+      "market.storefront.subscription.requested:success",
+      "market.storefront.subscription.activated:success",
+      "market.storefront.suspended:success",
+      "market.storefront.reactivated:success",
       "market.view.switch:denied",
       "market.view.switched:success",
     ]) assert.ok(eventTypes.includes(expected), `missing ${expected}`);
@@ -242,7 +322,7 @@ async function run() {
     );
 
     const latest = await getPool().query("SELECT max(version) AS version FROM schema_migrations");
-    assert.equal(latest.rows[0].version, "0060");
+    assert.equal(latest.rows[0].version, "0061");
     console.log("[market identity integration] passed", {
       migration: latest.rows[0].version,
       memberships: approved.data.identity.active_memberships,

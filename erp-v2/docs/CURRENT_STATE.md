@@ -18,6 +18,34 @@ validated at enterprise scale.
   restore guidance, health monitoring, and restart policies exist.
 - Database and internal service ports are not intended to be public.
 
+### Production release V35 — Digital Storefront foundation
+
+- Migration `0061` adds versioned storefront plans, one Provider-owned digital
+  storefront per Market identity, service subscriptions, entitlement snapshots,
+  lifecycle guards, no-delete protection, and append-only audit links. These
+  records represent access to OVERVA's storefront service only; they do not
+  represent customer/provider work payments, commission, escrow, settlement,
+  payout, refund, or dispute authority.
+- Only an active reviewed Provider can create or edit their storefront. Creating
+  the same storefront and requesting the same open subscription are idempotent.
+  Only a live Market operator can publish a plan, activate a subscription, or
+  suspend/reactivate a storefront. Suspending Provider membership also hides its
+  storefront; membership reactivation alone does not republish it.
+- Public V31 renders only active storefronts backed by an active Provider
+  membership and an unexpired active subscription. The private Provider view
+  supports profile editing and plan requests without exposing it to guests.
+- All 225 repository tests pass, and a clean disposable PostgreSQL run applied
+  `0001–0061` and passed the complete Market identity/storefront smoke.
+- V35 was production-deployed after verified backup
+  `overva-20260829T080218Z`. Production is API V35, Public V31, Web/Admin V31,
+  and schema `0061`; the four new storefront tables remain at zero rows. All
+  seven services are healthy, external Home/API/App/Admin/Status checks pass,
+  public storefront browse returns an empty collection, and the private
+  storefront endpoint rejects a guest with `401`. Deployed API image is
+  `sha256:923752a931ea076db93cb33cddd7fd6489184a4a7ab0d7202c90c5f6b0fadfa8`;
+  Public image is
+  `sha256:93aaa1e0267133545fb2f5c34b9024cff20317fbad16237aa12f8b8b80e08e29`.
+
 ### Production release V34 — complete reviewed Provider lifecycle
 
 - Migration `0060` enforces `submitted -> under_review -> approved/rejected`
