@@ -5,9 +5,9 @@ const bcrypt = require("bcryptjs");
 const { rateLimit } = require("express-rate-limit");
 const { z } = require("zod");
 const { getPool } = require("../db");
-const { signMarketToken } = require("../security/token");
-const { authenticateMarket, requireMarketOperator } = require("../middleware/auth");
+const { authenticateMarket, requireMarketOperator, requireRecentMarketStepUp } = require("../middleware/auth");
 const { loadMarketIdentity, writeMarketAudit } = require("../services/market-identity");
+const { createMarketSession, revokeMarketSessions } = require("../services/market-auth");
 const { asyncHandler } = require("../utils/async-handler");
 
 const router = express.Router();
@@ -57,9 +57,10 @@ router.post("/auth/register", authLimiter, asyncHandler(async(req, res) => {
       eventType: "market.identity.registered", outcome: "success", subject: parsed.data.email,
       ipAddress: req.ip || null,
     });
+    const auth = await createMarketSession({ client, identityId, authMethod: "password", req });
     await client.query("COMMIT");
     const identity = await loadMarketIdentity(identityId);
-    res.status(201).json({ token: signMarketToken(identityId), identity });
+    res.status(201).json({ token: auth.token, identity });
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     throw error;
@@ -76,30 +77,49 @@ router.post("/auth/login", authLimiter, asyncHandler(async(req, res) => {
     [parsed.data.email]
   );
   const record = result.rows[0];
-  if (!record || !record.active || !(await bcrypt.compare(parsed.data.password, record.password_hash))) {
+  if (!record || !record.active || !record.password_hash || !(await bcrypt.compare(parsed.data.password, record.password_hash))) {
     await writeMarketAudit({
       marketIdentityId: record?.id || null, actorType: "anonymous", eventType: "market.auth.login",
       outcome: "failure", subject: parsed.data.email, ipAddress: req.ip || null,
     });
     return res.status(401).json({ error: "Market email or password is incorrect" });
   }
-  await writeMarketAudit({
-    marketIdentityId: record.id, actorType: "market_identity", actorIdentityId: record.id,
-    eventType: "market.auth.login", outcome: "success", subject: parsed.data.email,
-    ipAddress: req.ip || null,
-  });
-  res.json({ token: signMarketToken(record.id), identity: await loadMarketIdentity(record.id) });
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const auth = await createMarketSession({ client, identityId: record.id, authMethod: "password", req });
+    await writeMarketAudit({
+      client, marketIdentityId: record.id, marketSessionId: auth.session.id,
+      actorType: "market_identity", actorIdentityId: record.id,
+      eventType: "market.auth.login", outcome: "success", subject: parsed.data.email,
+      ipAddress: req.ip || null,
+    });
+    await client.query("COMMIT");
+    res.json({ token: auth.token, identity: await loadMarketIdentity(record.id) });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
 }));
 
 router.get("/auth/me", authenticateMarket, (req, res) => res.json({ identity: req.marketIdentity }));
 
 router.post("/auth/logout", authenticateMarket, asyncHandler(async(req, res) => {
-  await writeMarketAudit({
-    marketIdentityId: req.marketIdentity.id, actorType: "market_identity",
-    actorIdentityId: req.marketIdentity.id, eventType: "market.auth.logout", outcome: "success",
-    ipAddress: req.ip || null,
-  });
-  res.status(204).end();
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    await revokeMarketSessions({
+      client, identityId: req.marketIdentity.id, sessionId: req.marketSession.id,
+      reason: "user logout", req,
+    });
+    await client.query("COMMIT");
+    res.status(204).end();
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally { client.release(); }
 }));
 
 router.post("/memberships", authenticateMarket, asyncHandler(async(req, res) => {
@@ -183,7 +203,7 @@ router.post("/memberships", authenticateMarket, asyncHandler(async(req, res) => 
   }
 }));
 
-router.post("/provider-applications", authenticateMarket, asyncHandler(async(req, res) => {
+router.post("/provider-applications", authenticateMarket, requireRecentMarketStepUp, asyncHandler(async(req, res) => {
   const parsed = providerApplicationSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({
     error: "Provider summary, skills, accepted rules, and an optional valid portfolio URL are required",
@@ -222,17 +242,39 @@ router.post("/provider-applications", authenticateMarket, asyncHandler(async(req
         code: "MARKET_PROVIDER_APPLICATION_OPEN",
       });
     }
+    const phoneVerification = await client.query(
+      `SELECT verification.id
+         FROM market_identity_verifications verification
+         JOIN market_phone_contacts contact
+           ON contact.market_identity_id=verification.market_identity_id
+          AND contact.phone_fingerprint=verification.evidence_hash
+          AND contact.status='verified'
+        WHERE verification.market_identity_id=$1 AND verification.verification_type='phone'
+          AND verification.status='verified' AND verification.revoked_at IS NULL
+        ORDER BY verification.decided_at DESC LIMIT 1 FOR UPDATE OF verification,contact`,
+      [req.marketIdentity.id]
+    );
+    if (!phoneVerification.rowCount) {
+      await client.query("ROLLBACK");
+      return res.status(403).json({
+        error: "Verified phone is required before submitting a Provider application",
+        code: "MARKET_PHONE_VERIFICATION_REQUIRED",
+      });
+    }
     const created = await client.query(
       `INSERT INTO market_provider_applications
-         (market_identity_id,professional_summary,skill_tags,portfolio_url,rules_accepted_at)
-       VALUES($1,$2,$3,$4,now()) RETURNING id`,
-      [req.marketIdentity.id, parsed.data.professionalSummary, skills, parsed.data.portfolioUrl || null]
+         (market_identity_id,professional_summary,skill_tags,portfolio_url,rules_accepted_at,
+          assurance_policy_version,phone_verification_id,step_up_at)
+       VALUES($1,$2,$3,$4,now(),1,$5,$6) RETURNING id`,
+      [req.marketIdentity.id, parsed.data.professionalSummary, skills, parsed.data.portfolioUrl || null,
+        phoneVerification.rows[0].id, req.marketSession.reauthenticated_at]
     );
     await writeMarketAudit({
       client, marketIdentityId: req.marketIdentity.id, providerApplicationId: created.rows[0].id,
       actorType: "market_identity", actorIdentityId: req.marketIdentity.id,
       eventType: "market.provider.application.submitted", outcome: "success",
-      detail: { status: "submitted", skillCount: skills.length, rulesAccepted: true },
+      detail: { status: "submitted", skillCount: skills.length, rulesAccepted: true,
+        assurancePolicyVersion: 1, phoneVerified: true, recentStepUp: true },
       ipAddress: req.ip || null,
     });
     await client.query("COMMIT");
@@ -318,7 +360,8 @@ router.post("/operator/provider-applications/:id/start-review", authenticateMark
         return res.status(403).json({ error: "Market operator assignment required", code: "MARKET_OPERATOR_REQUIRED" });
       }
       const application = await client.query(
-        `SELECT id,market_identity_id,status FROM market_provider_applications
+        `SELECT id,market_identity_id,status,assurance_policy_version,phone_verification_id
+           FROM market_provider_applications
           WHERE id=$1 FOR UPDATE`,
         [id.data]
       );
@@ -393,6 +436,28 @@ router.post("/operator/provider-applications/:id/approve", authenticateMarket, r
         });
         await client.query("COMMIT");
         return res.status(403).json({ error: "A Market operator cannot approve their own provider application", code: "MARKET_PROVIDER_SELF_REVIEW_DENIED" });
+      }
+      if (item.assurance_policy_version === 1) {
+        const assurance = await client.query(
+          `SELECT verification.id
+             FROM market_identity_verifications verification
+             JOIN market_phone_contacts contact
+               ON contact.market_identity_id=verification.market_identity_id
+              AND contact.phone_fingerprint=verification.evidence_hash
+              AND contact.status='verified'
+            WHERE verification.id=$1 AND verification.market_identity_id=$2
+              AND verification.verification_type='phone'
+              AND verification.status='verified' AND verification.revoked_at IS NULL
+            FOR UPDATE OF verification,contact`,
+          [item.phone_verification_id, item.market_identity_id]
+        );
+        if (!assurance.rowCount) {
+          await client.query("ROLLBACK");
+          return res.status(409).json({
+            error: "Provider phone assurance is no longer valid",
+            code: "MARKET_PROVIDER_ASSURANCE_INVALID",
+          });
+        }
       }
       const existing = await client.query(
         `SELECT id,status FROM market_memberships
@@ -620,6 +685,7 @@ router.post("/operator/memberships/:id/activate", authenticateMarket, requireMar
   })
 );
 
+router.use("/", require("./market-auth-assurance"));
 router.use("/", require("./market-storefront"));
 
 module.exports = router;

@@ -116,9 +116,18 @@ const authenticateMarket = asyncHandler(async (req, res, next) => {
     return res.status(401).json({ error: "Invalid or expired Market token" });
   }
   if (payload.kind !== "market") return res.status(401).json({ error: "Market authentication required" });
+  if (!payload.sid) return res.status(401).json({ error: "Revocable Market session required" });
+  const session = await getPool().query(
+    `UPDATE market_sessions SET last_seen_at=now()
+      WHERE id=$1 AND market_identity_id=$2 AND revoked_at IS NULL AND expires_at>now()
+      RETURNING id,auth_method,created_at,reauthenticated_at,expires_at`,
+    [payload.sid, payload.sub]
+  );
+  if (!session.rowCount) return res.status(401).json({ error: "Market session is inactive or expired" });
   const identity = await loadMarketIdentity(payload.sub);
   if (!identity) return res.status(401).json({ error: "Market identity is inactive or unavailable" });
   req.marketIdentity = identity;
+  req.marketSession = session.rows[0];
   next();
 });
 
@@ -218,4 +227,28 @@ const requireMarketOperator = asyncHandler(async(req, res, next) => {
   next();
 });
 
-module.exports = { authenticate, authenticatePlatform, authenticateMarket, requireRoles, requireModule, requireWorkspace, requirePermissions, requireSystemRoles, requirePlatformPermissions, requireMarketOperator };
+function hasRecentMarketStepUp(session, minutes = 10) {
+  const value = new Date(session?.reauthenticated_at || 0).getTime();
+  return Number.isFinite(value) && value >= Date.now() - minutes * 60 * 1000;
+}
+
+const requireRecentMarketStepUp = asyncHandler(async(req, res, next) => {
+  if (!req.marketSession || !hasRecentMarketStepUp(req.marketSession)) {
+    await writeMarketAudit({
+      marketIdentityId: req.marketIdentity?.id || null,
+      marketSessionId: req.marketSession?.id || null,
+      actorType: req.marketIdentity ? "market_identity" : "anonymous",
+      actorIdentityId: req.marketIdentity?.id || null,
+      eventType: "market.auth.step_up.required", outcome: "denied",
+      detail: { method: req.method, path: req.originalUrl, authorityChanged: false },
+      ipAddress: req.ip || null,
+    });
+    return res.status(403).json({
+      error: "Recent authentication is required",
+      code: "MARKET_STEP_UP_REQUIRED",
+    });
+  }
+  next();
+});
+
+module.exports = { authenticate, authenticatePlatform, authenticateMarket, requireRoles, requireModule, requireWorkspace, requirePermissions, requireSystemRoles, requirePlatformPermissions, requireMarketOperator, requireRecentMarketStepUp, hasRecentMarketStepUp };

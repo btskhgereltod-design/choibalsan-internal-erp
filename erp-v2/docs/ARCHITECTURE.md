@@ -123,8 +123,38 @@ subscription. Plan terms and entitlements are snapshotted at subscription
 request time; operator-only activation creates dated grants, and lifecycle
 transitions create Market audit evidence. These subscriptions sell access to
 OVERVA's storefront service only and create no authority over Customer/Provider
-job money. No person-level federation, listing, proposal, engagement, review,
-transaction payment, dispute, or forum backend is implemented in this slice.
+job money.
+
+The identity-assurance layer keeps the compatible password hash on the
+canonical `market_identities` row while storing external login proofs,
+revocable `market_sessions`, hashed
+single-use `market_auth_challenges`, attributable verification facts, and risk
+signals separately. JWTs contain only Market identity and session identifiers;
+middleware requires the session to remain active and derives memberships and
+operator assignments live. Authentication methods never carry those grants.
+Google OIDC uses authorization code plus PKCE/state/nonce and binds by issuer
+and subject. An email collision requires authenticated explicit linking and is
+never silently merged. Recovery revokes all prior sessions. Email delivery and
+Google integrations are disabled unless complete provider configuration is
+present. Tenant and Platform person-level federation, listing, proposal,
+engagement, review, transaction payment, dispute, forum, and ranking backends
+are not implemented in this slice.
+
+Provider onboarding adds an assurance gate without changing those boundaries.
+The current Market session records its most recent strong authentication.
+Password re-entry or reauthentication by the exact linked Google subject may
+refresh that timestamp for ten minutes. Phone contacts are encrypted, while a
+keyed fingerprint supports collision checks without using plaintext as an
+index. OTP challenges are bcrypt-protected, short-lived, single-use, bounded by
+attempt and request limits, and linked to append-only audit evidence. Database
+advisory locking serializes decisions for the same fingerprint.
+
+A new Provider application snapshots assurance policy version, phone
+verification, and step-up time. Submission and operator approval both require
+live assurance evidence; the latter still creates membership only through the
+existing reviewed four-eyes lifecycle. Existing policy-0 records remain
+compatible. Phone/step-up proof grants no membership or operator authority, and
+future Seller/Publisher capability remains separate from Provider membership.
 
 ## Tenant and Identity Model
 

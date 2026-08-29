@@ -70,12 +70,12 @@ test("public site starts with a portfolio Home and opens the governed workspace 
   assert.match(html, /data-market-role="provider"/);
   assert.match(html, /data-market-view="proposals"/);
   assert.match(html, /data-market-view="deliveries"/);
-  assert.match(html, /data-market-view="provider-rules"/);
+  assert.match(html, /data-provider-guide-open/);
   const customerNav = html.match(/<nav class="market-side-nav[^\"]*" data-market-role-nav="customer"[\s\S]*?<\/nav>/)?.[0] || "";
   const providerNav = html.match(/<nav class="market-side-nav[^\"]*" data-market-role-nav="provider"[\s\S]*?<\/nav>/)?.[0] || "";
   assert.doesNotMatch(customerNav, /data-market-view="labs"/);
   assert.doesNotMatch(customerNav, /data-market-view="rules"/);
-  assert.doesNotMatch(providerNav, /data-market-view="provider-rules"/);
+  assert.doesNotMatch(providerNav, /data-provider-guide-open/);
   assert.match(html, /data-market-role-guide="customer"/);
   assert.match(html, /data-market-role-guide="provider"/);
   assert.match(html, /Хамтын тодруулга бол сонголт/);
@@ -144,8 +144,8 @@ test("public site starts with a portfolio Home and opens the governed workspace 
   assert.match(html, /бодит худалдаа биш/);
   assert.match(html, /Одоогоор бодит нийтлэл, хэрэглэгчийн бүртгэл нээгдээгүй/);
   assert.match(html, /data-forum-topic/);
-  assert.match(html, /site\.css\?v=31/);
-  assert.match(html, /site\.js\?v=31/);
+  assert.match(html, /site\.css\?v=34/);
+  assert.match(html, /site\.js\?v=34/);
   assert.match(html, /request-draft-registry\.js\?v=3/);
   assert.match(html, /conversation-memory\.js\?v=15/);
   assert.match(html, /workspace-lifecycle\.js\?v=14/);

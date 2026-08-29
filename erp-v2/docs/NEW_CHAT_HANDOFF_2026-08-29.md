@@ -16,7 +16,7 @@ boundaries. Do not generalize legacy tenant behavior into OVERVA.
 
 ## Production truth
 
-- Public Home V31 and API V35 are deployed with migration `0061`; Web/Admin
+- Public Home V34 and API V37 are deployed with migration `0063`; Web/Admin
   remain V31.
 - V31 provides real Platform-only RBAC: 15 permissions, seven roles, 53 mappings,
   live permission derivation, and server-side route guards.
@@ -34,6 +34,68 @@ boundaries. Do not generalize legacy tenant behavior into OVERVA.
   storage plus a typed Market token. It still has no listings, proposals,
   freelance transaction workflow, forum persistence, payments, disputes, or
   Apps operator system.
+
+## V37 Provider onboarding assurance — deployed
+
+- D-031 and migration `0063` require a ten-minute recent step-up plus a live
+  verified phone for every new policy-1 Provider application. Password re-entry
+  and exact linked-Google reauthentication are supported. These authentication
+  facts grant no participant or operator authority.
+- Phone values are encrypted; uniqueness uses a keyed fingerprint and
+  transaction-level advisory lock. OTPs are bcrypt-protected, expire after five
+  minutes, have five attempts, are rate-limited, single-use, and audited. A
+  collision creates a risk signal and never merges identities.
+- Operator approval rechecks the live phone verification before issuing
+  Provider membership. Existing policy-0 applications and active Providers are
+  compatible. Public V34 presents account, phone, profile, and review as four
+  explicit onboarding steps. A single static ten-principle contractor guide is
+  available from onboarding and the Provider sidebar; it adds no publishing,
+  likes, forum persistence, or reputation authority.
+- Repository tests are 233/233. A disposable PostgreSQL 16 run applied
+  `0001–0063` and passed stale-session denial, step-up, OTP, duplicate prevention,
+  operator guards, approval, and immutable evidence; the container was removed.
+- Production is API V37 / Public V34 / Web/Admin V31 / schema `0063`.
+  SMS secret mounts and a one-time phone-fingerprint key are prepared; the SMS
+  token is still a fail-closed placeholder and `.env.production` explicitly
+  keeps SMS disabled. The three production overlays pass Compose preflight.
+  A real provider endpoint/token/sender and delivery test are still required.
+  V37 was deployed after verified backup `overva-20260829T132335Z`. All seven
+  services, local Caddy, Cloudflare Home/API/App/Admin/Status, V34 assets, guide,
+  guest private-route denial, and capability flags passed. Production has two
+  Market identities and zero memberships, operators, Provider applications,
+  risk signals, or phone contacts.
+- Provider is not a future digital-product Seller/Publisher. No listing,
+  proposal, payment, dispute, forum, ranking, or KYC-document backend was added.
+
+## V36 Market identity assurance — deployed
+
+- D-030 and migration `0062` separate canonical Market identity from external
+  login proofs, revocable sessions, one-time challenges, verification facts, and
+  operator-reviewed risk signals. Existing password identities and participant
+  memberships are unchanged.
+- Password recovery/email verification are single-use and session-revoking as
+  appropriate. Google OIDC uses code flow, PKCE, state, nonce, signed-token
+  validation, and issuer+subject binding. Email matching never silently merges
+  accounts; an existing identity must authenticate and explicitly link Google.
+- Public V33 contains recovery, Google, verification, and session-security UI.
+  Returning Google users see one primary Google path; password login is revealed
+  only through an explicit alternative-action control.
+  Google is enabled in production with its secret mounted from an ignored
+  Docker secret file. Outbound email remains disabled; production capabilities
+  report Google available and email recovery/Facebook unavailable.
+- Repository tests are 231/231. A clean disposable database applied
+  `0001–0062` and the full Market smoke passed existing password login,
+  recovery replay prevention, old-session revocation, dual Customer/Provider
+  behavior, operator guards, inactive-identity session rejection, and immutable
+  evidence. Google activation was deployed after verified backup
+  `overva-20260829T095542Z`; production is API V36 / Public V33 / Web/Admin V31
+  / schema `0062`. Live Google smoke produced two different-email identities;
+  the current identity owns password plus Google credentials, one verified
+  Google fact, and one active Google session. Membership/operator/risk state is
+  still zero.
+- Do not bundle tenant SSO, Facebook, KYC documents, billing identity, listing,
+  proposal, engagement, review, payment, dispute, forum, or ranking into this
+  release.
 
 ## V35 Digital Storefront foundation — deployed
 
@@ -131,36 +193,43 @@ boundaries. Do not generalize legacy tenant behavior into OVERVA.
 
 ## Deployment evidence and rollback
 
-- Verified backup: `erp-v2/backups-production/overva-20260829T060223Z`.
+- Verified backup: `erp-v2/backups-production/overva-20260829T132335Z`.
 - Current API image:
-  `sha256:a750213878a4380bcfb7267258526669299f6a135a2e07240b4b033cf308004d`.
+  `sha256:e1e65e69e3fcb24bd5e5e3320d637e2bad5f5222dd59a5499b77330d76f962da`.
 - Current Public image:
-  `sha256:54f2546b9a472b6b871a2a57eaef5b805148e5e70149a51057d5142bf71a16e9`.
+  `sha256:8e78884ac48626f4aed06aeb66f6840f9666f828334058d062f4b02248ff9717`.
 - Current Web image:
   `sha256:5c2ad3eec659945c60d51ae39bf3d596b0f55736b0bd88bcc17217abed83e737`.
 - Previous API image:
-  `sha256:dadac6b8c740509851343d80e145505eb0fd81ca49f6c6dd8555ecfa81eb592e`.
+  `sha256:28077c52aaa0917726a3edc66df0b00719ce255db536243f5fdea3ff5f382edf`.
 - Previous Public image:
-  `sha256:6dd118b9ba3bce827820993f3e547505846d860072131971319ca0c06096a6c0`.
-- Migration `0059` is additive. The V32 application does not use Provider
-  application records, so a schema restore is not needed for an application-
-  only rollback, but any live
-  restore still requires an approved outage and full database/uploads restore.
-- Every Compose command that may recreate Caddy must use both
-  `docker-compose.production.yml` and `docker-compose.cloudflare.yml`.
+  `sha256:52853b71e7f77be948c9e35b49a4fb59e943e7c5c75ef35faa3b089ad674ece7`.
+- Migration `0063` is forward-compatible with the current bounded Market-identity
+  state. Application-only rollback requires identity compatibility review now
+  that Google is enabled and a linked external identity exists. Any live database
+  restore requires an approved outage and full database/uploads restore.
+- Production Compose commands must use `docker-compose.production.yml`,
+  `docker-compose.cloudflare.yml`, and `docker-compose.ai.yml`. The Cloudflare
+  overlay preserves the loopback tunnel origin; the AI egress overlay preserves
+  approved API outbound connectivity for Google OIDC and OpenAI. Omitting the
+  latter caused Google callback DNS `EAI_AGAIN` and was corrected after explicit
+  approval on 2026-08-29.
 
 ## Verified state
 
-- Tests: 222 passed, 0 failed.
-- Production DB: latest migration `0059`; Platform counts remain `15|7|53` and
+- Tests: 233 passed, 0 failed.
+- Production DB: latest migration `0063`; Platform counts remain `15|7|53` and
   active founder assignments/effective permissions remain `2|15`.
-- Production Market zero-state is `0` identities, `0` memberships, `0` Provider
-  applications, `0` active operators, and `0` audit events. Runtime can insert
-  audit evidence but cannot update, delete, or truncate it.
-- Production reverified `15|7|53`, two active founder assignments, and 15
-  effective permissions after `0059`; V33 changes no Platform authority.
+- Production Market identity state includes `2` different-email active
+  identities, `3` historical sessions (`1` active Google session), `1` active
+  Google external identity, `1` verified Google fact, and `0` risk signals.
+  The older identity has no active session; neither identity has a membership or
+  operator assignment. Runtime can insert audit evidence but cannot update,
+  delete, or truncate it.
+- Migration `0062` changes no Platform or tenant authority. Market auth
+  capabilities report Google enabled, with email recovery and Facebook disabled.
 - All seven production services healthy.
-- External Public V29 CSS/JS, API, public Home, tenant app, admin redirect, and
+- External Public V33 CSS/JS, API, public Home, tenant app, admin redirect, and
   status health passed. `/api/market/auth/me` returns the expected
   unauthenticated HTTP 401 through both local Caddy and the Cloudflare edge.
 - Windows AC/DC sleep and hibernate are `Never`; keep-awake PID 1276 had a
@@ -168,8 +237,6 @@ boundaries. Do not generalize legacy tenant behavior into OVERVA.
 
 ## Working-tree caution
 
-V27–V32 is committed as `514983b`. The deployed V33–V34 changes are
-uncommitted.
 `OVERVA.code-workspace` is a separate user workspace file and must not be
 included unless explicitly requested. Restricted-path Git status may falsely
 show deletions under `.tmp/pdfreader` and `erp-v2/.tools/pdfreader`; escalated

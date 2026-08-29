@@ -135,8 +135,16 @@ const requestDownloadButton = document.getElementById("requestDownloadButton");
 const marketAuthDialog = document.getElementById("marketAuthDialog");
 const marketLoginForm = document.getElementById("marketLoginForm");
 const marketRegisterForm = document.getElementById("marketRegisterForm");
+const marketRecoveryDialog = document.getElementById("marketRecoveryDialog");
+const marketRecoveryForm = document.getElementById("marketRecoveryForm");
+const marketResetForm = document.getElementById("marketResetForm");
+const marketSecurityDialog = document.getElementById("marketSecurityDialog");
 const providerApplicationDialog = document.getElementById("providerApplicationDialog");
+const providerGuideDialog = document.getElementById("providerGuideDialog");
 const providerApplicationForm = document.getElementById("providerApplicationForm");
+const providerPasswordStepUpForm = document.getElementById("providerPasswordStepUpForm");
+const providerPhoneRequestForm = document.getElementById("providerPhoneRequestForm");
+const providerPhoneConfirmForm = document.getElementById("providerPhoneConfirmForm");
 const storefrontProfileForm = document.getElementById("storefrontProfileForm");
 const storefrontManagerStatus = document.getElementById("storefrontManagerStatus");
 const storefrontManagerState = document.getElementById("storefrontManagerState");
@@ -146,6 +154,8 @@ const marketStorefrontGrid = document.getElementById("marketStorefrontGrid");
 const marketStorefrontEmpty = document.getElementById("marketStorefrontEmpty");
 const MARKET_TOKEN_KEY = "overva.market.token.v1";
 let marketIdentity = null;
+let marketAuthCapabilities = { emailRecovery:false, google:false, phoneVerification:false, stepUp:true, facebook:false };
+let providerReadiness = null;
 let pendingMarketAction = "";
 let pendingRequestSeed = null;
 const HOME_INTENT_HELP = "Асуудлаа нэг өгүүлбэрээр бичнэ үү. Дараагийн маягт төрөл, төсөв, хугацаа болон харагдах хүрээг цэгцэлнэ.";
@@ -414,7 +424,7 @@ function filterMarketRequests(searchText = "") {
 
 function showMarketView(view = "all") {
   const allowedViews = activeMarketRole === "provider"
-    ? ["all","storefront","proposals","deliveries","provider-rules"]
+    ? ["all","storefront","proposals","deliveries"]
     : activeMarketRole === "customer"
       ? ["all","mine","projects","labs","rules","request-detail"]
       : ["all"];
@@ -486,6 +496,33 @@ function storeMarketToken(token = "") {
   } catch { /* Session storage may be disabled. */ }
 }
 
+function storedMarketAuthMethod() {
+  try { return localStorage.getItem("overva.market.last_auth_method") || ""; }
+  catch { return ""; }
+}
+
+function syncMarketLoginOptions() {
+  const method = storedMarketAuthMethod();
+  const reminder = document.getElementById("marketAuthReminder");
+  const passwordLogin = document.getElementById("marketPasswordLogin");
+  const passwordToggle = document.getElementById("marketPasswordLoginToggle");
+  const preferGoogle = Boolean(marketAuthCapabilities.google && method === "google");
+  reminder.textContent = preferGoogle ? "Та өмнө нь Google-ээр нэвтэрсэн. Тэр account-аараа шууд үргэлжлүүлнэ үү." : "";
+  passwordLogin.classList.toggle("hidden", preferGoogle);
+  passwordToggle.classList.toggle("hidden", !preferGoogle);
+  passwordToggle.setAttribute("aria-expanded", String(!preferGoogle));
+  document.getElementById("marketGoogleDivider").classList.toggle("hidden", !marketAuthCapabilities.google);
+}
+
+function rememberMarketAuthMethod(method) {
+  try { localStorage.setItem("overva.market.last_auth_method", method); } catch { /* Optional device hint only. */ }
+  syncMarketLoginOptions();
+}
+
+function restoreMarketAuthReminder() {
+  syncMarketLoginOptions();
+}
+
 async function marketApi(path, options = {}) {
   const headers = { accept:"application/json", ...(options.body ? { "content-type":"application/json" } : {}), ...(options.headers || {}) };
   const token = marketToken();
@@ -499,6 +536,100 @@ async function marketApi(path, options = {}) {
     throw error;
   }
   return data;
+}
+
+async function loadMarketAuthCapabilities() {
+  try {
+    marketAuthCapabilities = await marketApi("/auth/capabilities");
+  } catch { marketAuthCapabilities = { emailRecovery:false, google:false, phoneVerification:false, stepUp:true, facebook:false }; }
+  document.getElementById("marketGoogleLogin").classList.toggle("hidden", !marketAuthCapabilities.google);
+  document.getElementById("marketForgotPassword").classList.toggle("hidden", !marketAuthCapabilities.emailRecovery);
+  syncMarketLoginOptions();
+}
+
+async function startGoogleAuth(link = false) {
+  const status = link ? document.getElementById("marketSecurityStatus") : document.getElementById("marketLoginError");
+  status.textContent = "Google нэвтрэх цонх руу шилжүүлж байна…";
+  try {
+    const data = await marketApi(link ? "/auth/google/link/start" : "/auth/google/start", { method: link ? "POST" : "GET" });
+    location.assign(data.url);
+  } catch (error) { status.textContent = error.message; }
+}
+
+async function handleMarketAuthReturn(params) {
+  const clean = () => history.replaceState({}, "", `${location.pathname}${location.hash || ""}`);
+  const authCode = params.get("market_auth_code");
+  const verifyToken = params.get("market_verify_token");
+  const resetToken = params.get("market_reset_token");
+  if (authCode) {
+    try {
+      const data = await marketApi("/auth/google/exchange", { method:"POST", body:JSON.stringify({ token:authCode }) });
+      storeMarketToken(data.token);
+      marketIdentity = data.identity;
+      rememberMarketAuthMethod("google");
+      renderMarketIdentity();
+    } catch (error) {
+      marketAuthDialog.showModal();
+      document.getElementById("marketLoginError").textContent = error.message;
+    }
+    clean();
+  } else if (verifyToken) {
+    try {
+      const data = await marketApi("/auth/email-verification/confirm", { method:"POST", body:JSON.stringify({ token:verifyToken }) });
+      if (marketIdentity?.id === data.identity?.id) marketIdentity = data.identity;
+    } catch (error) {
+      marketAuthDialog.showModal();
+      document.getElementById("marketLoginError").textContent = error.message;
+    } finally { clean(); }
+  } else if (resetToken) {
+    marketResetForm.elements.token.value = resetToken;
+    marketRecoveryForm.classList.add("hidden");
+    marketResetForm.classList.remove("hidden");
+    marketRecoveryDialog.showModal();
+    clean();
+  } else if (params.get("market_auth_error")) {
+    const messages = {
+      existing_email_link_required:"Энэ имэйлтэй бүртгэл байна. Эхлээд имэйл, нууц үгээрээ ороод Google account-аа холбоно уу.",
+      google_already_linked:"Энэ Google account өөр Market identity-тай аль хэдийн холбоотой байна.",
+      google_state_expired:"Google нэвтрэх хүсэлтийн хугацаа дууссан. Дахин оролдоно уу.",
+      google_reauth_mismatch:"Сонгосон Google account энэ Market identity-тай тохирохгүй байна.",
+      google_reauth_session_expired:"Market session дууссан байна. Дахин нэвтэрнэ үү.",
+      identity_inactive:"Энэ Market бүртгэл идэвхгүй байна. Дэмжлэгтэй холбогдоно уу.",
+    };
+    marketAuthDialog.showModal();
+    document.getElementById("marketLoginError").textContent = messages[params.get("market_auth_error")] || "Google нэвтрэлт амжилтгүй боллоо.";
+    clean();
+  } else if (params.get("market_google_linked")) {
+    clean();
+    await restoreMarketIdentity();
+    openMarketSecurity();
+  } else if (params.get("market_google_reauthenticated")) {
+    clean();
+    await restoreMarketIdentity();
+    openProviderApplication();
+  }
+}
+
+async function openMarketSecurity() {
+  if (!marketIdentity) return;
+  const methods = [marketIdentity.email_verified_at ? "баталгаажсан имэйл" : "баталгаажаагүй имэйл",
+    ...(marketIdentity.external_auth_methods || []).map(value => value === "google" ? "Google" : value)];
+  document.getElementById("marketSecuritySummary").textContent = `Нэвтрэх арга: ${methods.join(" · ")}`;
+  document.getElementById("marketGoogleLink").classList.toggle("hidden", !marketAuthCapabilities.google || (marketIdentity.external_auth_methods || []).includes("google"));
+  document.getElementById("marketGoogleUnlink").classList.toggle("hidden", !(marketIdentity.external_auth_methods || []).includes("google"));
+  document.getElementById("marketVerifyEmail").classList.toggle("hidden", Boolean(marketIdentity.email_verified_at) || !marketAuthCapabilities.emailRecovery);
+  document.getElementById("marketSecurityStatus").textContent = "";
+  const sessionList = document.getElementById("marketSessionList");
+  sessionList.textContent = "Идэвхтэй session-уудыг уншиж байна…";
+  marketSecurityDialog.showModal();
+  try {
+    const sessions = await marketApi("/auth/sessions");
+    sessionList.replaceChildren(...sessions.items.map(item => {
+      const row = document.createElement("small");
+      row.textContent = `${item.current ? "Энэ төхөөрөмж" : "Бусад төхөөрөмж"} · ${item.auth_method} · ${new Date(item.last_seen_at).toLocaleString("mn-MN")}`;
+      return row;
+    }));
+  } catch (error) { sessionList.textContent = error.message; }
 }
 
 function formatMnt(value) {
@@ -795,7 +926,46 @@ async function openRequestDialog(seed = {}) {
   }
 }
 
-function openProviderApplication() {
+function renderProviderOnboarding() {
+  const readiness = providerReadiness || {};
+  const applicationStatus = readiness.providerApplication?.status;
+  const review = ["submitted","under_review","approved","rejected"].includes(applicationStatus);
+  const step = review ? "review" : !readiness.stepUpValid ? "account" : !readiness.phoneVerified ? "phone" : "profile";
+  const order = ["account","phone","profile","review"];
+  const currentIndex = order.indexOf(step);
+  document.querySelectorAll("[data-provider-step]").forEach(item => {
+    const index = order.indexOf(item.dataset.providerStep);
+    item.classList.toggle("active", index === currentIndex);
+    item.classList.toggle("done", index < currentIndex || (step === "review" && index < 3));
+  });
+  document.getElementById("providerStepUpPanel").classList.toggle("hidden", step !== "account");
+  document.getElementById("providerPhonePanel").classList.toggle("hidden", step !== "phone");
+  providerApplicationForm.classList.toggle("hidden", step !== "profile");
+  document.getElementById("providerGoogleStepUp").classList.toggle("hidden",
+    !(marketIdentity?.external_auth_methods || []).includes("google"));
+  providerPasswordStepUpForm.classList.toggle("hidden", !marketIdentity?.has_password);
+  document.getElementById("providerStepUpStatus").textContent = readiness.stepUpValid
+    ? "Бүртгэл баталгаажлаа." : "Google эсвэл одоогийн нууц үгээрээ дахин баталгаажуулна уу.";
+  document.getElementById("providerPhoneStatus").textContent = readiness.phoneVerified
+    ? `${readiness.maskedPhone} баталгаажсан.`
+    : readiness.phoneAvailable
+      ? "Монголын 8 оронтой дугаар эсвэл + улсын кодтой дугаар оруулна."
+      : "Утас баталгаажуулах үйлчилгээ хараахан тохируулагдаагүй байна.";
+  providerPhoneRequestForm.classList.toggle("hidden", !readiness.phoneAvailable || readiness.phoneVerified);
+  if (review) {
+    const labels = { submitted:"Хүсэлт илгээгдсэн. Market operator хяналтаа эхлүүлэхийг хүлээж байна.",
+      under_review:"Хүсэлт Market operator-ын хяналтад байна.",
+      approved:"Гүйцэтгэгчийн хүсэлт зөвшөөрөгдсөн.", rejected:"Хүсэлт татгалзсан. Шалтгааныг account төлөвөөс харна уу." };
+    document.getElementById("providerOnboardingStatus").textContent = labels[applicationStatus] || "";
+  }
+}
+
+async function refreshProviderReadiness() {
+  providerReadiness = await marketApi("/auth/provider-readiness");
+  renderProviderOnboarding();
+}
+
+async function openProviderApplication() {
   if (!marketIdentity) {
     pendingMarketAction = "provider";
     marketAuthDialog.showModal();
@@ -805,13 +975,16 @@ function openProviderApplication() {
     requestMarketRole("provider");
     return;
   }
-  if (["submitted","under_review"].includes(marketIdentity.provider_application?.status)) {
-    document.getElementById("marketIdentityMemberships").textContent = "Гүйцэтгэгчийн хүсэлт Market operator-ын шалгалтад байна.";
-    return;
-  }
   providerApplicationForm.reset();
+  providerPasswordStepUpForm.reset();
+  providerPhoneRequestForm.reset();
+  providerPhoneConfirmForm.reset();
+  providerPhoneConfirmForm.classList.add("hidden");
   document.getElementById("providerApplicationError").textContent = "";
+  document.getElementById("providerOnboardingStatus").textContent = "";
   providerApplicationDialog.showModal();
+  try { await refreshProviderReadiness(); }
+  catch (error) { document.getElementById("providerOnboardingStatus").textContent = error.message; }
 }
 
 function continuePendingMarketAction() {
@@ -1434,11 +1607,89 @@ document.getElementById("marketAuthOpen").addEventListener("click", () => {
   pendingRequestSeed = null;
   marketAuthDialog.showModal();
 });
+document.querySelectorAll("[data-provider-guide-open]").forEach(button => button.addEventListener("click", () => {
+  providerGuideDialog.showModal();
+}));
+document.getElementById("marketGoogleLogin").addEventListener("click", () => startGoogleAuth(false));
+document.getElementById("marketPasswordLoginToggle").addEventListener("click", () => {
+  const passwordLogin = document.getElementById("marketPasswordLogin");
+  const passwordToggle = document.getElementById("marketPasswordLoginToggle");
+  passwordLogin.classList.remove("hidden");
+  passwordToggle.classList.add("hidden");
+  passwordToggle.setAttribute("aria-expanded", "true");
+  marketLoginForm.elements.email.focus();
+});
+document.getElementById("marketForgotPassword").addEventListener("click", () => {
+  marketAuthDialog.close();
+  marketRecoveryForm.classList.remove("hidden");
+  marketResetForm.classList.add("hidden");
+  document.getElementById("marketRecoveryStatus").textContent = "";
+  marketRecoveryDialog.showModal();
+});
+marketRecoveryForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  const status = document.getElementById("marketRecoveryStatus");
+  status.textContent = "Илгээж байна…";
+  try {
+    const data = await marketApi("/auth/password/forgot", {
+      method:"POST", body:JSON.stringify(Object.fromEntries(new FormData(marketRecoveryForm)))
+    });
+    status.textContent = data.message;
+  } catch (error) { status.textContent = error.message; }
+});
+marketResetForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  const status = document.getElementById("marketResetStatus");
+  const values = Object.fromEntries(new FormData(marketResetForm));
+  if (values.password !== values.passwordConfirm) {
+    status.textContent = "Нууц үгүүд ижил байх ёстой.";
+    return;
+  }
+  try {
+    await marketApi("/auth/password/reset", { method:"POST", body:JSON.stringify({ token:values.token, password:values.password }) });
+    marketIdentity = null;
+    storeMarketToken();
+    marketResetForm.reset();
+    marketRecoveryDialog.close();
+    marketAuthDialog.showModal();
+    document.getElementById("marketLoginError").textContent = "Нууц үг шинэчлэгдлээ. Шинэ нууц үгээрээ нэвтэрнэ үү.";
+  } catch (error) { status.textContent = error.message; }
+});
+document.getElementById("marketSecurityOpen").addEventListener("click", openMarketSecurity);
+document.getElementById("marketGoogleLink").addEventListener("click", () => startGoogleAuth(true));
+document.getElementById("marketGoogleUnlink").addEventListener("click", async() => {
+  const status = document.getElementById("marketSecurityStatus");
+  try {
+    const data = await marketApi("/auth/google/unlink", { method:"POST" });
+    marketIdentity = data.identity;
+    renderMarketIdentity();
+    marketSecurityDialog.close();
+    openMarketSecurity();
+  } catch (error) { status.textContent = error.message; }
+});
+document.getElementById("marketVerifyEmail").addEventListener("click", async() => {
+  const status = document.getElementById("marketSecurityStatus");
+  try {
+    await marketApi("/auth/email-verification/request", { method:"POST" });
+    status.textContent = "Баталгаажуулах холбоосыг имэйл рүү илгээлээ.";
+  } catch (error) { status.textContent = error.message; }
+});
+document.getElementById("marketRevokeSessions").addEventListener("click", async() => {
+  const status = document.getElementById("marketSecurityStatus");
+  try {
+    await marketApi("/auth/sessions/revoke-all", { method:"POST" });
+    marketIdentity = null;
+    storeMarketToken();
+    marketSecurityDialog.close();
+    renderMarketIdentity();
+  } catch (error) { status.textContent = error.message; }
+});
 document.querySelectorAll("[data-market-auth-tab]").forEach(button => button.addEventListener("click", () => {
   const register = button.dataset.marketAuthTab === "register";
   document.querySelectorAll("[data-market-auth-tab]").forEach(item => item.classList.toggle("active", item === button));
   marketLoginForm.classList.toggle("hidden", register);
   marketRegisterForm.classList.toggle("hidden", !register);
+  if (!register) syncMarketLoginOptions();
 }));
 marketLoginForm.addEventListener("submit", async event => {
   event.preventDefault();
@@ -1449,6 +1700,7 @@ marketLoginForm.addEventListener("submit", async event => {
     const data = await marketApi("/auth/login", { method:"POST", body:JSON.stringify(values) });
     storeMarketToken(data.token);
     marketIdentity = data.identity;
+    rememberMarketAuthMethod("password");
     renderMarketIdentity();
     marketLoginForm.reset();
     marketAuthDialog.close();
@@ -1464,6 +1716,7 @@ marketRegisterForm.addEventListener("submit", async event => {
     const data = await marketApi("/auth/register", { method:"POST", body:JSON.stringify(values) });
     storeMarketToken(data.token);
     marketIdentity = data.identity;
+    rememberMarketAuthMethod("password");
     renderMarketIdentity();
     marketRegisterForm.reset();
     marketAuthDialog.close();
@@ -1474,6 +1727,56 @@ document.querySelectorAll("[data-market-participation-action]").forEach(button =
   if (button.dataset.marketParticipationAction === "provider") openProviderApplication();
   else openRequestDialog();
 }));
+document.getElementById("providerGoogleStepUp").addEventListener("click", async() => {
+  const status = document.getElementById("providerOnboardingStatus");
+  status.textContent = "Google баталгаажуулалт руу шилжүүлж байна…";
+  try {
+    const data = await marketApi("/auth/google/reauth/start", { method:"POST" });
+    location.assign(data.url);
+  } catch (error) { status.textContent = error.message; }
+});
+providerPasswordStepUpForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  const status = document.getElementById("providerOnboardingStatus");
+  status.textContent = "Account-ыг баталгаажуулж байна…";
+  try {
+    await marketApi("/auth/step-up/password", {
+      method:"POST", body:JSON.stringify(Object.fromEntries(new FormData(providerPasswordStepUpForm)))
+    });
+    providerPasswordStepUpForm.reset();
+    status.textContent = "Account баталгаажлаа.";
+    await refreshProviderReadiness();
+  } catch (error) { status.textContent = error.message; }
+});
+providerPhoneRequestForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  const status = document.getElementById("providerOnboardingStatus");
+  status.textContent = "Баталгаажуулах код илгээж байна…";
+  try {
+    const data = await marketApi("/auth/phone/request", {
+      method:"POST", body:JSON.stringify(Object.fromEntries(new FormData(providerPhoneRequestForm)))
+    });
+    providerPhoneConfirmForm.classList.remove("hidden");
+    document.getElementById("providerPhoneStatus").textContent = `${data.maskedPhone} дугаарт 6 оронтой код илгээлээ.`;
+    status.textContent = data.testCode ? `TEST код: ${data.testCode}` : "Код 5 минут хүчинтэй.";
+    providerPhoneConfirmForm.elements.code.focus();
+  } catch (error) { status.textContent = error.message; }
+});
+providerPhoneConfirmForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  const status = document.getElementById("providerOnboardingStatus");
+  status.textContent = "Кодыг шалгаж байна…";
+  try {
+    const data = await marketApi("/auth/phone/confirm", {
+      method:"POST", body:JSON.stringify(Object.fromEntries(new FormData(providerPhoneConfirmForm)))
+    });
+    marketIdentity = data.identity;
+    renderMarketIdentity();
+    providerPhoneConfirmForm.reset();
+    status.textContent = `${data.maskedPhone} баталгаажлаа.`;
+    await refreshProviderReadiness();
+  } catch (error) { status.textContent = error.message; }
+});
 providerApplicationForm.addEventListener("submit", async event => {
   event.preventDefault();
   const errorElement = document.getElementById("providerApplicationError");
@@ -1496,6 +1799,9 @@ providerApplicationForm.addEventListener("submit", async event => {
     providerApplicationDialog.close();
   } catch (error) {
     errorElement.textContent = error.message;
+    if (["MARKET_STEP_UP_REQUIRED","MARKET_PHONE_VERIFICATION_REQUIRED"].includes(error.code)) {
+      refreshProviderReadiness().catch(() => {});
+    }
   }
 });
 storefrontProfileForm.addEventListener("submit", async event => {
@@ -1746,4 +2052,5 @@ const initialParams = new URLSearchParams(location.search);
 if (initialParams.get("view") === "connectors") showPublicConnectors();
 else showMarketArea(initialParams.get("area") || (initialParams.get("role") === "provider" ? "freelance" : "products"));
 loadPublicStorefronts();
-restoreMarketIdentity();
+restoreMarketAuthReminder();
+loadMarketAuthCapabilities().then(() => handleMarketAuthReturn(initialParams)).then(() => restoreMarketIdentity());

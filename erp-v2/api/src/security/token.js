@@ -25,9 +25,9 @@ function signPlatformToken(adminId) {
   });
 }
 
-function signMarketToken(identityId) {
+function signMarketToken(identityId, sessionId = undefined) {
   const config = loadConfig();
-  return jwt.sign({ kind: "market" }, config.JWT_SECRET, {
+  return jwt.sign({ kind: "market", ...(sessionId ? { sid: sessionId } : {}) }, config.JWT_SECRET, {
     subject: identityId,
     issuer: config.JWT_ISSUER,
     audience: config.JWT_AUDIENCE,

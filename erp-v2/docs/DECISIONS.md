@@ -447,6 +447,74 @@ dispute, forum, and social-like backends remain out of scope. A later review may
 be authored only by the actual Customer tied to a completed engagement; guests,
 unrelated identities, and the Provider themself must never create trust scores.
 
+### D-030 — One Market identity may have multiple proof methods, never merged authority
+
+Accepted: 2026-08-29
+
+A person uses one canonical Market identity and may prove control through a
+password, a verified email recovery channel, and explicitly linked external
+identity providers. Authentication credentials are not Customer/Provider
+memberships and are not Market operator, Platform founder, tenant, or Group
+authority. Adding or switching a login method must therefore change no business
+permission.
+
+External accounts are keyed by provider issuer plus immutable subject, not by
+display name or email. A verified email claim may establish a new identity only
+when no active Market identity already owns that email. When one exists, the
+user must authenticate that identity and explicitly link the external account;
+silent email-based merge is forbidden. The last usable credential cannot be
+removed. Facebook, phone/person/business KYC, payment identity, and federation
+with tenant or Platform accounts remain future reviewed contracts.
+
+Market sessions are revocable server-side. Recovery, verification, OIDC state,
+and login exchange codes are short-lived, hashed at rest, single-use, and
+audited. OIDC uses authorization code flow with PKCE, state, nonce, issuer,
+audience, expiry, signature, and verified-email validation. Raw KYC documents
+are not stored in this slice; only attributable verification facts and
+privacy-safe hashes are retained. Possible duplicate-account signals enter a
+separate operator-only review queue and never grant, suspend, merge, or delete
+authority automatically.
+
+Migration `0062` is additive except that password hashes become nullable for
+external-provider-only identities. Existing identities and memberships are not
+rewritten. Email and Google providers are fail-closed feature flags and must
+remain disabled until their separate secrets, callback registration, delivery
+behavior, and operational rollback have been verified. Listing, proposal,
+engagement, review, transaction payment, dispute, forum, and ranking backends
+remain out of scope.
+
+### D-031 — Provider onboarding requires bounded assurance, not a Seller role
+
+Accepted: 2026-08-29
+
+Applying to become a Provider is a sensitive capability request. Every new
+policy-1 application requires a live verified phone and a successful step-up
+on the current revocable Market session within ten minutes. Password and linked
+Google proof are equivalent step-up methods, but neither proof grants Provider
+membership. Only a different live Market operator may review and approve the
+application under the existing lifecycle and four-eyes boundary.
+
+Phone numbers are encrypted for recovery/operations and separately represented
+by a keyed fingerprint for uniqueness checks. OTP values are short-lived,
+bcrypt-protected, single-use, attempt-bounded, rate-limited, and audited. A
+fingerprint decision is serialized in PostgreSQL. A phone collision never
+merges accounts and never grants authority; it produces a privacy-safe risk
+signal for operator review. Provider approval rechecks that the recorded phone
+verification and its contact remain live.
+
+Existing policy-0 Provider applications and already active Provider memberships
+remain compatible. The new API always creates policy-1 applications. Phone
+assurance is not person/business KYC, payment identity, or a guarantee of work
+quality, and raw KYC documents are not introduced.
+
+`Provider` means permission to participate in reviewed custom-work supply.
+`Seller` or `Publisher` for future digital-product publication is a distinct
+capability and onboarding contract. It must not be inferred from Provider
+status, a verified phone, Google login, Market operator authority, Platform
+founder authority, or tenant organization access. Migration `0063` and Public
+V34 therefore stop at Provider assurance; listing, proposal, payment, dispute,
+forum, ranking, Seller/Publisher, and KYC-document backends remain out of scope.
+
 ## Active Hypotheses
 
 ### H-001 — Customer journey

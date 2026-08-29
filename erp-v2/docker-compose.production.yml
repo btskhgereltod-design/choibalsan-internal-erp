@@ -86,10 +86,16 @@ services:
       DATABASE_URL_FILE: /run/secrets/app_database_url
       JWT_SECRET_FILE: /run/secrets/jwt_secret
       OPENAI_API_KEY_FILE: /run/secrets/openai_api_key
+      MARKET_GOOGLE_OIDC_CLIENT_SECRET_FILE: /run/secrets/market_google_oidc_client_secret
+      MARKET_SMS_TOKEN_FILE: /run/secrets/market_sms_token
+      MARKET_PHONE_FINGERPRINT_KEY_FILE: /run/secrets/market_phone_fingerprint_key
     secrets:
       - app_database_url
       - jwt_secret
       - openai_api_key
+      - market_google_oidc_client_secret
+      - market_sms_token
+      - market_phone_fingerprint_key
     read_only: true
     tmpfs:
       - /tmp
@@ -144,10 +150,16 @@ services:
       NODE_ENV: production
       DATABASE_URL_FILE: /run/secrets/migration_database_url
       JWT_SECRET_FILE: /run/secrets/jwt_secret
+      MARKET_GOOGLE_OIDC_CLIENT_SECRET_FILE: /run/secrets/market_google_oidc_client_secret
+      MARKET_SMS_TOKEN_FILE: /run/secrets/market_sms_token
+      MARKET_PHONE_FINGERPRINT_KEY_FILE: /run/secrets/market_phone_fingerprint_key
       APP_DATABASE_USER: ${APP_DATABASE_USER:?APP_DATABASE_USER is required}
     secrets:
       - migration_database_url
       - jwt_secret
+      - market_google_oidc_client_secret
+      - market_sms_token
+      - market_phone_fingerprint_key
     read_only: true
     tmpfs:
       - /tmp
@@ -226,10 +238,16 @@ services:
       NODE_ENV: production
       DATABASE_URL_FILE: /run/secrets/app_database_url
       JWT_SECRET_FILE: /run/secrets/jwt_secret
+      MARKET_GOOGLE_OIDC_CLIENT_SECRET_FILE: /run/secrets/market_google_oidc_client_secret
+      MARKET_SMS_TOKEN_FILE: /run/secrets/market_sms_token
+      MARKET_PHONE_FINGERPRINT_KEY_FILE: /run/secrets/market_phone_fingerprint_key
       WEBHOOK_WORKER_INTERVAL_MS: ${WEBHOOK_WORKER_INTERVAL_MS:-30000}
     secrets:
       - app_database_url
       - jwt_secret
+      - market_google_oidc_client_secret
+      - market_sms_token
+      - market_phone_fingerprint_key
     read_only: true
     tmpfs:
       - /tmp
@@ -259,6 +277,12 @@ secrets:
     file: ./secrets/jwt_secret
   openai_api_key:
     file: ./secrets/openai_api_key
+  market_google_oidc_client_secret:
+    file: ./secrets/market_google_oidc_client_secret
+  market_sms_token:
+    file: ./secrets/market_sms_token
+  market_phone_fingerprint_key:
+    file: ./secrets/market_phone_fingerprint_key
 
 networks:
   edge:

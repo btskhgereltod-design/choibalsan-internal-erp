@@ -35,3 +35,42 @@ test("AI stays disabled unless explicitly enabled", () => {
   const enabled = loadConfig({ ...base, AI_ENABLED: "true", OPENAI_API_KEY: "sk-test-012345678901234567890123456789" });
   assert.equal(enabled.ai.enabled, true);
 });
+
+test("Market recovery, Google login, and SMS verification remain fail-closed", () => {
+  const disabled = loadConfig(base);
+  assert.equal(disabled.marketAuth.email.enabled, false);
+  assert.equal(disabled.marketAuth.google.enabled, false);
+  assert.equal(disabled.marketAuth.sms.enabled, false);
+  assert.throws(
+    () => loadConfig({ ...base, MARKET_EMAIL_ENABLED: "true" }),
+    /enabled Market email requires endpoint, token, and sender/
+  );
+  assert.throws(
+    () => loadConfig({ ...base, MARKET_GOOGLE_OIDC_ENABLED: "true" }),
+    /enabled Market Google OIDC requires client and callback configuration/
+  );
+  assert.throws(
+    () => loadConfig({ ...base, MARKET_SMS_ENABLED: "true" }),
+    /enabled Market SMS requires endpoint, token, sender, and phone fingerprint key/
+  );
+  assert.throws(
+    () => loadConfig({
+      ...base,
+      MARKET_SMS_ENABLED: "true",
+      MARKET_SMS_ENDPOINT: "https://sms.example.test/send",
+      MARKET_SMS_TOKEN: "__MARKET_SMS_TOKEN_NOT_CONFIGURED__",
+      MARKET_SMS_SENDER: "OVERVA",
+      MARKET_PHONE_FINGERPRINT_KEY: "__MARKET_PHONE_FINGERPRINT_KEY_NOT_CONFIGURED__",
+    }),
+    /enabled Market SMS requires endpoint, token, sender, and phone fingerprint key/
+  );
+  const sms = loadConfig({
+    ...base,
+    MARKET_SMS_ENABLED: "true",
+    MARKET_SMS_ENDPOINT: "https://sms.example.test/send",
+    MARKET_SMS_TOKEN: "sms-test-token",
+    MARKET_SMS_SENDER: "OVERVA",
+    MARKET_PHONE_FINGERPRINT_KEY: "market-phone-test-fingerprint-key-2026",
+  });
+  assert.equal(sms.marketAuth.sms.enabled, true);
+});

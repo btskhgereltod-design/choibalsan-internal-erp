@@ -16,6 +16,24 @@ This runbook prepares `overva.com` without changing Namecheap or the current LAN
 | `map.overva.com` | `/api/map/*`, `/api/gps/*` | Existing GIS/GPS APIs; map UI remains in the main app |
 | `status.overva.com` | live `/health` plus status page | Exposes no database sizes, tenant counts or admin diagnostics |
 
+### Market Provider phone-assurance preparation
+
+Production Compose mounts `secrets/market_sms_token` and
+`secrets/market_phone_fingerprint_key` into API, migration, and optional worker
+containers. The real files are ignored by Git; only `.example` guidance is
+tracked. Generate the fingerprint key once with:
+
+```powershell
+node ops/prepare-market-phone-fingerprint-key.js
+```
+
+Do not rotate that key after verified phone fingerprints exist. Paste the real
+provider token into `secrets/market_sms_token`, then set the provider-specific
+`MARKET_SMS_ENDPOINT` and `MARKET_SMS_SENDER` in `.env.production`. Keep
+`MARKET_SMS_ENABLED=false` until a provider sandbox request, real delivery,
+wrong/expired/reused OTP, rate-limit, and rollback checks pass. Placeholder
+secrets are rejected if the flag is enabled.
+
 ## Namecheap DNS records
 
 Replace `SERVER_PUBLIC_IPV4` with the production server's static public IPv4. In Namecheap open **Domain List → overva.com → Advanced DNS** and add these records only when the server and firewall are ready. This repository does not make DNS changes.
@@ -85,19 +103,20 @@ Caddy obtains and renews public certificates after DNS points to the server and 
 ### Cloudflare Tunnel deployment
 
 The current `overva.com` host uses Cloudflare Tunnel instead of exposing Caddy
-directly. Every Compose command that can create or recreate Caddy **must** add
-the Cloudflare overlay; otherwise port `127.0.0.1:4180` disappears and the
-public hostnames return Cloudflare 502 errors:
+directly. Production Compose commands **must** add both the Cloudflare and AI
+egress overlays. Omitting Cloudflare removes `127.0.0.1:4180` and causes public
+502 errors; omitting AI egress leaves the API on the internal backend network
+and breaks approved outbound providers such as Google OIDC and OpenAI:
 
 ```sh
 docker compose --env-file .env.production \
-  -f docker-compose.production.yml -f docker-compose.cloudflare.yml config --quiet
+  -f docker-compose.production.yml -f docker-compose.cloudflare.yml -f docker-compose.ai.yml config --quiet
 docker compose --env-file .env.production \
-  -f docker-compose.production.yml -f docker-compose.cloudflare.yml build
+  -f docker-compose.production.yml -f docker-compose.cloudflare.yml -f docker-compose.ai.yml build
 docker compose --env-file .env.production \
-  -f docker-compose.production.yml -f docker-compose.cloudflare.yml up -d --wait
+  -f docker-compose.production.yml -f docker-compose.cloudflare.yml -f docker-compose.ai.yml up -d --wait
 docker compose --env-file .env.production \
-  -f docker-compose.production.yml -f docker-compose.cloudflare.yml ps
+  -f docker-compose.production.yml -f docker-compose.cloudflare.yml -f docker-compose.ai.yml ps
 ```
 
 The overlay binds plain HTTP only to loopback (`127.0.0.1:4180`). Cloudflare

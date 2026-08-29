@@ -18,6 +18,110 @@ validated at enterprise scale.
   restore guidance, health monitoring, and restart policies exist.
 - Database and internal service ports are not intended to be public.
 
+### Production release V37 — Provider onboarding assurance
+
+- Migration `0063` adds a recent-authentication timestamp to revocable Market
+  sessions, encrypted phone contacts, keyed phone fingerprints, bcrypt-protected
+  single-use OTP challenges, bounded attempts, collision risk signals, and
+  attributable audit links. A verified phone is assurance evidence only; it
+  grants no Customer, Provider, Market operator, Platform, or tenant authority.
+- A new Provider application requires both a step-up performed within ten
+  minutes and a live verified phone fact. Password identities re-enter their
+  current password; Google-linked identities may reauthenticate with the exact
+  linked Google issuer and subject. Existing policy-0 applications and active
+  Provider memberships remain compatible.
+- Phone ownership decisions are serialized by a database advisory lock over the
+  blinded fingerprint. The same verified phone cannot silently create or merge
+  identities; a collision creates an operator-review risk signal. Approval
+  rechecks the live phone contact and verification fact before issuing Provider
+  membership.
+- Public V34 implements a four-step Provider onboarding dialog: account
+  confirmation, phone verification, professional profile, and review state.
+  The same onboarding and Provider sidebar open one OVERVA-authored
+  ten-principle contractor guide covering capability honesty, scope, plain
+  language, confidentiality, evidence, communication, acceptance, and
+  completed-engagement-only reviews. It is static editorial guidance and adds
+  no article publishing, likes, forum persistence, or reputation authority.
+  SMS remains fail-closed and disabled until a real provider endpoint, token,
+  sender, and fingerprint key are provisioned. Test delivery exposes OTPs only
+  under `NODE_ENV=test`.
+- Production preparation now mounts the SMS token and phone-fingerprint key as
+  ignored Docker secrets across API, migration, and optional worker services.
+  A one-time 64-character fingerprint key has been generated without disclosure,
+  the SMS token remains a fail-closed placeholder, and `.env.production`
+  explicitly keeps `MARKET_SMS_ENABLED=false`. All three production overlays
+  pass `docker compose config --quiet` together.
+- All 233 repository tests pass. A clean disposable PostgreSQL 16 run applied
+  migrations `0001–0063` and passed the full Market integration flow, including
+  stale-session denial, password step-up, phone OTP, duplicate application
+  prevention, operator-only review/approval, audit evidence, and unchanged
+  Customer/Provider authority boundaries. The disposable container was removed.
+- V37 was production-deployed after verified backup
+  `overva-20260829T132335Z`. Production is API V37, Public V34, Web/Admin V31,
+  and schema `0063`. All seven services are healthy; local Caddy and Cloudflare
+  Home/API/App/Admin/Status checks return 200, guest Provider readiness returns
+  401, and external V34 assets plus the contractor guide are visible. Google
+  remains enabled; phone verification truthfully reports unavailable while SMS
+  remains disabled. Production has two Market identities and zero memberships,
+  operator assignments, Provider applications, risk signals, or phone contacts.
+  Seller/Publisher registration is a separate future capability; listings,
+  proposals, payments, disputes, forum, ranking, and KYC-document backends
+  remain out of scope.
+
+### Production release V36 — Market identity assurance
+
+- Migration `0062` keeps one canonical Market identity while separating its
+  external login credentials, revocable sessions, one-time authentication challenges,
+  verification facts, and operator-reviewed risk signals. Existing password
+  identities and Customer/Provider memberships are preserved; credentials and
+  verification facts grant no membership, Market operator, Platform founder,
+  or tenant authority.
+- Market tokens now name a live database session. Logout, password reset, and
+  “all devices” revocation take effect server-side without waiting for JWT
+  expiry. Password recovery and email verification use short-lived, hashed,
+  single-use challenges and generic account-enumeration-safe responses.
+- Optional Google OIDC uses authorization code flow, PKCE, state, nonce, signed
+  ID-token validation, and the stable Google issuer plus subject as the account
+  key. Matching email alone never merges identities: an existing password
+  identity must authenticate first and explicitly link Google. Removing the
+  last login credential is rejected.
+- Public V33 adds Google entry/link controls, recovery, verification, and an
+  active-session view. Returning Google users now see Google as the single
+  primary path; email/password stays behind an explicit alternative-action
+  disclosure. Email delivery remains feature-flagged off. Google OIDC
+  is enabled in production with its Client Secret mounted from an ignored
+  Docker secret file; production capabilities report Google available while
+  email recovery and Facebook remain unavailable.
+- Possible email/external-identity collisions become privacy-safe risk signals.
+  Only a live Market operator can list or review them, and an operator cannot
+  review a signal involving their own identity. Review creates append-only
+  evidence and changes no participant authority by itself.
+- All 231 repository tests pass. A clean disposable PostgreSQL/API run applied
+  migrations `0001–0062` and passed password-user regression, session-bound
+  tokens, single-use recovery, old-session revocation, Customer/Provider
+  lifecycle regression, operator-only risk access, and audit immutability.
+  Google signature/issuer/audience/expiry/nonce/verified-email validation is
+  covered with a locally signed OIDC test token. Session creation now also
+  rejects an inactive identity before issuing any token.
+- V36 Google activation was production-deployed after verified backup
+  `overva-20260829T095542Z`. Production is API V36, Public V33, Web/Admin V31,
+  and schema `0062`. Live smoke now has two active identities with different
+  normalized emails: one older unused password identity and one current identity
+  holding both password and Google credentials. The current identity has one
+  verified Google fact and one active Google session; memberships, operator
+  assignments, and risk signals remain zero. All seven services are healthy;
+  Cloudflare
+  Home/API/App/Admin/Status checks passed, and auth capabilities report Google
+  enabled with email recovery and Facebook disabled. Google authorization
+  preflight verified the Client ID, callback, state, nonce, and PKCE-S256 without
+  exposing the authorization URL or secret. The first live callback exposed a
+  missing outbound overlay (`EAI_AGAIN`); production API was reattached to the
+  existing `ai-egress` network after explicit approval, and Google DNS/TLS probes
+  then passed. Deployed API image is
+  `sha256:28077c52aaa0917726a3edc66df0b00719ce255db536243f5fdea3ff5f382edf`;
+  Public image is
+  `sha256:52853b71e7f77be948c9e35b49a4fb59e943e7c5c75ef35faa3b089ad674ece7`.
+
 ### Production release V35 — Digital Storefront foundation
 
 - Migration `0061` adds versioned storefront plans, one Provider-owned digital

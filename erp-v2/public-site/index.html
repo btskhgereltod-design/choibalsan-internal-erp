@@ -6,13 +6,13 @@
   <meta name="description" content="OVERVA — байгууллагын цахим хэрэгцээг бүтэцтэй хүсэлт болгож, тохирох хэрэгжүүлэх замыг сонгон, ажлыг pilot-аас production хүртэл хяналттай хүргэх орчин.">
   <meta name="color-scheme" content="light">
   <title>OVERVA — Байгууллагын цахим хэрэгцээний зах</title>
-  <link rel="stylesheet" href="/site.css?v=31">
+  <link rel="stylesheet" href="/site.css?v=34">
   <script src="/conversation-memory.js?v=15" defer></script>
   <script src="/workspace-lifecycle.js?v=14" defer></script>
   <script src="/workspace-registry.js?v=14" defer></script>
   <script src="/workspace-intake.js?v=14.1" defer></script>
   <script src="/request-draft-registry.js?v=3" defer></script>
-  <script src="/site.js?v=31" defer></script>
+  <script src="/site.js?v=34" defer></script>
 </head>
 <body>
   <section class="portfolio-home products-area" id="portfolioHome" aria-label="OVERVA үндсэн нүүр">
@@ -42,12 +42,12 @@
         <button type="button" data-market-view="deliveries"><span>◇</span> Гүйцэтгэх ажлууд</button>
       </nav>
       <div class="market-side-guides freelance-only hidden" data-market-role-guide="customer"><strong>ТУСЛАМЖ</strong><button type="button" data-market-view="rules">Үйлчилгээ хэрхэн явах вэ?</button><button type="button" data-market-view="labs">Өмнөх туршилтуудаа харах</button></div>
-      <div class="market-side-guides freelance-only hidden" data-market-role-guide="provider"><strong>ТУСЛАМЖ</strong><button type="button" data-market-view="provider-rules">Ажил хэрхэн явах вэ?</button></div>
+      <div class="market-side-guides freelance-only hidden" data-market-role-guide="provider"><strong>ТУСЛАМЖ</strong><button type="button" data-provider-guide-open>Гүйцэтгэгчийн гарын авлага</button></div>
       <div class="portfolio-privacy freelance-only hidden" id="marketCustomerPrivacy"><strong>Таны хүсэлтийн ноорог</strong><p>Market-д нэвтэрсэн захиалагчийн ноорог энэ төхөөрөмжид хадгалагдана. Одоохондоо нийтлэгдэхгүй.</p></div>
       <button class="portfolio-nav-button" id="homeConnectorsButton" type="button"><span>⌁</span> Холболтууд</button>
       <section class="market-identity-card" id="marketIdentityCard" aria-live="polite">
         <div id="marketIdentityGuest"><strong>Зочин</strong><small>Нээлттэй захыг үзэж болно. Захиалах эсвэл санал өгөхийн тулд Market-д бүртгүүлнэ.</small><button type="button" id="marketAuthOpen">Market-д нэвтрэх</button></div>
-        <div class="hidden" id="marketIdentitySession"><strong id="marketIdentityName"></strong><small id="marketIdentityMemberships"></small><div><button type="button" data-market-participation-action="customer">Ажил захиалах</button><button type="button" data-market-participation-action="provider">Гүйцэтгэгчээр бүртгүүлэх</button></div><button class="market-logout" type="button" id="marketLogout">Гарах</button></div>
+        <div class="hidden" id="marketIdentitySession"><strong id="marketIdentityName"></strong><small id="marketIdentityMemberships"></small><div><button type="button" data-market-participation-action="customer">Ажил захиалах</button><button type="button" data-market-participation-action="provider">Гүйцэтгэгчээр бүртгүүлэх</button></div><button class="market-logout" type="button" id="marketSecurityOpen">Хамгаалалт</button><button class="market-logout" type="button" id="marketLogout">Гарах</button></div>
       </section>
       <a class="portfolio-login" href="https://app.overva.com">Байгууллагын Platform-д нэвтрэх</a>
     </aside>
@@ -167,10 +167,6 @@
           <div class="market-lifecycle provider-delivery-flow"><span>Сонгогдох</span><i>→</i><span class="optional-stage">Хамтын тодруулга <small>хүсвэл</small></span><i>→</i><span>Тохиролцох</span><i>→</i><span>Гүйцэтгэх</span><i>→</i><span>Хүргэх</span><i>→</i><span>Хүлээн авах</span><i>→</i><span>Дуусгах</span></div>
           <div class="optional-clarification"><div><strong>Хамтын тодруулга бол сонголт</strong><p>Сонгогдсон гүйцэтгэгч шаардлагатай үед захиалагчийг урьж, бодит ажлын урсгал, оролцогч, мэдээлэл болон хүлээн авах үр дүнг хамт зураглаж болно. Код бичих өрөө биш.</p></div><ul><li>Гүйцэтгэгч санал болгоно</li><li>Захиалагч зөвшөөрнө</li><li>Хоёр тал хүсвэл алгасана</li></ul></div>
           <div class="market-empty"><strong>Одоогоор танд гүйцэтгэх ажил алга.</strong><p>Таны саналыг захиалагч сонгосны дараа хамтын тодруулга хийх эсвэл шууд тохиролцох сонголт гарна.</p></div>
-        </section>
-        <section class="market-panel market-rules hidden" data-portfolio-work-view data-market-panel="provider-rules">
-          <div class="market-page-head"><div><span>АЖИЛ ХЭРХЭН ЯВАХ ВЭ?</span><h1>Санал өгөхөөс ажил дуусгах хүртэл</h1><p>Энэ бол тусдаа хийх ажил биш, шаардлагатай үед эргэж харах товч заавар.</p></div></div>
-          <ol><li><strong>Ойлгосон хүсэлтэд санал өгнө.</strong><p>Үнэ, хугацаа, хийх арга болон дараах дэмжлэгээ ойлгомжтой бичнэ.</p></li><li><strong>Сонгогдсоны дараа ойлголтоо нэгтгэнэ.</strong><p>Хоёр тал шууд тохиролцож болно. Шаардлагатай бол гүйцэтгэгч “Хамтын тодруулга” санал болгож, захиалагч зөвшөөрсний дараа ашиглана.</p></li><li><strong>Тохирсон ажлаа үе шаттай хүргэнэ.</strong><p>Үзүүлэх хувилбар, шалгалтын үр дүн, баримт болон ажиллаж буй холбоосоо тухайн үе шаттай холбоно.</p></li><li><strong>Захиалагч хүлээн авна эсвэл засвар хүснэ.</strong><p>Захиалагчийн шийдвэргүйгээр ажил дууссан гэж тооцохгүй.</p></li><li><strong>Дууссан ажлын дараа хоёр тал үнэлнэ.</strong><p>Зөвхөн хүлээн авч, хаасан бодит ажлын үнэлгээ цаашдын нэр хүндэд нөлөөлнө.</p></li></ol>
         </section>
         <section class="developer-pilot hidden">
           <div><span>ХӨГЖҮҮЛЭГЧ, ТЕХНОЛОГИЙН КОМПАНИУД</span><h2>Тодорхой шаардлагатай бодит pilot ажлын сүлжээ бүрдэж байна</h2><p>OVERVA хөгжүүлэгчийг хоосон санаатай биш, байгууллагаар баталсан асуудал, хамрах хүрээ болон acceptance criteria-тай ажилтай холбох загварыг туршина.</p></div>
@@ -309,10 +305,17 @@
     <div class="market-auth-head"><span>OVERVA MARKET IDENTITY</span><h2>Market-д тусдаа нэвтрэх</h2><p>Нэг identity захиалга үүсгэж болно. Гүйцэтгэгчээр санал өгөх эрх тусдаа хүсэлт, хяналтаар идэвхжинэ. Market operator эрх аль алинаас тусдаа.</p></div>
     <div class="market-auth-tabs"><button class="active" type="button" data-market-auth-tab="login">Нэвтрэх</button><button type="button" data-market-auth-tab="register">Шинээр бүртгүүлэх</button></div>
     <form class="market-auth-form" id="marketLoginForm">
-      <label>Имэйл<input name="email" type="email" autocomplete="email" required maxlength="200"></label>
-      <label>Нууц үг<input name="password" type="password" autocomplete="current-password" required minlength="8" maxlength="200"></label>
+      <small class="market-auth-reminder" id="marketAuthReminder"></small>
+      <button class="market-google-button hidden" id="marketGoogleLogin" type="button">G&nbsp;&nbsp; Google-ээр үргэлжлүүлэх</button>
+      <button class="market-text-button hidden" id="marketPasswordLoginToggle" type="button" aria-expanded="false" aria-controls="marketPasswordLogin">Имэйл, нууц үгээр нэвтрэх</button>
+      <div class="market-password-login" id="marketPasswordLogin">
+        <div class="market-auth-divider hidden" id="marketGoogleDivider"><span>эсвэл имэйлээр</span></div>
+        <label>Имэйл<input name="email" type="email" autocomplete="email" required maxlength="200"></label>
+        <label>Нууц үг<input name="password" type="password" autocomplete="current-password" required minlength="8" maxlength="200"></label>
+        <button class="primary-button" type="submit">Market-д нэвтрэх</button>
+        <button class="market-text-button hidden" id="marketForgotPassword" type="button">Нууц үгээ мартсан уу?</button>
+      </div>
       <p class="form-error" id="marketLoginError" role="alert"></p>
-      <button class="primary-button" type="submit">Market-д нэвтрэх</button>
     </form>
     <form class="market-auth-form hidden" id="marketRegisterForm">
       <label>Нэр<input name="displayName" autocomplete="name" required minlength="2" maxlength="120"></label>
@@ -323,10 +326,50 @@
     </form>
   </dialog>
 
+  <dialog class="market-auth-dialog" id="marketRecoveryDialog">
+    <form method="dialog" class="dialog-close-form"><button aria-label="Нууц үг сэргээх цонх хаах">×</button></form>
+    <div class="market-auth-head"><span>ACCOUNT RECOVERY</span><h2>Нууц үгээ сэргээх</h2><p>Бүртгэлтэй бол нэг удаагийн, богино хугацаатай холбоос таны имэйлд очно. Account байгаа эсэхийг дэлгэц задруулахгүй.</p></div>
+    <form class="market-auth-form" id="marketRecoveryForm">
+      <label>Имэйл<input name="email" type="email" autocomplete="email" required maxlength="200"></label>
+      <p class="form-error" id="marketRecoveryStatus" role="status"></p>
+      <button class="primary-button" type="submit">Сэргээх холбоос авах</button>
+    </form>
+    <form class="market-auth-form hidden" id="marketResetForm">
+      <input name="token" type="hidden">
+      <label>Шинэ нууц үг<input name="password" type="password" autocomplete="new-password" required minlength="12" maxlength="200"><small>12-оос дээш тэмдэгт</small></label>
+      <label>Нууц үгээ давтах<input name="passwordConfirm" type="password" autocomplete="new-password" required minlength="12" maxlength="200"></label>
+      <p class="form-error" id="marketResetStatus" role="alert"></p>
+      <button class="primary-button" type="submit">Нууц үгээ шинэчлэх</button>
+    </form>
+  </dialog>
+
+  <dialog class="market-auth-dialog" id="marketSecurityDialog">
+    <form method="dialog" class="dialog-close-form"><button aria-label="Хамгаалалтын цонх хаах">×</button></form>
+    <div class="market-auth-head"><span>IDENTITY SECURITY</span><h2>Нэвтрэх ба хамгаалалт</h2><p id="marketSecuritySummary"></p></div>
+    <div class="market-auth-form"><button class="market-google-button hidden" id="marketGoogleLink" type="button">G&nbsp;&nbsp; Google account холбох</button><button class="market-text-button hidden" id="marketGoogleUnlink" type="button">Google холбоос салгах</button><button class="market-text-button" id="marketVerifyEmail" type="button">Имэйлээ баталгаажуулах</button><div class="market-session-list" id="marketSessionList"></div><button class="market-text-button" id="marketRevokeSessions" type="button">Бүх төхөөрөмжөөс гарах</button><p class="form-error" id="marketSecurityStatus" role="status"></p></div>
+  </dialog>
+
   <dialog class="market-auth-dialog" id="providerApplicationDialog">
     <form method="dialog" class="dialog-close-form"><button aria-label="Хаах">×</button></form>
-    <div class="market-auth-head"><span>ГҮЙЦЭТГЭГЧИЙН ХҮСЭЛТ</span><h2>Ур чадвараа баталгаажуулалтад өгөх</h2><p>Хүсэлт илгээснээр гүйцэтгэгчийн эрх шууд үүсэхгүй. Market operator шалгаж зөвшөөрсний дараа л ажилд санал өгөх боломж нээгдэнэ.</p></div>
-    <form class="market-auth-form" id="providerApplicationForm">
+    <div class="market-auth-head"><span>ГҮЙЦЭТГЭГЧ БОЛОХ</span><h2>Баталгаатайгаар хүсэлт гаргах</h2><p>Дөрвөн алхмыг дуусгаснаар хүсэлт хяналтад орно. Баталгаажуулалт өөрөө гүйцэтгэгчийн эрх үүсгэхгүй.</p></div>
+    <button class="market-text-button provider-guide-link" type="button" data-provider-guide-open>Гүйцэтгэгчийн гарын авлага унших</button>
+    <div class="provider-onboarding-steps" aria-label="Гүйцэтгэгчийн бүртгэлийн алхам">
+      <span data-provider-step="account">1 · Бүртгэл</span><span data-provider-step="phone">2 · Утас</span><span data-provider-step="profile">3 · Ур чадвар</span><span data-provider-step="review">4 · Хяналт</span>
+    </div>
+    <section class="market-auth-form provider-onboarding-panel" id="providerStepUpPanel">
+      <strong>Бүртгэлээ дахин баталгаажуулна уу</strong>
+      <p class="provider-step-copy" id="providerStepUpStatus">Гүйцэтгэгч болох хүсэлт учраас энэ бүртгэл үнэхээр таных эсэхийг дахин шалгана.</p>
+      <button class="market-google-button hidden" id="providerGoogleStepUp" type="button">G&nbsp;&nbsp; Google-ээр баталгаажуулах</button>
+      <form class="provider-inline-form" id="providerPasswordStepUpForm"><label>Одоогийн нууц үг<input name="password" type="password" autocomplete="current-password" required minlength="8" maxlength="200"></label><button class="primary-button" type="submit">Баталгаажуулах</button></form>
+    </section>
+    <section class="market-auth-form provider-onboarding-panel hidden" id="providerPhonePanel">
+      <strong>Утасны дугаараа баталгаажуулна уу</strong>
+      <p class="provider-step-copy" id="providerPhoneStatus">Монголын 8 оронтой дугаар эсвэл + улсын кодтой дугаар оруулна.</p>
+      <form class="provider-inline-form" id="providerPhoneRequestForm"><label>Утасны дугаар<input name="phone" type="tel" autocomplete="tel" required maxlength="30" placeholder="99112233"></label><button class="primary-button" type="submit">Код авах</button></form>
+      <form class="provider-inline-form hidden" id="providerPhoneConfirmForm"><label>6 оронтой код<input name="code" inputmode="numeric" autocomplete="one-time-code" required pattern="[0-9]{6}" maxlength="6"></label><button class="primary-button" type="submit">Код баталгаажуулах</button></form>
+    </section>
+    <form class="market-auth-form provider-onboarding-panel hidden" id="providerApplicationForm">
+      <strong>Ур чадвар, туршлагаа танилцуулна уу</strong>
       <label>Туршлага, хийх ажлын чиглэл<textarea name="professionalSummary" required minlength="40" maxlength="2000" rows="5" placeholder="Хийж байсан ажил, гол ур чадвар, ямар төрлийн захиалга гүйцэтгэхээ 40-өөс дээш тэмдэгтээр тайлбарлана."></textarea></label>
       <label>Ур чадварууд<input name="skills" required maxlength="500" placeholder="Жишээ: JavaScript, PostgreSQL, UI дизайн"><small>Таслалаар тусгаарлаж 1–12 ур чадвар бичнэ.</small></label>
       <label>Portfolio холбоос · сонголттой<input name="portfolioUrl" type="url" maxlength="500" placeholder="https://..."></label>
@@ -334,6 +377,24 @@
       <p class="form-error" id="providerApplicationError" role="alert"></p>
       <button class="primary-button" type="submit">Хүсэлтээ шалгуулахаар илгээх</button>
     </form>
+    <p class="form-error provider-onboarding-status" id="providerOnboardingStatus" role="status"></p>
+  </dialog>
+
+  <dialog class="market-auth-dialog provider-guide-dialog" id="providerGuideDialog">
+    <form method="dialog" class="dialog-close-form"><button aria-label="Гарын авлага хаах">×</button></form>
+    <div class="market-auth-head"><span>OVERVA MARKET · ГАРЫН АВЛАГА</span><h2>Найдвартай гүйцэтгэгчээр ажиллах 10 зарчим</h2><p>Энэ бол OVERVA-ийн хянасан товч заавар. Нийтлэл, like, рейтинг эсвэл гүйцэтгэгчийн эрх автоматаар үүсгэхгүй.</p></div>
+    <div class="market-rules provider-guide-content"><ol>
+      <li><strong>Мэддэг, хийж чадах ажилдаа санал өгнө.</strong><p>Үнэ өндөр харагдсанаар мэдэхгүй ажлыг туршилт болгохгүй. Дутуу чадвараа нуухгүй.</p></li>
+      <li><strong>Хүсэлтийг бүтнээр нь ойлгож байж амлана.</strong><p>Зорилго, одоогийн асуудал, хамрах хүрээ, оролцогч болон хүлээн авах үр дүнг эхэлж тодруулна.</p></li>
+      <li><strong>Үнэ, хугацаагаа үндэслэлтэй санал болгоно.</strong><p>Юу багтсан, юу багтаагүй, ямар таамаг болон эрсдэл байгааг энгийнээр бичнэ.</p></li>
+      <li><strong>Хэт их амлалт өгөхгүй.</strong><p>Боломжгүй хугацаа, баталгаагүй үр дүн, далд нэмэлт ажлаар захиалагчийг төөрөгдүүлэхгүй.</p></li>
+      <li><strong>Техникийн үгийг хүний хэлээр тайлбарлана.</strong><p>Захиалагч шийдвэр гаргахад хэрэгтэй үр дүн, сонголт, өртөг болон эрсдэлийг ойлгомжтой хэлнэ.</p></li>
+      <li><strong>Нууц мэдээлэл, өгөгдлийг хамгаална.</strong><p>Зөвшөөрөгдсөн хүрээнд л хандаж, нууц үг болон хувийн мэдээллийг чат, нийтлэл, portfolio-д задруулахгүй.</p></li>
+      <li><strong>Ажлыг жижиг, шалгаж болох үе шаттай хүргэнэ.</strong><p>Үзүүлэх хувилбар, тест, баримт болон ажиллаж буй холбоосыг тухайн үе шаттай холбож нотолгоо үлдээнэ.</p></li>
+      <li><strong>Асуудлыг эрт, үнэнээр мэдээлнэ.</strong><p>Хугацаа, хүрээ эсвэл чанарт нөлөөлөх зүйл гарвал нуухгүй; сонголт болон шийдлийн саналтай мэдэгдэнэ.</p></li>
+      <li><strong>Захиалагчийн хүлээн авалтыг хүндэтгэнэ.</strong><p>Тохирсон шалгуураар хүлээн авах эсвэл засвар хүсэх шийдвэр гараагүй байхад ажлыг дууссан гэж тооцохгүй.</p></li>
+      <li><strong>Үнэлгээ зөвхөн бодит дууссан ажлаас үүснэ.</strong><p>Гүйцэтгэгч өөртөө үнэлгээ өгөхгүй. Зочин болон хамааралгүй хүн үнэлэхгүй; зөвхөн тохирсон ажлын бодит оролцогч үнэлнэ.</p></li>
+    </ol></div>
   </dialog>
 
   <dialog class="request-dialog" id="requestDialog">

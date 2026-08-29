@@ -5,11 +5,16 @@ if (process.env.RUN_MARKET_IDENTITY_INTEGRATION !== "1") {
   process.exit(0);
 }
 
+process.env.NODE_ENV = "test";
+process.env.MARKET_AUTH_TEST_DELIVERY = "true";
+process.env.MARKET_PHONE_FINGERPRINT_KEY = "market-phone-integration-fingerprint-key-2026";
+
 const assert = require("node:assert/strict");
 const { migrate } = require("./migrate");
 const { createApp } = require("../src/app");
 const { getPool, closePool } = require("../src/db");
-const { signAccessToken, signPlatformToken } = require("../src/security/token");
+const { signAccessToken, signPlatformToken, signMarketToken, verifyAccessToken } = require("../src/security/token");
+const { randomToken, tokenHash } = require("../src/services/market-auth");
 
 async function request(baseUrl, path, { token, method = "GET", body } = {}) {
   const response = await fetch(`${baseUrl}${path}`, {
@@ -23,6 +28,20 @@ async function request(baseUrl, path, { token, method = "GET", body } = {}) {
   });
   const data = response.status === 204 ? null : await response.json().catch(() => ({}));
   return { status: response.status, data };
+}
+
+async function verifyPhone(baseUrl, token, phone) {
+  const requested = await request(baseUrl, "/api/market/auth/phone/request", {
+    token, method: "POST", body: { phone },
+  });
+  assert.equal(requested.status, 202);
+  assert.match(requested.data.testCode, /^\d{6}$/);
+  const confirmed = await request(baseUrl, "/api/market/auth/phone/confirm", {
+    token, method: "POST", body: { code: requested.data.testCode },
+  });
+  assert.equal(confirmed.status, 200);
+  assert.equal(confirmed.data.verified, true);
+  return confirmed;
 }
 
 async function run() {
@@ -41,6 +60,76 @@ async function run() {
     const participantId = participant.data.identity.id;
     assert.deepEqual(participant.data.identity.active_memberships, []);
     assert.equal(participant.data.identity.has_operator_authority, false);
+    assert.ok(verifyAccessToken(participantToken).sid);
+    assert.equal((await request(baseUrl, "/api/market/auth/me", {
+      token: signMarketToken(participantId),
+    })).status, 401);
+
+    const capabilities = await request(baseUrl, "/api/market/auth/capabilities");
+    assert.equal(capabilities.status, 200);
+    assert.equal(capabilities.data.emailRecovery, true);
+    assert.equal(capabilities.data.google, false);
+    assert.equal(capabilities.data.phoneVerification, true);
+    assert.equal(capabilities.data.stepUp, true);
+
+    const recoveryEmail = `recovery-${unique}@example.test`;
+    const recoveryIdentity = await request(baseUrl, "/api/market/auth/register", {
+      method: "POST",
+      body: { email: recoveryEmail, password: "Recovery-old-password-2026", displayName: "Recovery Identity" },
+    });
+    assert.equal(recoveryIdentity.status, 201);
+    const recoveryRequest = await request(baseUrl, "/api/market/auth/password/forgot", {
+      method: "POST", body: { email: recoveryEmail },
+    });
+    assert.equal(recoveryRequest.status, 202);
+    assert.ok(recoveryRequest.data.testToken);
+    const reset = await request(baseUrl, "/api/market/auth/password/reset", {
+      method: "POST", body: { token: recoveryRequest.data.testToken, password: "Recovery-new-password-2026" },
+    });
+    assert.equal(reset.status, 204);
+    assert.equal((await request(baseUrl, "/api/market/auth/password/reset", {
+      method: "POST", body: { token: recoveryRequest.data.testToken, password: "Recovery-replayed-password-2026" },
+    })).status, 400);
+    assert.equal((await request(baseUrl, "/api/market/auth/me", { token: recoveryIdentity.data.token })).status, 401);
+    assert.equal((await request(baseUrl, "/api/market/auth/login", {
+      method: "POST", body: { email: recoveryEmail, password: "Recovery-old-password-2026" },
+    })).status, 401);
+    const recoveredLogin = await request(baseUrl, "/api/market/auth/login", {
+      method: "POST", body: { email: recoveryEmail, password: "Recovery-new-password-2026" },
+    });
+    assert.equal(recoveredLogin.status, 200);
+    assert.equal(recoveredLogin.data.identity.email_verified_at !== null, true);
+    assert.equal((await request(baseUrl, "/api/market/auth/sessions", { token: recoveredLogin.data.token })).data.items.length, 1);
+    assert.equal((await request(baseUrl, "/api/market/auth/sessions/revoke-all", {
+      token: recoveredLogin.data.token, method: "POST",
+    })).status, 200);
+    assert.equal((await request(baseUrl, "/api/market/auth/me", { token: recoveredLogin.data.token })).status, 401);
+
+    const logoutIdentity = await request(baseUrl, "/api/market/auth/register", {
+      method: "POST",
+      body: { email: `logout-${unique}@example.test`, password: "Logout-test-password-2026", displayName: "Logout Identity" },
+    });
+    assert.equal((await request(baseUrl, "/api/market/auth/logout", {
+      token: logoutIdentity.data.token, method: "POST",
+    })).status, 204);
+    assert.equal((await request(baseUrl, "/api/market/auth/me", { token: logoutIdentity.data.token })).status, 401);
+    await getPool().query("UPDATE market_identities SET active=false WHERE id=$1", [logoutIdentity.data.identity.id]);
+    const inactiveExchangeToken = randomToken();
+    await getPool().query(
+      `INSERT INTO market_auth_challenges(market_identity_id,purpose,token_hash,detail,expires_at)
+       VALUES($1,'login_exchange',$2,'{"authMethod":"google"}'::jsonb,now()+interval '5 minutes')`,
+      [logoutIdentity.data.identity.id, tokenHash(inactiveExchangeToken)]
+    );
+    const inactiveExchange = await request(baseUrl, "/api/market/auth/google/exchange", {
+      method: "POST", body: { token: inactiveExchangeToken },
+    });
+    assert.equal(inactiveExchange.status, 401);
+    assert.equal(inactiveExchange.data.error, "Market identity is inactive");
+    const inactiveSessions = await getPool().query(
+      "SELECT count(*)::int AS count FROM market_sessions WHERE market_identity_id=$1 AND revoked_at IS NULL",
+      [logoutIdentity.data.identity.id]
+    );
+    assert.equal(inactiveSessions.rows[0].count, 0);
 
     assert.equal((await request(baseUrl, "/api/market/view", {
       token: participantToken, method: "POST", body: { view: "provider" },
@@ -67,12 +156,27 @@ async function run() {
     });
     assert.equal(providerSelfIssue.status, 409);
     assert.equal(providerSelfIssue.data.code, "MARKET_PROVIDER_APPLICATION_REQUIRED");
+    await verifyPhone(baseUrl, participantToken, "99110001");
+    const participantSessionId = verifyAccessToken(participantToken).sid;
+    await getPool().query(
+      "UPDATE market_sessions SET reauthenticated_at=now()-interval '20 minutes' WHERE id=$1",
+      [participantSessionId]
+    );
     const providerApplicationBody = {
       professionalSummary: "I design and deliver audited PostgreSQL and JavaScript business systems.",
       skills: ["PostgreSQL", "JavaScript"],
       portfolioUrl: "https://example.test/portfolio",
       rulesAccepted: true,
     };
+    const staleApplication = await request(baseUrl, "/api/market/provider-applications", {
+      token: participantToken, method: "POST", body: providerApplicationBody,
+    });
+    assert.equal(staleApplication.status, 403);
+    assert.equal(staleApplication.data.code, "MARKET_STEP_UP_REQUIRED");
+    const participantStepUp = await request(baseUrl, "/api/market/auth/step-up/password", {
+      token: participantToken, method: "POST", body: { password: "Market-test-password-2026" },
+    });
+    assert.equal(participantStepUp.status, 200);
     const concurrentApplications = await Promise.all([
       request(baseUrl, "/api/market/provider-applications", {
         token: participantToken, method: "POST", body: providerApplicationBody,
@@ -118,6 +222,40 @@ async function run() {
     assert.equal(operatorLogin.status, 200);
     assert.equal(operatorLogin.data.identity.has_operator_authority, true);
     const operatorToken = operatorLogin.data.token;
+    const riskSignal = await getPool().query(
+      `INSERT INTO market_identity_risk_signals
+         (market_identity_id,signal_type,severity,subject_hash,detail)
+       VALUES($1,'email_collision','low',repeat('a',64),'{}'::jsonb) RETURNING id`,
+      [participantId]
+    );
+    assert.equal((await request(baseUrl, "/api/market/operator/identity-risk-signals", {
+      token: participantToken,
+    })).status, 403);
+    const riskQueue = await request(baseUrl, "/api/market/operator/identity-risk-signals", {
+      token: operatorToken,
+    });
+    assert.equal(riskQueue.status, 200);
+    assert.ok(riskQueue.data.items.some(item => item.id === riskSignal.rows[0].id));
+    const riskReview = await request(baseUrl, `/api/market/operator/identity-risk-signals/${riskSignal.rows[0].id}/review`, {
+      token: operatorToken, method: "POST",
+      body: { status: "dismissed", reason: "Disposable false-positive identity signal" },
+    });
+    assert.equal(riskReview.status, 200);
+    assert.equal(riskReview.data.item.status, "dismissed");
+    assert.equal((await request(baseUrl, `/api/market/operator/identity-risk-signals/${riskSignal.rows[0].id}/review`, {
+      token: operatorToken, method: "POST",
+      body: { status: "dismissed", reason: "Idempotent review replay" },
+    })).data.idempotent, true);
+    const selfRisk = await getPool().query(
+      `INSERT INTO market_identity_risk_signals
+         (market_identity_id,signal_type,severity,subject_hash,detail)
+       VALUES($1,'auth_velocity','medium',repeat('b',64),'{}'::jsonb) RETURNING id`,
+      [operatorId]
+    );
+    assert.equal((await request(baseUrl, `/api/market/operator/identity-risk-signals/${selfRisk.rows[0].id}/review`, {
+      token: operatorToken, method: "POST",
+      body: { status: "confirmed", reason: "Self review must be denied" },
+    })).status, 403);
 
     const storefrontPlan = await request(baseUrl, "/api/market/operator/storefront-plans", {
       token: operatorToken,
@@ -134,6 +272,7 @@ async function run() {
     });
     assert.equal(storefrontPlan.status, 201);
 
+    await verifyPhone(baseUrl, operatorToken, "99110002");
     const operatorApplication = await request(baseUrl, "/api/market/provider-applications", {
       token: operatorToken,
       method: "POST",
@@ -155,6 +294,7 @@ async function run() {
       body: { email: `rejected-${unique}@example.test`, password: "Rejected-test-password-2026", displayName: "Rejected Applicant" },
     });
     assert.equal(rejectedIdentity.status, 201);
+    await verifyPhone(baseUrl, rejectedIdentity.data.token, "99110003");
     const rejectedApplication = await request(baseUrl, "/api/market/provider-applications", {
       token: rejectedIdentity.data.token,
       method: "POST",
@@ -322,7 +462,7 @@ async function run() {
     );
 
     const latest = await getPool().query("SELECT max(version) AS version FROM schema_migrations");
-    assert.equal(latest.rows[0].version, "0061");
+    assert.equal(latest.rows[0].version, "0063");
     console.log("[market identity integration] passed", {
       migration: latest.rows[0].version,
       memberships: approved.data.identity.active_memberships,

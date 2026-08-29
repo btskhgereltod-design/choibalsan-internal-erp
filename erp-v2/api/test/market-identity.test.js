@@ -22,8 +22,10 @@ const { activeMembershipTypes, canSelectParticipantView } = require("../src/serv
 
 test("Market token is an explicit third authentication kind", () => {
   const identityId = "5c696cb4-c34b-4c5b-b059-c24e9a3c2962";
-  assert.equal(verifyAccessToken(signMarketToken(identityId)).kind, "market");
-  assert.equal(verifyAccessToken(signMarketToken(identityId)).sub, identityId);
+  const sessionId = "aaf872cc-5288-41f1-b431-ffec668b3c77";
+  assert.equal(verifyAccessToken(signMarketToken(identityId, sessionId)).kind, "market");
+  assert.equal(verifyAccessToken(signMarketToken(identityId, sessionId)).sub, identityId);
+  assert.equal(verifyAccessToken(signMarketToken(identityId, sessionId)).sid, sessionId);
   assert.equal(verifyAccessToken(signPlatformToken(identityId)).kind, "platform");
   assert.equal(verifyAccessToken(signAccessToken(identityId)).kind, undefined);
 });
@@ -89,6 +91,48 @@ test("migration 0061 adds storefront service access without transaction settleme
   assert.doesNotMatch(migration, /CREATE TABLE market_(listings|proposals|payments|disputes)/i);
 });
 
+test("migration 0062 separates credentials, revocable sessions, verification facts, and risk review", () => {
+  const migration = readApi("migrations/0062_market_identity_assurance.sql");
+  assert.match(migration, /ALTER COLUMN password_hash DROP NOT NULL/);
+  assert.match(migration, /CREATE TABLE market_external_identities/);
+  assert.match(migration, /UNIQUE\(provider,issuer,subject\)/);
+  assert.match(migration, /CREATE UNIQUE INDEX market_external_identities_owner_provider_idx/);
+  assert.match(migration, /CREATE TABLE market_sessions/);
+  assert.match(migration, /CREATE TABLE market_auth_challenges/);
+  assert.match(migration, /CREATE TABLE market_identity_verifications/);
+  assert.match(migration, /CREATE TABLE market_identity_risk_signals/);
+  assert.match(migration, /market_identity_risk_signals_no_delete/);
+  assert.match(migration, /market_identity_risk_signals_transition_guard/);
+  assert.match(migration, /signal never grants or revokes authority/i);
+  assert.doesNotMatch(migration, /CREATE TABLE market_(listings|proposals|payments|disputes|forum)/i);
+});
+
+test("migration 0063 gates new Provider applications with recent step-up and verified phone assurance", () => {
+  const migration = readApi("migrations/0063_market_provider_assurance.sql");
+  const auth = readApi("src/routes/market-auth-assurance.js");
+  const route = readApi("src/routes/market.js");
+  const compose = readRepo("docker-compose.production.yml");
+  assert.match(migration, /ADD COLUMN reauthenticated_at TIMESTAMPTZ/);
+  assert.match(migration, /CREATE TABLE market_phone_contacts/);
+  assert.match(migration, /CREATE TABLE market_phone_verification_challenges/);
+  assert.match(migration, /assurance_policy_version INTEGER NOT NULL DEFAULT 0/);
+  assert.match(migration, /phone_collision/);
+  assert.match(auth, /router\.post\("\/auth\/step-up\/password"/);
+  assert.match(auth, /router\.post\("\/auth\/google\/reauth\/start"/);
+  assert.match(auth, /router\.post\("\/auth\/phone\/request"/);
+  assert.match(auth, /router\.post\("\/auth\/phone\/confirm"/);
+  assert.match(auth, /pg_advisory_xact_lock\(hashtextextended/);
+  assert.match(route, /"\/provider-applications", authenticateMarket, requireRecentMarketStepUp/);
+  assert.match(route, /code: "MARKET_PHONE_VERIFICATION_REQUIRED"/);
+  assert.match(route, /VALUES\(\$1,\$2,\$3,\$4,now\(\),1,\$5,\$6\)/);
+  assert.match(route, /contact\.status='verified'/);
+  assert.match(compose, /MARKET_SMS_TOKEN_FILE: \/run\/secrets\/market_sms_token/);
+  assert.match(compose, /MARKET_PHONE_FINGERPRINT_KEY_FILE: \/run\/secrets\/market_phone_fingerprint_key/);
+  assert.match(compose, /market_sms_token:\s*\n\s*file: \.\/secrets\/market_sms_token/);
+  assert.match(compose, /market_phone_fingerprint_key:\s*\n\s*file: \.\/secrets\/market_phone_fingerprint_key/);
+  assert.doesNotMatch(`${migration}\n${auth}`, /listing|proposal|payment|dispute|forum/i);
+});
+
 test("storefront API separates public browse, Provider ownership, and operator transitions", () => {
   const route = readApi("src/routes/market-storefront.js");
   assert.match(route, /router\.get\("\/storefronts"/);
@@ -105,8 +149,23 @@ test("Market middleware derives operator authority live and tenant auth rejects 
   const middleware = readApi("src/middleware/auth.js");
   assert.match(middleware, /payload\.kind !== "market"/);
   assert.match(middleware, /loadMarketIdentity\(payload\.sub\)/);
+  assert.match(middleware, /if \(!payload\.sid\)/);
+  assert.match(middleware, /market_sessions SET last_seen_at=now\(\)/);
   assert.match(middleware, /operator_roles\?\.includes\("market-operator"\)/);
   assert.match(middleware, /if \(payload\.kind\) return res\.status\(401\)/);
+});
+
+test("Market OAuth session creation rejects inactive identities before granting a token", () => {
+  const authService = readApi("src/services/market-auth.js");
+  const assuranceRoute = readApi("src/routes/market-auth-assurance.js");
+  const app = readApi("src/app.js");
+  const compose = readRepo("docker-compose.production.yml");
+  assert.match(authService, /WHERE id=\$1 AND active=true FOR UPDATE/);
+  assert.match(authService, /MARKET_IDENTITY_INACTIVE/);
+  assert.match(assuranceRoute, /reason: "identity_inactive"/);
+  assert.match(app, /marketIdentityInactive \? 401/);
+  assert.match(compose, /MARKET_GOOGLE_OIDC_CLIENT_SECRET_FILE: \/run\/secrets\/market_google_oidc_client_secret/);
+  assert.match(compose, /market_google_oidc_client_secret:\s*\n\s*file: \.\/secrets\/market_google_oidc_client_secret/);
 });
 
 test("Market API enforces live membership switching and separately guarded operator transitions", () => {
@@ -136,27 +195,49 @@ test("public routing exposes only the bounded Market identity API, not a Market 
   assert.doesNotMatch(caddy, /market\.overva\.com/);
 });
 
-test("public V31 keeps guests neutral and gates participant and storefront actions", () => {
+test("public V34 keeps login progressive and gates Provider assurance", () => {
   const html = readRepo("public-site/index.html");
   const client = readRepo("public-site/site.js");
-  assert.match(html, /site\.js\?v=31/);
+  assert.match(html, /site\.js\?v=34/);
   assert.match(html, /id="marketAuthDialog"/);
   assert.match(html, /class="market-role-switch[^"]* hidden"/);
   assert.match(html, /data-market-participation-action="customer"/);
   assert.match(html, /data-market-participation-action="provider"/);
   assert.match(html, /id="providerApplicationDialog"/);
+  assert.match(html, /id="providerGuideDialog"/);
+  assert.match(html, /data-provider-guide-open/);
+  assert.match(html, /Найдвартай гүйцэтгэгчээр ажиллах 10 зарчим/);
+  assert.match(html, /Гүйцэтгэгч өөртөө үнэлгээ өгөхгүй/);
+  assert.match(html, /id="providerStepUpPanel"/);
+  assert.match(html, /id="providerPhoneRequestForm"/);
+  assert.match(html, /id="providerPhoneConfirmForm"/);
   assert.match(html, /data-market-panel="storefront"/);
   assert.match(html, /id="marketStorefrontGrid"/);
+  assert.match(html, /id="marketRecoveryDialog"/);
+  assert.match(html, /id="marketSecurityDialog"/);
+  assert.match(html, /id="marketAuthReminder"/);
+  assert.match(html, /id="marketPasswordLoginToggle"/);
+  assert.match(html, /id="marketPasswordLogin"/);
   assert.match(html, /захиалагч, гүйцэтгэгчийн ажлын төлбөр биш/);
   assert.match(html, /Зочин нээлттэй ажлын бүтэц/);
   assert.match(html, /Байгууллагын Platform-д нэвтрэх/);
   assert.doesNotMatch(html, /data-add-market-membership=/);
+  assert.doesNotMatch(html, /Нийтлэл нэмэх|Like өгөх|article publishing/i);
   assert.match(client, /fetch\(`\/api\/market\$\{path\}`/);
   assert.match(client, /marketApi\("\/view"/);
   assert.match(client, /marketApi\("\/provider-applications"/);
+  assert.match(client, /marketApi\("\/auth\/provider-readiness"/);
+  assert.match(client, /marketApi\("\/auth\/step-up\/password"/);
+  assert.match(client, /marketApi\("\/auth\/google\/reauth\/start"/);
+  assert.match(client, /marketApi\("\/auth\/phone\/request"/);
+  assert.match(client, /marketApi\("\/auth\/phone\/confirm"/);
   assert.match(client, /marketApi\("\/storefront\/subscriptions"/);
   assert.match(client, /function loadPublicStorefronts\(\)/);
   assert.match(client, /function showGuestMarket\(\)/);
+  assert.match(client, /marketApi\("\/auth\/sessions"\)/);
+  assert.match(client, /overva\.market\.last_auth_method/);
+  assert.match(client, /function syncMarketLoginOptions\(\)/);
+  assert.match(client, /marketPasswordLoginToggle/);
   assert.match(client, /marketIdentity\.active_memberships/);
   assert.match(client, /pendingMarketAction = "customer"/);
   assert.doesNotMatch(client, /if \(!marketIdentity\) \{\s*showMarketRole\(view\)/);

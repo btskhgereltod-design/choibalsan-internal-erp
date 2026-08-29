@@ -26,23 +26,42 @@ function subjectHash(value) {
 
 async function writeMarketAudit({ client = getPool(), marketIdentityId = null, membershipId = null,
   operatorAssignmentId = null, providerApplicationId = null, storefrontPlanId = null, storefrontId = null,
-  storefrontSubscriptionId = null, actorType, actorIdentityId = null, eventType, outcome,
+  storefrontSubscriptionId = null, externalIdentityId = null, marketSessionId = null,
+  authChallengeId = null, verificationId = null, riskSignalId = null,
+  phoneContactId = null, phoneChallengeId = null,
+  actorType, actorIdentityId = null, eventType, outcome,
   subject = null, detail = {}, ipAddress = null }) {
   await client.query(
     `INSERT INTO market_audit_events
        (market_identity_id,membership_id,operator_assignment_id,provider_application_id,
-        storefront_plan_id,storefront_id,storefront_subscription_id,
+        storefront_plan_id,storefront_id,storefront_subscription_id,external_identity_id,
+        market_session_id,auth_challenge_id,verification_id,risk_signal_id,phone_contact_id,phone_challenge_id,
         actor_type,actor_identity_id,event_type,outcome,subject_hash,detail,ip_address)
-     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14)`,
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb,$21)`,
     [marketIdentityId, membershipId, operatorAssignmentId, providerApplicationId,
-      storefrontPlanId, storefrontId, storefrontSubscriptionId, actorType, actorIdentityId,
-      eventType, outcome, subject ? subjectHash(subject) : null, JSON.stringify(detail), ipAddress]
+      storefrontPlanId, storefrontId, storefrontSubscriptionId, externalIdentityId, marketSessionId,
+      authChallengeId, verificationId, riskSignalId, phoneContactId, phoneChallengeId,
+      actorType, actorIdentityId, eventType, outcome,
+      subject ? subjectHash(subject) : null, JSON.stringify(detail), ipAddress]
   );
+}
+
+async function writeMarketRiskSignal({ client = getPool(), marketIdentityId = null,
+  relatedIdentityId = null, signalType, severity, subject = null, detail = {} }) {
+  const result = await client.query(
+    `INSERT INTO market_identity_risk_signals
+       (market_identity_id,related_identity_id,signal_type,severity,subject_hash,detail)
+     VALUES($1,$2,$3,$4,$5,$6::jsonb) RETURNING id`,
+    [marketIdentityId, relatedIdentityId, signalType, severity,
+      subject ? subjectHash(subject) : null, JSON.stringify(detail)]
+  );
+  return result.rows[0];
 }
 
 async function loadMarketIdentity(identityId, client = getPool()) {
   const result = await client.query(
-    `SELECT identity.id,identity.email,identity.display_name,identity.selected_view,
+    `SELECT identity.id,identity.email,identity.email_verified_at,identity.display_name,identity.selected_view,
+            (identity.password_hash IS NOT NULL) AS has_password,
             identity.created_at,identity.updated_at,
             COALESCE((SELECT jsonb_agg(jsonb_build_object(
                          'id',membership.id,
@@ -72,7 +91,14 @@ async function loadMarketIdentity(identityId, client = getPool()) {
                FROM market_provider_applications application
               WHERE application.market_identity_id=identity.id
               ORDER BY application.submitted_at DESC
-              LIMIT 1) AS provider_application
+              LIMIT 1) AS provider_application,
+            COALESCE((SELECT array_agg(DISTINCT external.provider ORDER BY external.provider)
+                        FROM market_external_identities external
+                       WHERE external.market_identity_id=identity.id AND external.revoked_at IS NULL),'{}'::text[]) AS external_auth_methods,
+            COALESCE((SELECT array_agg(DISTINCT verification.verification_type ORDER BY verification.verification_type)
+                        FROM market_identity_verifications verification
+                       WHERE verification.market_identity_id=identity.id
+                         AND verification.status='verified' AND verification.revoked_at IS NULL),'{}'::text[]) AS verified_facts
        FROM market_identities identity
       WHERE identity.id=$1 AND identity.active=true`,
     [identityId]
@@ -91,4 +117,5 @@ module.exports = {
   loadMarketIdentity,
   subjectHash,
   writeMarketAudit,
+  writeMarketRiskSignal,
 };

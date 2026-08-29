@@ -83,9 +83,11 @@ function createApp() {
     const assignmentError = String(error.code || "").startsWith("ASSIGNMENT_");
     const governanceError = String(error.code || "").startsWith("GOVERNANCE_") || error.message === "GOVERNANCE_ACTIVE_HOLD";
     const importError = String(error.code || "").startsWith("IMPORT_") || error.code === "LIMIT_FILE_SIZE";
-    const status = (error.code === "23505" || governanceError) ? 409 : (error.code === "23503" || assignmentError || importError) ? 400 : 500;
+    const marketIdentityInactive = error.code === "MARKET_IDENTITY_INACTIVE";
+    const status = marketIdentityInactive ? 401 : (error.code === "23505" || governanceError) ? 409 : (error.code === "23503" || assignmentError || importError) ? 400 : 500;
     const message = error.message === "GOVERNANCE_ACTIVE_HOLD" ? "Идэвхтэй хадгалалтын хоригтой өгөгдлийн хүсэлтийг батлах боломжгүй"
       : (assignmentError || governanceError || importError) ? error.message
+      : marketIdentityInactive ? "Market identity is inactive"
       : status === 409 ? "Duplicate record" : status === 400 ? "Invalid reference" : "Internal server error";
     res.status(status).json({ error: message });
   });

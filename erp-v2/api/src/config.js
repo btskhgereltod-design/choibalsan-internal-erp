@@ -23,6 +23,21 @@ const schema = z.object({
   GOOGLE_OAUTH_CLIENT_SECRET: z.string().min(8).optional(),
   GITHUB_OAUTH_CLIENT_ID: z.string().min(5).optional(),
   GITHUB_OAUTH_CLIENT_SECRET: z.string().min(8).optional(),
+  MARKET_EMAIL_ENABLED: z.enum(["true", "false"]).default("false"),
+  MARKET_EMAIL_ENDPOINT: z.string().url().optional(),
+  MARKET_EMAIL_TOKEN: z.string().min(8).optional(),
+  MARKET_EMAIL_FROM: z.string().email().optional(),
+  MARKET_APP_URL: z.string().url().default("https://overva.com"),
+  MARKET_GOOGLE_OIDC_ENABLED: z.enum(["true", "false"]).default("false"),
+  MARKET_GOOGLE_OIDC_CLIENT_ID: z.string().min(5).optional(),
+  MARKET_GOOGLE_OIDC_CLIENT_SECRET: z.string().min(8).optional(),
+  MARKET_GOOGLE_OIDC_CALLBACK_URL: z.string().url().optional(),
+  MARKET_SMS_ENABLED: z.enum(["true", "false"]).default("false"),
+  MARKET_SMS_ENDPOINT: z.string().url().optional(),
+  MARKET_SMS_TOKEN: z.string().min(8).optional(),
+  MARKET_SMS_SENDER: z.string().min(2).max(40).optional(),
+  MARKET_PHONE_FINGERPRINT_KEY: z.string().min(32).optional(),
+  MARKET_AUTH_TEST_DELIVERY: z.enum(["true", "false"]).default("false"),
 });
 
 function secretValue(env, name) {
@@ -41,6 +56,10 @@ function loadConfig(env = process.env) {
     CONNECTOR_ENCRYPTION_KEY: secretValue(env, "CONNECTOR_ENCRYPTION_KEY"),
     GOOGLE_OAUTH_CLIENT_SECRET: secretValue(env, "GOOGLE_OAUTH_CLIENT_SECRET"),
     GITHUB_OAUTH_CLIENT_SECRET: secretValue(env, "GITHUB_OAUTH_CLIENT_SECRET"),
+    MARKET_EMAIL_TOKEN: secretValue(env, "MARKET_EMAIL_TOKEN"),
+    MARKET_GOOGLE_OIDC_CLIENT_SECRET: secretValue(env, "MARKET_GOOGLE_OIDC_CLIENT_SECRET"),
+    MARKET_SMS_TOKEN: secretValue(env, "MARKET_SMS_TOKEN"),
+    MARKET_PHONE_FINGERPRINT_KEY: secretValue(env, "MARKET_PHONE_FINGERPRINT_KEY"),
   };
   const parsed = schema.safeParse(resolved);
   if (!parsed.success) {
@@ -54,6 +73,27 @@ function loadConfig(env = process.env) {
   if (parsed.data.NODE_ENV === "production" && [parsed.data.CONNECTOR_CALLBACK_BASE_URL, parsed.data.CONNECTOR_APP_URL]
     .filter(Boolean).some(url => !url.startsWith("https://"))) {
     throw new Error("Invalid OVERVA configuration: production connector URLs must use HTTPS");
+  }
+  if (parsed.data.MARKET_EMAIL_ENABLED === "true"
+    && (!parsed.data.MARKET_EMAIL_ENDPOINT || !parsed.data.MARKET_EMAIL_TOKEN || !parsed.data.MARKET_EMAIL_FROM)) {
+    throw new Error("Invalid OVERVA configuration: enabled Market email requires endpoint, token, and sender");
+  }
+  if (parsed.data.MARKET_GOOGLE_OIDC_ENABLED === "true"
+    && (!parsed.data.MARKET_GOOGLE_OIDC_CLIENT_ID || !parsed.data.MARKET_GOOGLE_OIDC_CLIENT_SECRET
+      || !parsed.data.MARKET_GOOGLE_OIDC_CALLBACK_URL)) {
+    throw new Error("Invalid OVERVA configuration: enabled Market Google OIDC requires client and callback configuration");
+  }
+  const marketSmsPlaceholder = [parsed.data.MARKET_SMS_TOKEN, parsed.data.MARKET_PHONE_FINGERPRINT_KEY]
+    .some(value => String(value || "").startsWith("__MARKET_"));
+  if (parsed.data.MARKET_SMS_ENABLED === "true"
+    && (!parsed.data.MARKET_SMS_ENDPOINT || !parsed.data.MARKET_SMS_TOKEN
+      || !parsed.data.MARKET_SMS_SENDER || !parsed.data.MARKET_PHONE_FINGERPRINT_KEY
+      || marketSmsPlaceholder)) {
+    throw new Error("Invalid OVERVA configuration: enabled Market SMS requires endpoint, token, sender, and phone fingerprint key");
+  }
+  if (parsed.data.NODE_ENV === "production" && [parsed.data.MARKET_APP_URL, parsed.data.MARKET_GOOGLE_OIDC_CALLBACK_URL]
+    .filter(Boolean).some(url => !url.startsWith("https://"))) {
+    throw new Error("Invalid OVERVA configuration: production Market auth URLs must use HTTPS");
   }
   return {
     ...parsed.data,
@@ -78,6 +118,29 @@ function loadConfig(env = process.env) {
           clientId: parsed.data.GITHUB_OAUTH_CLIENT_ID || null,
           clientSecret: parsed.data.GITHUB_OAUTH_CLIENT_SECRET || null,
         },
+      },
+    },
+    marketAuth: {
+      appUrl: parsed.data.MARKET_APP_URL.replace(/\/$/, ""),
+      testDelivery: parsed.data.NODE_ENV === "test" && parsed.data.MARKET_AUTH_TEST_DELIVERY === "true",
+      email: {
+        enabled: parsed.data.MARKET_EMAIL_ENABLED === "true",
+        endpoint: parsed.data.MARKET_EMAIL_ENDPOINT || null,
+        token: parsed.data.MARKET_EMAIL_TOKEN || null,
+        from: parsed.data.MARKET_EMAIL_FROM || null,
+      },
+      google: {
+        enabled: parsed.data.MARKET_GOOGLE_OIDC_ENABLED === "true",
+        clientId: parsed.data.MARKET_GOOGLE_OIDC_CLIENT_ID || null,
+        clientSecret: parsed.data.MARKET_GOOGLE_OIDC_CLIENT_SECRET || null,
+        callbackUrl: parsed.data.MARKET_GOOGLE_OIDC_CALLBACK_URL || null,
+      },
+      sms: {
+        enabled: parsed.data.MARKET_SMS_ENABLED === "true",
+        endpoint: parsed.data.MARKET_SMS_ENDPOINT || null,
+        token: parsed.data.MARKET_SMS_TOKEN || null,
+        sender: parsed.data.MARKET_SMS_SENDER || null,
+        fingerprintKey: parsed.data.MARKET_PHONE_FINGERPRINT_KEY || null,
       },
     },
   };
