@@ -77,3 +77,29 @@ test("platform UI contains adoption funnel and time-to-value view", () => {
   assert.match(js, /\/api\/platform\/adoption\/overview/);
   assert.match(js, /Smart Import/);
 });
+
+test("admin shell separates Group, Platform, Apps, and Market without fabricating access", () => {
+  const html = readProject("web/platform.html");
+  const js = readProject("web/platform.js");
+
+  assert.match(html, /data-admin-context="group"/);
+  assert.match(html, /data-admin-context="platform"/);
+  assert.match(html, /data-admin-context="apps"/);
+  assert.match(html, /data-admin-context="market"/);
+  assert.match(html, /data-admin-context-panel="platform"/);
+  assert.match(html, /ТӨЛӨВЛӨСӨН · 20 ДҮРИЙН SIMULATION · BACKEND БАЙХГҮЙ/);
+  assert.match(html, /Одоогийн Platform token энэ орчинд эрх өгөхгүй/);
+  assert.match(html, /Group admin гэсэн бүхнийг нээдэг эрх байхгүй/);
+  assert.match(html, /platform\.css\?v=4/);
+  assert.match(html, /platform-system\.css\?v=12/);
+  assert.match(html, /platform\.js\?v=12/);
+  assert.match(html, /20 ДҮРИЙН SIMULATION/);
+  assert.match(html, /Портфолио ба шаардлага/);
+  assert.match(html, /Нийлүүлэгч ба listing/);
+  assert.match(js, /function switchAdminContext/);
+  assert.match(js, /function hasPlatformPermission/);
+  assert.match(html, /data-requires-platform-permission="platform\.organizations\.manage"/);
+  assert.match(html, /data-requires-platform-permission="platform\.billing\.manage"/);
+  assert.match(js, /platform\.organizations\.read/);
+  assert.doesNotMatch(js, /\/api\/(market|apps)/);
+});

@@ -11,13 +11,21 @@ async function main() {
   );
   assert.equal(admin.rowCount, 1, "An active platform administrator is required");
   const authorization = `Bearer ${signPlatformToken(admin.rows[0].id)}`;
+  const meResponse = await fetch("http://127.0.0.1:4100/api/platform/auth/me", {
+    headers: { authorization },
+  });
+  const me = await meResponse.json();
+  assert.equal(meResponse.status, 200, JSON.stringify(me));
+  assert(me.admin.roles.includes("platform-owner"));
+  assert(me.admin.roles.includes("founder-operator"));
+  assert.equal(me.admin.permissions.length, 15);
   const response = await fetch("http://127.0.0.1:4100/api/platform/system/status", {
     headers: { authorization },
   });
   const body = await response.json();
   assert.equal(response.status, 200, JSON.stringify(body));
   assert.equal(body.status, "healthy");
-  assert.equal(body.schema_version, "0045");
+  assert.equal(body.schema_version, "0057");
   assert(Number(body.governance.reference_sets) > 0);
   assert(Number(body.governance.dictionary_elements) > 0);
   assert(Number(body.governance.kpi_templates) > 0);
@@ -38,7 +46,7 @@ async function main() {
   const adoption = await adoptionResponse.json();
   assert.equal(adoptionResponse.status, 200, JSON.stringify(adoption));
   assert(adoption.summary && Array.isArray(adoption.funnel) && Array.isArray(adoption.items));
-  assert.equal(adoption.funnel.length, 6);
+  assert.equal(adoption.funnel.length, 9);
   assert.equal(Object.hasOwn(adoption.items[0] || {}, "employee_name"), false);
 
   const organizationsResponse = await fetch("http://127.0.0.1:4100/api/platform/organizations", {

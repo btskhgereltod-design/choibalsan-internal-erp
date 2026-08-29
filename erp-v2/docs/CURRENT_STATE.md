@@ -1,6 +1,6 @@
 # OVERVA Current State
 
-Last updated: 2026-08-27
+Last updated: 2026-08-29
 
 This document answers one question: **what exists in the repository now?** It
 does not claim that every implemented foundation is complete or production-
@@ -17,6 +17,101 @@ validated at enterprise scale.
 - PostgreSQL and uploads use persistent volumes. Scheduled verified backups,
   restore guidance, health monitoring, and restart policies exist.
 - Database and internal service ports are not intended to be public.
+
+### Production release V30 — Platform admin RBAC
+
+- V30 is production-deployed. Migration `0056` adds 13 Platform-only
+  permissions, six bounded roles, 36 role-permission mappings, and attributable
+  role assignments. Every previously active Platform administrator was
+  backfilled with `platform-owner`; production verified one active admin and
+  one active owner assignment.
+- Platform authentication derives live roles and permissions on every request.
+  All organization, adoption, operations, system, AI knowledge/usage, module
+  validation, and billing routes enforce scoped Platform permissions
+  server-side. Platform RBAC grants no Group, OVERVA Apps, or Market authority.
+- The production admin shell presents Group, Platform, OVERVA Apps, and Market
+  as separate contexts. Only Platform has a real backend. Group, Apps, and
+  Market are truthful responsibility blueprints; they do not claim shared
+  identity, storage, accounts, listings, proposals, forum, payments, or
+  operator APIs.
+- Pre-deployment backup `overva-20260829T023027Z` passed SHA-256, PostgreSQL
+  archive-list, and uploads-archive verification. The full 207-test suite,
+  migration counts `13|6|36`, existing-admin owner/permission smoke, all seven
+  service health checks, Caddy loopback, and public admin/API/status/home/app
+  checks passed on 2026-08-29. Public V27 was not recreated by this release.
+
+### Production release V31 — Founder Control
+
+- Migration `0057` adds two Platform-only permissions, one
+  `founder-operator` role, short-lived tenant support grants, and append-only
+  support-access events. A fresh database contains 15 Platform permissions,
+  seven roles, and 53 role-permission mappings; bootstrap gives the first
+  founder two role assignments and 15 effective permissions.
+- Founder Control truthfully labels live Platform authority, preview Market
+  customer/provider memberships, planned Apps and Market operator boundaries,
+  external system operation, and offline break-glass recovery.
+- Support access requires a 12+ character reason, one to three allowed scopes,
+  and a 5–60 minute lifetime. Only the issuer can read or revoke it. The
+  snapshot is aggregate/read-only and cannot create a tenant identity, bypass
+  tenant APIs, mutate tenant data, or suppress audit evidence.
+- `recover-platform-owner.js` requires production-only migration authority,
+  explicit confirmation, a target email, and a 20+ character reason. It
+  restores only Platform owner/founder assignments and writes Platform plus
+  security audit evidence.
+- The 213-test suite and a disposable PostgreSQL/API integration flow pass:
+  migrations `0001–0057`, founder bootstrap, grant issue, scoped snapshot,
+  revoke, subsequent denial, and immutable event evidence. A separate forced
+  founder-lockout test also passed recovery plus dual-audit verification.
+- V31 was production-deployed after verified backup
+  `overva-20260829T031638Z`. Production reports schema `0057`, catalog counts
+  `15|7|53`, two active founder role assignments, and 15 effective permissions.
+  Founder Control boundary smoke, all seven service health checks, local Caddy,
+  and external V12 admin/API/status/home/app checks passed. Public V27 was not
+  recreated.
+
+### Production release V32 — Market identity and membership
+
+- Migration `0058` and `/api/market/*` implement the first bounded Market
+  identity slice in production. API is V32, Public Home is V28, and the current
+  production schema is `0058`.
+- Market login identity, participant memberships, operator assignments, token
+  context, routes, and append-only audit evidence use isolated `market_*`
+  records with no tenant-user, organization, employee, Platform-admin, or
+  Platform-role links. Person-level federation is not implemented.
+- One identity may hold zero, one, or both active `customer` and `provider`
+  memberships. The selected view is allowed only by a live active membership
+  and changes presentation context without adding membership, operator role, or
+  any other authority.
+- Participant membership is self-service and does not claim supplier
+  verification. Suspension/reactivation is guarded by a separately attributable
+  live Market operator assignment and reason; no founder, Platform, tenant, or
+  participant role silently creates that assignment.
+- The public Market shell retains unauthenticated Customer/Provider preview.
+  A real Market session can register/login, add either or both memberships,
+  switch only among its active memberships, and log out. Listings, proposals,
+  payments, disputes, forum persistence, ranking, and supplier verification are
+  still absent. The cache-busted V28 public assets and the bounded Market route
+  are production-deployed through the existing Cloudflare/Caddy edge.
+- D-027 records the accepted identity/storage/federation contract. All 221
+  repository tests pass. A disposable PostgreSQL/API flow applied migrations
+  `0001`–`0058`, exercised zero/one/both memberships, both view switches,
+  tenant/Platform token denial, participant/operator denial, operator
+  suspension/reactivation, and append-only audit protection. A 1440x1000 local
+  headless Edge render also passed.
+- V32 was production-deployed after verified backup
+  `overva-20260829T034814Z`. Production reports schema `0058`; the initial
+  Market state remains zero identities, zero memberships, zero active operator
+  assignments, and zero Market audit events. No test identity or operator was
+  left in production. The runtime role can insert Market evidence but cannot
+  update, delete, or truncate it.
+- API image
+  `sha256:dadac6b8c740509851343d80e145505eb0fd81ca49f6c6dd8555ecfa81eb592e`
+  and Public image
+  `sha256:6dd118b9ba3bce827820993f3e547505846d860072131971319ca0c06096a6c0`
+  are deployed. All seven services are healthy; local Caddy and external
+  Market auth routing, Public V28 CSS/JS, API health, and tenant-app health
+  passed. The external unauthenticated Market identity check returns the
+  expected HTTP 401 boundary response.
 
 ## Implemented Foundations
 
@@ -295,9 +390,10 @@ validated at enterprise scale.
   customer workspaces. Provider views truthfully show empty concierge-pilot
   states rather than fabricated proposals or jobs. The test-only Market model
   now requires provider delivery evidence before customer acceptance and allows
-  one verified review per party only after closed production outcome. D-020 and
-  `MARKETPLACE_OPERATING_MODEL_V1.md` preserve the delivery-control and revenue
-  boundary. This does not add production Market identity, publication,
+  one verified review per party only after closed production outcome. At that
+  release D-020 and `MARKETPLACE_OPERATING_MODEL_V1.md` defined the delivery
+  control boundary; D-023 now supersedes its mandatory-control interpretation.
+  This does not add production Market identity, publication,
   proposal, payment, escrow, or review persistence. JavaScript syntax, all 191
   tests, the production image build, verified backup
   `overva-20260827T081501Z`, production service health, and external V22
@@ -316,24 +412,46 @@ validated at enterprise scale.
   backup `overva-20260827T084207Z`, production service health, external V22.2
   assets, the full customer flow marker, and status health passed on 2026-08-27.
 
+- Public workspace V23 is production-deployed. It separates pre-award requests
+  from post-agreement projects: saving creates only an unpublished request draft,
+  optional OVERVA review creates a separately labelled refinement room, and
+  `My Projects` remains reserved for work after provider selection and bilateral
+  agreement. Existing device-local checkpoints remain recoverable without being
+  presented as real projects.
+- Public workspace V24 is production-deployed. Joint Clarification is an optional
+  provider-proposed collaboration path after selection, never a mandatory AI,
+  preview, or fixed lifecycle gate. Customer and provider primary navigation no
+  longer promotes legacy trial rooms or rules, while existing local records remain
+  recoverable. No provider, proposal, agreement, payment, or review backend is
+  claimed by this release.
+- Public workspace V25 requirement artifact is production-deployed. A customer
+  can explicitly confirm the current
+  request revision and download a UTF-8, versioned requirement artifact. The
+  confirmation remains browser-local and records its time and source revision;
+  it does not publish the request, send it to a provider, or create a project.
+  JavaScript syntax, the focused 12-test public flow, the full 192-test suite,
+  production image build, verified backup `overva-20260828T092432Z`, all service
+  health checks, Cloudflare loopback, and external V25 assets passed on
+  2026-08-28.
+- D-023 and `MARKET_PLATFORM_SEPARATION_CONTRACT_V1.md` now establish the
+  accepted target boundary between the governed Platform/App Factory,
+  supplier-neutral Market operator, and equal-participating `OVERVA Apps` vendor
+  arm. This is product and architecture direction, not a claim that a separate
+  Market backend, real product commerce, freelance proposals, forum, payments,
+  or neutral ranking is already implemented.
+
 ## In Progress
 
-- Extend the deployed V21 browser-local request-intake slice into a fully
-  structured, human-confirmed requirement artifact and measure first-pass
-  requirement accuracy with real organizations before server-side publication
-  or an operating procurement market is designed.
-- Validate the accepted D-019 market-entry strategy through an assisted,
-  concierge digital-needs pilot rather than building a broad automated
-  marketplace first. The target evidence is 10 qualified developer teams, 20
-  organization discovery conversations, 5 confirmed request packages,
-  approximately 3 qualified proposals per request, 3 selected deliveries, and
-  at least 1 accepted production outcome. None of these targets is currently
-  claimed as achieved.
-- Join product proof and market proof through the existing stable workspace:
-  Discovery -> confirmed Requirement -> Blueprint/Preview -> selected build or
-  developer path -> Pilot/Production -> attributable outcome. Marketplace
-  publication, commercial acceptance, and production remain separate human
-  gates.
+- Design V26 public information architecture around peer `Products`,
+  `Freelance`, and `Community` paths while truthfully distinguishing examples
+  from real inventory and commerce.
+- Define separate Market identity, data, administration, ranking, commercial,
+  and audit boundaries before implementing real multi-supplier records. Do not
+  reuse Platform tenant tables as Market aggregates.
+- Pilot-test V25 requirement artifacts and a bounded set of real third-party and
+  `OVERVA Apps` products/orders under equal supplier rules. Measure customer
+  choice, requirement accuracy, proposal confidentiality, and operator
+  neutrality before automating ranking or payment.
 - Validate the first `inventory.goods-received` event contract with at least
   two real source/target systems, including authorization, idempotency, retry,
   reconciliation, rollback, and operational ownership evidence.
@@ -365,10 +483,10 @@ validated at enterprise scale.
 
 ## Current Product Focus
 
-1. Validate the digital-needs entry wedge: turn a real organization problem into
-   a confirmed requirement, useful preview, qualified delivery choice, and an
-   accepted production outcome.
-2. Run market proof as an assisted pilot before automating a broad marketplace.
+1. Make the separate Products, Freelance, and Community Market paths clear to a
+   first-time visitor without forcing Platform discovery.
+2. Prove supplier-neutral Market operation with bounded real inventory and
+   assisted orders before automating ranking, payment, or mass onboarding.
 3. Make organization discovery and Smart Import easier and safer.
 4. Measure setup effort, abandonment, assistance, first value, and adoption.
 5. Turn real pilot problems into reusable patterns without hard-coding the
@@ -398,19 +516,77 @@ validated at enterprise scale.
   creates no production identities or orders and does not make the marketplace
   an implemented capability. The boundary audit is recorded in
   `docs/MARKETPLACE_BOUNDARY_AND_DEMO_AUDIT_V1.md`.
-- Public workspace V23 is production-deployed.
-- V23 corrects the pre-award boundary: `My Requests` stores request drafts and
-  their review state; `My Projects` remains empty until provider selection and
-  bilateral agreement; optional requirement-review workspaces live under a
-  separate `Trial Rooms` surface. A saved request no longer creates a project
-  or opens Studio automatically.
+- Public Home V26 is production-deployed.
+  Its default area is `Маркет`, followed by `Форум` and `Захиалгат ажил`.
+  Market places clearly labelled OVERVA Apps
+  samples beside other supplier samples without operator privilege. Forum and
+  product commerce remain honest preview surfaces: there are no live posts,
+  accounts, prices, purchases, supplier onboarding, or server-backed catalog
+  records. The existing request/provider shell now lives only under the custom
+  work area. Deployment used verified pre-deployment backup
+  `overva-20260828T101326Z` and recreated only `public-site` with the Cloudflare
+  overlay. All seven production services remained healthy; external Home, V26
+  JavaScript/CSS, status health, Caddy loopback, three-area navigation, equal
+  supplier labels, and the sample-truth marker were verified successfully.
+- Public Home V27 is production-deployed. It applies D-024
+  terminology: the custom-work area is `Захиалгат ажил ба үйлчилгээ`; Product
+  Market uses Apps, Modules, Connectors, Templates, and AI Agents; and a
+  non-operational Market Governance note explains equal supplier rules. The
+  added cards, rules, and controls remain samples or disabled previews.
+  Deployment used verified pre-deployment backup
+  `overva-20260828T122110Z` and recreated only `public-site` with the Cloudflare
+  overlay. All seven services remained healthy. External V27 HTML/JS/CSS,
+  custom-work/service label, five product categories, governance note,
+  sample-truth boundary, status health, and Caddy loopback were verified.
+- D-024 and `OVERVA_GROUP_OPERATING_MODEL_V1.md` now define OVERVA Group as an
+  ownership umbrella with three peer operating roles: Platform, OVERVA Apps,
+  and Market. Group membership is not a tenant, database, authorization, or
+  permission boundary. Legal-entity separation is not claimed as implemented.
+- Admin shell V30, Founder Control V31, and the bounded Market participant
+  identity slice V32 are production-deployed. The existing
+  authenticated Platform admin remains the only operational control plane. One
+  web application now provides a context switcher for Group overview, Platform,
+  OVERVA Apps, and Market Operator. Group and Apps remain boundary blueprints;
+  the admin Market context still grants no operator access. V32 adds only the
+  separately typed public Market identity/membership API and isolated
+  `market_*` storage. The Platform token grants no Apps or Market access, no
+  Platform/founder role creates a Market operator assignment, and no universal
+  super-admin role was introduced. V29
+  adds business-responsibility workspace blueprints for Group, Apps, and Market,
+  labels the twenty-role simulations truthfully, uses cache-busted responsive
+  assets. V30 adds migration `0056` with 13 Platform-only permissions and six
+  bounded roles. Current assignments are resolved server-side on every request;
+  every Platform control and billing route has an explicit permission guard;
+  existing administrators are backfilled as `platform-owner`; and the browser
+  fetches, displays, and mutates only granted Platform areas. The complete
+  207-test suite, a clean `0001–0056` disposable PostgreSQL rehearsal, and
+  production-equivalent `overva-api:v30-admin-rbac-local` and
+  `overva-web:v30-admin-rbac-local` builds passed. V31 then adds the bounded
+  founder role, short-lived read-only support access, immutable lifecycle
+  evidence, and offline audited owner recovery described above.
+- D-025 and `ADMIN_OPERATING_MODEL_V1.md` define bounded workspaces for Group
+  oversight, Platform operations, OVERVA Apps vendor operations, and Market
+  operation. A test-only admin control simulation now creates twenty isolated
+  virtual roles per context (eighty total), verifies cross-context denial,
+  four-eyes Platform/App/Market/Group gates, aggregate-only Group visibility,
+  append-only event evidence, and a redacted Apps-to-Market release handoff.
+  This simulation creates no production identities and does not make the Apps
+  or Market transaction/operator workspaces operational.
+- Public workspace V25 is production-deployed.
+- `My Requests` stores request drafts, their review state, and (in V25)
+  an explicit human-confirmed requirement revision. `My Projects` remains empty
+  until provider selection and bilateral agreement. A saved or confirmed
+  request never creates a project or opens Studio automatically.
 - Legacy browser-local request/workspace links migrate non-destructively into
-  optional review-room links. Existing local checkpoints are retained and
-  relabelled as requirement-refinement trial rooms rather than customer
-  projects.
-- It remains browser-local and unauthenticated. Server-side Market identity,
-  publication, proposals, provider selection, agreements, payment, production
-  delivery control, and verified reviews are still absent.
+  optional review-room links. Existing local checkpoints remain recoverable as
+  earlier experiments rather than customer projects.
+- Workspace/request preview data remains browser-local. Server-side Market
+  identity and Customer/Provider memberships now exist, while publication,
+  proposals, provider selection, agreements, payment, production delivery
+  control, and verified reviews are still absent.
+- Market and Platform are accepted as separate future data and authorization
+  boundaries. `OVERVA Apps` is a normal supplier; operator-only and
+  competitor-private data must be inaccessible to it.
 - Public workspace V24 is production-deployed. It removes `Trial Rooms` and the
   provider rules page from primary navigation, while preserving legacy
   checkpoints behind secondary help. Customer and provider Home copy is now

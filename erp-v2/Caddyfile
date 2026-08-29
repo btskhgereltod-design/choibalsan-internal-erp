@@ -16,7 +16,7 @@
 {$SITE_SCHEME:https}://overva.com {
 	import security_headers
 	encode zstd gzip
-	@trial_api path /api/public/*
+	@trial_api path /api/public/* /api/market/*
 	handle @trial_api {
 		reverse_proxy api:4100
 	}

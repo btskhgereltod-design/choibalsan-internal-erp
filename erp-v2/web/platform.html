@@ -4,17 +4,17 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light">
-  <title>OVERVA · Platform удирдлага</title>
-  <link rel="stylesheet" href="/platform.css?v=3">
-  <link rel="stylesheet" href="/platform-system.css?v=9">
+  <title>OVERVA · Admin</title>
+  <link rel="stylesheet" href="/platform.css?v=4">
+  <link rel="stylesheet" href="/platform-system.css?v=12">
 </head>
 <body>
   <section class="platform-login" id="loginView">
     <form class="login-card" id="loginForm">
       <div class="logo">OV</div>
-      <span class="eyebrow">OVERVA PLATFORM УДИРДЛАГА</span>
-      <h1>Platform admin</h1>
-      <p>Харилцагч байгууллага болон сарын үйлчилгээний эрхийг удирдана.</p>
+      <span class="eyebrow">OVERVA PLATFORM ADMIN</span>
+      <h1>Платформын удирдлага</h1>
+      <p>Энэ нэвтрэлт зөвхөн OVERVA Platform-ийн байгууллага, ажиллагаа болон үйлчилгээний эрхэд хамаарна.</p>
       <label>И-мэйл<input name="email" type="email" autocomplete="username" required></label>
       <label>Нууц үг<input name="password" type="password" autocomplete="current-password" minlength="12" required></label>
       <p class="error" data-error></p>
@@ -25,22 +25,68 @@
 
   <div class="platform-app hidden" id="appView">
     <header>
-      <div class="brand"><span class="logo small">OV</span><div><b>OVERVA Platform</b><small>Үйлчилгээ үзүүлэгчийн удирдлага</small></div></div>
+      <div class="brand"><span class="logo small">OV</span><div><b>OVERVA Admin</b><small>Нэг апп · тусдаа удирдлагын орчин</small></div></div>
       <div class="admin"><div><b id="adminName"></b><small id="adminEmail"></small></div><button class="ghost" type="button" data-open="accountDialog">Бүртгэл</button><button class="ghost" id="logoutButton">Гарах</button></div>
     </header>
-    <div class="control-layout">
+    <nav class="admin-context-switcher" aria-label="OVERVA удирдлагын орчин">
+      <button type="button" data-admin-context="group"><span>OV</span><strong>Группийн тойм</strong><small>Зөвхөн ерөнхий төлөв</small></button>
+      <button class="active" type="button" data-admin-context="platform"><span>PF</span><strong>Платформ</strong><small>Одоогийн бодит эрх</small></button>
+      <button type="button" data-admin-context="apps"><span>AP</span><strong>OVERVA Apps</strong><small>Загвар + тест</small></button>
+      <button type="button" data-admin-context="market"><span>MK</span><strong>Маркетын оператор</strong><small>Загвар + тест</small></button>
+    </nav>
+
+    <section class="admin-context-page hidden" data-admin-context-panel="group" aria-labelledby="groupOverviewTitle">
+      <div class="admin-context-head"><span class="eyebrow">OVERVA GROUP · ХИЛИЙН ТОЙМ</span><h1 id="groupOverviewTitle">Нэг өмчлөл, гурван тусдаа үүрэг</h1><p>Энэ тойм нь нэгдсэн супер админ биш. Үйл ажиллагааны орчин бүр өөрийн эрх, өгөгдөл, аудиттай байна.</p></div>
+      <div class="admin-domain-grid">
+        <article><span class="domain-state live">БОДИТ</span><b>OVERVA Platform</b><p>Байгууллага, tenant, ажиллагаа, нөөцлөлт болон Platform аудит.</p><button type="button" data-admin-context="platform">Платформ руу орох →</button></article>
+        <article><span class="domain-state planned">ТӨЛӨВЛӨСӨН</span><b>OVERVA Apps</b><p>Бүтээгдэхүүн, release, лиценз болон дэмжлэгийн тусдаа vendor орчин.</p><button type="button" data-admin-context="apps">Хязгаарыг харах →</button></article>
+        <article><span class="domain-state planned">ТӨЛӨВЛӨСӨН</span><b>OVERVA Market</b><p>Нийлүүлэгч, бүтээгдэхүүний шалгалт, moderation, гомдол болон аудит.</p><button type="button" data-admin-context="market">Хязгаарыг харах →</button></article>
+      </div>
+      <div class="admin-workspace-grid" aria-label="Группийн хяналтын ажлын орчин">
+        <article><small>ЕРӨНХИЙ ТӨЛӨВ</small><b>Хилийн эрүүл мэнд</b><p>Platform, Apps, Market тус бүрийн үйлчилгээ, эрсдэл, баталгаажуулалтын зөвхөн нэгтгэсэн төлөв.</p></article>
+        <article><small>ХАРААТ БУС ХЯНАЛТ</small><b>Эрсдэл ба баталгаа</b><p>Аюулгүй байдал, нууцлал, тасралтгүй ажиллагаа, бодлогын зөрчлийн attestations.</p></article>
+        <article><small>САНХҮҮГИЙН ХИЛ</small><b>Нэгтгэсэн санхүү</b><p>Орлого, зардал, шимтгэлийн нийлбэр; tenant, vendor, Market-ийн мөрийг задлан харахгүй.</p></article>
+        <article><small>ТЭГШ ОРОЛЦОО</small><b>Ашиг сонирхлын хяналт</b><p>OVERVA Apps-д давуу байдал үүссэн эсэх, operator-vendor тусгаарлалтыг хэмжинэ.</p></article>
+      </div>
+      <aside class="admin-boundary-note"><strong>Group admin гэсэн бүхнийг нээдэг эрх байхгүй.</strong><p>Нэг хүн хэд хэдэн үүрэгтэй болсон ч тухайн орчны тусдаа зөвшөөрлөөр нэвтэрч, аль дүрээр үйлдсэн нь аудитад үлдэнэ.</p></aside>
+    </section>
+
+    <section class="admin-context-page admin-coming-soon hidden" data-admin-context-panel="apps" aria-labelledby="appsAdminTitle">
+      <span class="domain-state planned">ТӨЛӨВЛӨСӨН · 20 ДҮРИЙН SIMULATION · BACKEND БАЙХГҮЙ</span><h1 id="appsAdminTitle">OVERVA Apps удирдлага</h1><p>Энэ нь Platform admin-ийн дэд цэс биш. Бодит vendor identity, бүтээгдэхүүний бүртгэл, release болон лицензийн эрх бий болсны дараа тусдаа нээгдэнэ.</p>
+      <div class="admin-workspace-grid">
+        <article><small>PRODUCT</small><b>Портфолио ба шаардлага</b><p>Бүтээгдэхүүний санаа, хэрэглэгчийн асуудал, roadmap, scope, хэмжих үр дүн.</p></article>
+        <article><small>BUILD</small><b>Бүтээлт ба чанар</b><p>AI/low-code/code бүтээлт, architecture, data, integration, UX, QA ба security review.</p></article>
+        <article><small>RELEASE</small><b>Хувилбар ба лиценз</b><p>QA болон security баталгааны дараа versioned release package, support policy, license.</p></article>
+        <article><small>OPERATE</small><b>Нэвтрүүлэлт ба дэмжлэг</b><p>Implementation, customer success, support, sales болон vendor-ийн тусдаа санхүү.</p></article>
+      </div>
+      <aside><strong>Одоогийн Platform token энэ орчинд эрх өгөхгүй.</strong><p>OVERVA Apps өөрийн бүтээгдэхүүнийг Маркетад өөрөө батлах боломжгүй байна.</p></aside>
+    </section>
+
+    <section class="admin-context-page admin-coming-soon hidden" data-admin-context-panel="market" aria-labelledby="marketAdminTitle">
+      <span class="domain-state planned">ТӨЛӨВЛӨСӨН · 20 ДҮРИЙН SIMULATION · BACKEND БАЙХГҮЙ</span><h1 id="marketAdminTitle">Маркетын оператор</h1><p>Нийлүүлэгчийн хувийн орчин биш. Тусдаа operator identity, permission, өгөгдөл болон аудит бий болсны дараа ажиллана.</p>
+      <div class="admin-workspace-grid">
+        <article><small>PRODUCT MARKET</small><b>Нийлүүлэгч ба listing</b><p>Supplier verification, intake, technical/security review, compatibility, license, publishing.</p></article>
+        <article><small>CUSTOM WORK</small><b>Захиалгат ажил</b><p>Захиалга, саналын нууцлал, сонголтын бүрэн бүтэн байдал, үйлчилгээний дүрэм.</p></article>
+        <article><small>COMMUNITY</small><b>Форум ба мэдлэг</b><p>Хэрэглэгч, хөгжүүлэгч, салбарын нийгэмлэг, moderation болон мэдлэгийн сан.</p></article>
+        <article><small>GOVERNANCE</small><b>Гомдол ба тэгш байдал</b><p>Fee, ranking audit, complaint, investigation, dispute, independent appeal, Market audit.</p></article>
+      </div>
+      <aside><strong>Одоогийн Platform token энэ орчинд эрх өгөхгүй.</strong><p>OVERVA Apps болон бусад нийлүүлэгчийн мэдээлэл, үнэлгээ, маргаанд Platform admin автоматаар нэвтрэхгүй.</p></aside>
+    </section>
+
+    <div class="control-layout" data-admin-context-panel="platform">
       <nav class="control-nav" aria-label="Platform удирдлага">
-        <button class="active" data-view="command"><span>⌂</span>Хяналтын төв</button>
-        <button data-view="organizations"><span>▦</span>Байгууллагууд</button>
-        <button data-view="adoption"><span>↗</span>Нэвтрүүлэлт</button>
+        <button class="active" data-view="command" data-requires-platform-permission="platform.operations.read"><span>⌂</span>Хяналтын төв</button>
+        <button data-view="founder" data-requires-platform-permission="platform.founder.read"><span>★</span>Founder Control</button>
+        <button data-view="organizations" data-requires-platform-permission="platform.organizations.read"><span>▦</span>Байгууллагууд</button>
+        <button data-view="adoption" data-requires-platform-permission="platform.adoption.read"><span>↗</span>Нэвтрүүлэлт</button>
         <small>БҮТЭЭГДЭХҮҮН</small>
-        <button data-view="catalog"><span>◇</span>Модуль ба стандарт</button>
-        <button data-view="ai-knowledge"><span>✦</span>AI мэдлэгийн сан</button>
-        <button data-view="ai-usage"><span>◫</span>AI хөгжүүлэлтийн зардал</button>
+        <button data-view="catalog" data-requires-platform-permission="platform.system.read"><span>◇</span>Модуль ба стандарт</button>
+        <button data-view="ai-knowledge" data-requires-platform-permission="platform.ai-knowledge.read"><span>✦</span>AI мэдлэгийн сан</button>
+        <button data-view="ai-usage" data-requires-platform-permission="platform.ai-usage.read"><span>◫</span>AI хөгжүүлэлтийн зардал</button>
         <small>ҮЙЛ АЖИЛЛАГАА</small>
-        <button data-view="governance"><span>◎</span>Data governance</button>
-        <button data-view="billing"><span>▤</span>Багц ба төлбөр</button>
-        <button data-view="operations"><span>◉</span>System health</button>
+        <button data-view="governance" data-requires-platform-permission="platform.system.read"><span>◎</span>Data governance</button>
+        <button data-view="billing" data-requires-platform-permission="platform.billing.read"><span>▤</span>Багц ба төлбөр</button>
+        <button data-view="operations" data-requires-platform-permission="platform.system.read"><span>◉</span>System health</button>
       </nav>
       <main>
         <section class="platform-view active" data-view-panel="command">
@@ -50,9 +96,27 @@
           <section class="system-section"><div class="system-head"><div><span class="eyebrow">СЕРВЕРИЙН ХЯНАЛТ</span><h2>Системийн төлөв</h2></div><span class="system-health"><i></i> Хэвийн</span></div><div class="system-grid" id="systemPanel"></div></section>
         </section>
 
+        <section class="platform-view" data-view-panel="founder">
+          <section class="page-head"><div><span class="eyebrow">FOUNDER CONTROL · V31</span><h1>Үүсгэн байгуулагчийн ажиллагааны төв</h1><p>Өдөр тутмын Platform эрх, тусдаа бизнес context, хугацаатай tenant support access болон web-ээс гадуурх recovery хилийг нэг дор харуулна.</p></div></section>
+          <section class="founder-boundaries" id="founderBoundaries"></section>
+          <section class="founder-control-grid">
+            <article class="control-card"><div class="card-head"><div><span class="eyebrow">TEMPORARY SUPPORT ACCESS</span><h2>Tenant diagnostic grant</h2><p>Шалтгаан, хүрээ, хугацаатай. Tenant user үүсгэхгүй, tenant API болон mutation-ийг тойрохгүй.</p></div></div>
+              <form class="founder-support-form" id="supportAccessForm" data-requires-platform-permission="platform.support-access.manage">
+                <label>Байгууллага<select name="organizationId" id="supportOrganization" required></select></label>
+                <label>Шалтгаан<textarea name="reason" minlength="12" maxlength="1000" required placeholder="Ямар incident, алдаа эсвэл support хүсэлтийг шалгах вэ?"></textarea></label>
+                <div class="grid"><label>Хугацаа<select name="durationMinutes"><option value="15">15 минут</option><option value="30" selected>30 минут</option><option value="60">60 минут</option></select></label><fieldset><legend>Хүрээ</legend><label><input type="checkbox" name="supportScope" value="diagnostics" checked> Diagnostics</label><label><input type="checkbox" name="supportScope" value="configuration"> Configuration</label><label><input type="checkbox" name="supportScope" value="audit"> Audit summary</label></fieldset></div>
+                <p class="error" data-error></p><button class="primary" type="submit">Хугацаатай grant нээх</button>
+              </form>
+            </article>
+            <article class="control-card"><div class="card-head"><div><span class="eyebrow">ACTIVE AND RECENT</span><h2>Support grant-ууд</h2></div></div><div class="support-grant-list" id="supportGrantList"></div></article>
+          </section>
+          <section class="control-card support-snapshot-card hidden" id="supportSnapshotCard"><div class="card-head"><div><span class="eyebrow">REDACTED DIAGNOSTIC SNAPSHOT</span><h2 id="supportSnapshotTitle">Tenant snapshot</h2><p>Зөвхөн grant-д зөвшөөрсөн aggregate/configuration/audit summary.</p></div><button class="ghost" type="button" data-close-support-snapshot>Хаах</button></div><pre id="supportSnapshot"></pre></section>
+          <aside class="founder-break-glass"><strong>Root / Break-glass нь web-ийн super admin биш.</strong><p>Production migration credential, explicit confirmation, target email, 20+ тэмдэгтийн reason шаардсан offline recovery script ашиглана. Ашиглалт бүр immutable audit-д орно; Market ranking, review, proposal, dispute болон IoT safety-г өөрчлөх эрх өгөхгүй.</p><code>node scripts/recover-platform-owner.js</code></aside>
+        </section>
+
         <section class="platform-view" data-view-panel="organizations">
-          <section class="organizations-overview" id="organizationsOverview"><section class="page-head"><div><span class="eyebrow">TENANT CONTROL</span><h1>Байгууллагууд</h1><p>Байгууллагын төлөв, ашиглалт, тохиргооны бэлэн байдлыг удирдана.</p></div><button class="primary" data-open="organizationDialog">+ Шинэ байгууллага</button></section><section class="stats" id="stats"></section><section class="organization-list" id="organizationList"></section></section>
-          <section class="organization-control hidden" id="organizationControl"><div class="detail-head"><button class="ghost" data-close-detail>← Жагсаалт</button><div><span class="eyebrow">ORGANIZATION CONTROL</span><h2 id="detailTitle"></h2><p id="detailSubtitle"></p></div><button class="ghost" id="detailSubscriptionButton">Үйлчилгээний эрх</button></div><div class="detail-status" id="detailStatus"></div><div class="detail-grid" id="detailGrid"></div><div class="detail-columns"><article class="control-card"><div class="card-head"><h2>Идэвхтэй модулиуд</h2></div><div class="module-list" id="detailModules"></div></article><article class="control-card"><div class="card-head"><h2>Tenant-ийн сүүлийн үйлдэл</h2></div><div class="activity-list" id="detailActivity"></div></article></div></section>
+          <section class="organizations-overview" id="organizationsOverview"><section class="page-head"><div><span class="eyebrow">TENANT CONTROL</span><h1>Байгууллагууд</h1><p>Байгууллагын төлөв, ашиглалт, тохиргооны бэлэн байдлыг удирдана.</p></div><button class="primary" data-open="organizationDialog" data-requires-platform-permission="platform.organizations.manage">+ Шинэ байгууллага</button></section><section class="stats" id="stats"></section><section class="organization-list" id="organizationList"></section></section>
+          <section class="organization-control hidden" id="organizationControl"><div class="detail-head"><button class="ghost" data-close-detail>← Жагсаалт</button><div><span class="eyebrow">ORGANIZATION CONTROL</span><h2 id="detailTitle"></h2><p id="detailSubtitle"></p></div><button class="ghost" id="detailSubscriptionButton" data-requires-platform-permission="platform.organizations.manage">Үйлчилгээний эрх</button></div><div class="detail-status" id="detailStatus"></div><div class="detail-grid" id="detailGrid"></div><div class="detail-columns"><article class="control-card"><div class="card-head"><h2>Идэвхтэй модулиуд</h2></div><div class="module-list" id="detailModules"></div></article><article class="control-card"><div class="card-head"><h2>Tenant-ийн сүүлийн үйлдэл</h2></div><div class="activity-list" id="detailActivity"></div></article></div></section>
         </section>
 
         <section class="platform-view" data-view-panel="adoption">
@@ -82,7 +146,7 @@
           <section class="stats" id="aiUsageStats"></section>
           <section class="ai-usage-grid">
             <article class="control-card"><div class="card-head"><div><span class="eyebrow">USAGE BREAKDOWN</span><h2>Зардлын задаргаа</h2></div></div><div class="ai-usage-list" id="aiUsageBreakdown"></div></article>
-            <article class="control-card"><div class="card-head"><div><span class="eyebrow">EXTERNAL TOOL USAGE</span><h2>Hercules хэрэглээ бүртгэх</h2><p>Нэг модуль эсвэл нэг тодорхой artifact тутам зарцуулсан credit-ээ бүртгэнэ.</p></div></div><form class="ai-usage-form" id="externalAiUsageForm"><div class="grid"><label>Үйлчилгээ<select name="provider"><option value="hercules">Hercules</option><option value="other">Бусад</option></select></label><label>Ажлын төрөл<select name="operationMode"><option value="build">Build</option><option value="repair">Repair</option><option value="design">Design</option><option value="review">Review</option></select></label></div><label>Ажлын хүрээ<input name="scope" required maxlength="240" placeholder="Жишээ: Inventory барааны бүртгэлийн дэлгэц"></label><div class="grid"><label>Зарцуулсан credit<input name="externalCredits" type="number" min="0" step="0.01" required></label><label>Үр дүн<select name="outcome"><option value="accepted">Хүлээн авсан</option><option value="partial">Хэсэгчлэн ашигласан</option><option value="rejected">Ашиглаагүй</option><option value="failed">Алдаатай</option></select></label></div><label>Artifact / commit / холбоос<input name="artifactReference" maxlength="500" placeholder="Commit, файл эсвэл Hercules ажлын дугаар"></label><button class="primary" type="submit">Хэрэглээ бүртгэх</button></form></article>
+            <article class="control-card"><div class="card-head"><div><span class="eyebrow">EXTERNAL TOOL USAGE</span><h2>Hercules хэрэглээ бүртгэх</h2><p>Нэг модуль эсвэл нэг тодорхой artifact тутам зарцуулсан credit-ээ бүртгэнэ.</p></div></div><form class="ai-usage-form" id="externalAiUsageForm" data-requires-platform-permission="platform.ai-usage.manage"><div class="grid"><label>Үйлчилгээ<select name="provider"><option value="hercules">Hercules</option><option value="other">Бусад</option></select></label><label>Ажлын төрөл<select name="operationMode"><option value="build">Build</option><option value="repair">Repair</option><option value="design">Design</option><option value="review">Review</option></select></label></div><label>Ажлын хүрээ<input name="scope" required maxlength="240" placeholder="Жишээ: Inventory барааны бүртгэлийн дэлгэц"></label><div class="grid"><label>Зарцуулсан credit<input name="externalCredits" type="number" min="0" step="0.01" required></label><label>Үр дүн<select name="outcome"><option value="accepted">Хүлээн авсан</option><option value="partial">Хэсэгчлэн ашигласан</option><option value="rejected">Ашиглаагүй</option><option value="failed">Алдаатай</option></select></label></div><label>Artifact / commit / холбоос<input name="artifactReference" maxlength="500" placeholder="Commit, файл эсвэл Hercules ажлын дугаар"></label><button class="primary" type="submit">Хэрэглээ бүртгэх</button></form></article>
           </section>
           <section class="control-card ai-usage-recent"><div class="card-head"><div><span class="eyebrow">RECENT USAGE</span><h2>Сүүлийн AI ажлууд</h2></div></div><div class="ai-usage-list" id="aiUsageRecent"></div></section>
           <section class="control-card ai-usage-recent"><div class="card-head"><div><span class="eyebrow">MODULE CONTRACTS</span><h2>Модуль ба route-ийн засаглал</h2><p>Hercules-ээс ирсэн модуль шууд production-д орохгүй. Manifest, route, permission, audit contract-аар шалгагдана.</p></div></div><div class="ai-usage-list" id="moduleGovernance"></div></section>
@@ -90,7 +154,7 @@
 
         <section class="platform-view" data-view-panel="governance"><section class="system-section first"><div class="system-head"><div><span class="eyebrow">ӨГӨГДЛИЙН ЗАСАГЛАЛ</span><h2>Байгууллагуудын хэрэгжилтийн хяналт</h2><p>Зөвхөн бодлого, хариуцлага, эрсдэлийн хураангуй. Tenant-ийн ажилтан болон бизнесийн бодит өгөгдлийг энд задлахгүй.</p></div><span class="system-health" id="governanceHealth"><i></i> Хянаж байна</span></div><div class="stats" id="governanceStats"></div><div class="governance-list" id="governanceList"></div></section></section>
 
-        <section class="platform-view" data-view-panel="billing"><section class="system-section first"><div class="system-head"><div><span class="eyebrow">САРЫН ҮЙЛЧИЛГЭЭ</span><h2>Багц, нэхэмжлэх ба орлого</h2></div><button class="primary" data-open="invoiceDialog">+ Нэхэмжлэх</button></div><div class="stats" id="billingStats"></div><div class="organization-list" id="invoiceList"></div></section></section>
+        <section class="platform-view" data-view-panel="billing"><section class="system-section first"><div class="system-head"><div><span class="eyebrow">САРЫН ҮЙЛЧИЛГЭЭ</span><h2>Багц, нэхэмжлэх ба орлого</h2></div><button class="primary" data-open="invoiceDialog" data-requires-platform-permission="platform.billing.manage">+ Нэхэмжлэх</button></div><div class="stats" id="billingStats"></div><div class="organization-list" id="invoiceList"></div></section></section>
 
         <section class="platform-view" data-view-panel="operations"><section class="page-head"><div><span class="eyebrow">PLATFORM OPERATIONS</span><h1>System health</h1><p>API, database, backup, хадгалалт болон release schema-ийн ажиллагааны хураангуй.</p></div></section><section class="system-section"><div class="system-head"><div><h2>Үндсэн үйлчилгээ</h2></div><span class="system-health"><i></i> Хэвийн</span></div><div class="system-grid" id="operationsSystemPanel"></div></section></section>
       </main>
@@ -145,6 +209,6 @@
   </form></dialog>
   <div class="toast" id="toast"></div>
   <script src="/platform-ai-usage.js?v=1" defer></script>
-  <script src="/platform.js?v=9" defer></script>
+  <script src="/platform.js?v=12" defer></script>
 </body>
 </html>

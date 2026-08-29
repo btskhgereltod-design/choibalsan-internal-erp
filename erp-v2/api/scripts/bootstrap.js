@@ -65,10 +65,28 @@ async function bootstrap() {
     const passwordHash = await bcrypt.hash(values.BOOTSTRAP_PLATFORM_ADMIN_PASSWORD, 12);
     const result = await pool.query(
       `INSERT INTO platform_admins(email,password_hash,full_name)
-       VALUES (lower($1),$2,$3) ON CONFLICT (email) DO NOTHING RETURNING id`,
+       VALUES (lower($1),$2,$3)
+       ON CONFLICT (email) DO UPDATE SET email=EXCLUDED.email
+       RETURNING id`,
       [values.BOOTSTRAP_PLATFORM_ADMIN_EMAIL, passwordHash, values.BOOTSTRAP_PLATFORM_ADMIN_NAME]
     );
-    if (result.rowCount) console.log(`[bootstrap] created platform administrator ${values.BOOTSTRAP_PLATFORM_ADMIN_EMAIL}`);
+    await pool.query(
+      `INSERT INTO platform_admin_role_assignments(platform_admin_id,role_id,assigned_by)
+       SELECT $1,role.id,$1 FROM platform_admin_roles role WHERE role.code='platform-owner'
+       ON CONFLICT(platform_admin_id,role_id) WHERE revoked_at IS NULL DO NOTHING`,
+      [result.rows[0].id]
+    );
+    await pool.query(
+      `INSERT INTO platform_admin_role_assignments(platform_admin_id,role_id,assigned_by)
+       SELECT $1,role.id,$1 FROM platform_admin_roles role
+        WHERE role.code='founder-operator'
+          AND NOT EXISTS(SELECT 1 FROM platform_admin_role_assignments assignment
+            JOIN platform_admin_roles assigned_role ON assigned_role.id=assignment.role_id
+            WHERE assigned_role.code='founder-operator' AND assignment.revoked_at IS NULL)
+       ON CONFLICT(platform_admin_id,role_id) WHERE revoked_at IS NULL DO NOTHING`,
+      [result.rows[0].id]
+    );
+    if (result.rowCount) console.log(`[bootstrap] ensured platform administrator ${values.BOOTSTRAP_PLATFORM_ADMIN_EMAIL}`);
   } else {
     console.log("[bootstrap] optional platform bootstrap values are incomplete; skipped");
   }

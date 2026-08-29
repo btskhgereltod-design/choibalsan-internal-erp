@@ -2,7 +2,26 @@
 
 Status: accepted strategic direction; market proof remains to be validated
 
-Accepted: 2026-08-27
+Accepted: 2026-08-27; amended by D-023 and D-024 on 2026-08-28
+
+## D-023 separation amendment
+
+OVERVA Platform/App Factory and OVERVA Market are separate businesses and data
+boundaries. The Market is a supplier-neutral place for ready products,
+freelance orders, and community knowledge. `OVERVA Apps` may sell products and
+submit proposals only as a normal supplier under the same access, ranking, fee,
+review, and enforcement rules as competitors. Market use never requires a
+Platform workspace. `MARKET_PLATFORM_SEPARATION_CONTRACT_V1.md` is authoritative
+where this strategy's original one-workspace language conflicts with that rule.
+
+## D-024 Group amendment
+
+OVERVA Group has three peer operating roles: Platform, OVERVA Apps, and Market.
+The Group is not a shared data or authorization boundary. OVERVA Apps is the
+first-party vendor rather than a Platform administrator or Market operator.
+Market customer-facing domains are Product Market, Custom Work and Services,
+and Forum; Market Governance is the separate operator control domain.
+`OVERVA_GROUP_OPERATING_MODEL_V1.md` is authoritative for Group structure.
 
 ## Durable North Star
 
@@ -17,52 +36,48 @@ uses explicit contracts, permissions, and attributable evidence.
 
 ## Market-Entry Position
 
-OVERVA will not initially enter the market primarily as another ERP, a catalogue
-of modules, or a generic AI app builder.
+OVERVA does not collapse the Platform, App Factory, Market operator, and vendor
+arm into one offer. The Market position is:
 
-The initial position is:
+> Find a ready digital product, order custom work, or meet capable suppliers in
+> one well-governed market where the customer chooses freely.
 
-> OVERVA helps an organization define its digital need correctly, find a trusted
-> delivery path or developer, and govern the work through production outcome.
+The Platform position is separate:
 
-Primary entry question:
+> Understand, build, review, and operate organizational apps in a governed
+> environment.
 
-> Байгууллагынхаа ямар ажлыг цахимжуулах хэрэгтэй байна?
+The Market is not a race to the lowest bid, and governance is not vendor
+preference. `OVERVA Apps` competes alongside other suppliers.
 
-The builder is an enabling engine behind this promise. The marketplace is a
-governed delivery path, not a directory or race to the lowest bid.
+## Independent paths with explicit handoff
 
-## One Workspace, Two Proofs
-
-One stable OVERVA workspace joins product proof and market proof:
+Platform and Market proof remain separate and may connect only through an
+explicit, versioned handoff:
 
 ```text
-Organization conversation and evidence
-                 |
-                 v
- Discovery -> AS-IS -> Requirement -> Blueprint -> Preview
-                 |                         |
-                 |                         +-> build in OVERVA
-                 |
-                 +-> governed request -> developer proposals
-                                            |
-                                            v
-                    Scope -> Commercial -> Pilot -> Production
-                                            |
-                                            v
-                    Support -> Verified outcome -> Improve
+Market visitor -> ready product -> supplier terms -> customer choice
+              |
+              +-> freelance order -> proposals -> customer choice
+
+Platform tenant -> App Factory -> reviewed release package
+                              |
+                              +-> explicit vendor publication -> Market listing
+
+Platform requirement -> explicit redacted snapshot -> Market freelance order
 ```
 
-Product proof asks whether a real organizational problem can become a confirmed
-requirement, useful preview, and production result.
+Platform proof asks whether a real organizational problem can become a useful
+app and governed runtime result.
 
 Market proof asks whether a confirmed requirement attracts qualified proposals,
 supports a trustworthy comparison and selection, and reaches an accepted
 production result.
 
-Marketplace publication must reuse the workspace's governed evidence and human-
-confirmed baseline. It must not turn raw conversation, uploaded material, or AI
-inference into a public request automatically.
+Market publication does not require a Platform workspace. When a Platform
+artifact is published, it uses a versioned human-approved package or redacted
+snapshot. Raw conversation, tenant data, uploaded material, or AI inference can
+never become a public listing or order automatically.
 
 ## Initial Customer Value
 
@@ -81,12 +96,15 @@ or an assisted conversation. AI conversation is not a mandatory acquisition
 gate. Whichever entry is used, the result remains a draft until a person reviews
 and confirms the requirement.
 
-The organization then chooses to continue building, invite selected developers,
-publish a governed request, or request assisted delivery.
+The organization then chooses to continue building, publish a redacted order,
+buy a ready product, invite selected developers, or request assisted delivery.
+Another customer may begin and finish entirely in the Market without Platform
+discovery.
 
 ## Initial Developer Value
 
-Developers enter for qualified work rather than merely to use another platform.
+Product suppliers enter to sell reusable apps and developers enter for qualified
+work rather than merely to use another platform.
 A qualified opportunity provides a confirmed problem, scope boundary, budget
 context, acceptance criteria, decision path, and protected discussion.
 
@@ -99,43 +117,50 @@ scope, uncompensated change, unverifiable claims, data loss, missing support,
 and unclear ownership. Reviews are attributable to verified delivery outcomes,
 not unverified public ratings.
 
-## Concierge Validation Before Marketplace Automation
+## Bounded Market Validation Before Broad Automation
 
-Execution is frozen in this order until evidence requires a change:
+Execution proceeds in this order until evidence requires a change:
 
-1. V17 — make the public entry organization-first and outcome-clear.
-2. V18 — produce a structured, human-confirmed requirement artifact.
-3. Run V18 discovery with 20 real organizations and measure first-pass quality.
-4. V19 — convert confirmed evidence into a machine- and human-readable request
-   package.
-5. Match requests through a manually governed concierge process.
-6. Start 3 bounded pilots and collect production evidence.
+1. V26–V27 — make Product Market, Custom Work and Services, and Forum
+   understandable without claiming
+   nonexistent inventory or commerce.
+2. Define separate Market identity, data, operator, and `OVERVA Apps` vendor
+   boundaries before accepting real competing supply.
+3. Onboard a small verified set of third-party products and suppliers under
+   equal rules, alongside clearly labelled `OVERVA Apps` products.
+4. Run structured custom-work orders and proposals through a bounded assisted
+   pilot while testing proposal confidentiality and customer choice.
+5. Measure product discovery, qualified proposals, selection, completion,
+   complaints, and supplier-neutral treatment before automating ranking or
+   payment.
 
-Marketplace UI, automated ranking, escrow, and a broad connector catalogue do
-not move ahead of this sequence.
+Automated ranking, escrow, mass onboarding, and broad payment intermediation do
+not move ahead of this evidence and the D-023 release gates.
 
 A clearly labelled educational board of reference requests and a browser-local
 structured request draft are allowed during V18 because they test request
 comprehension without claiming live demand, developer proposals, publication,
-matching, or commerce. They must hand off into the same governed workspace and
-human confirmation boundary.
+matching, or commerce. The current V25 human confirmation remains useful, but a
+Market order may also be created directly without a Platform workspace.
 
 The first market test is deliberately assisted and small:
 
-1. Recruit 10 qualified developers or delivery teams.
-2. Conduct discovery with 20 real organizations.
-3. Produce 5 confirmed request packages.
-4. Invite approximately 3 qualified proposals per request.
-5. Select and start 3 deliveries.
-6. Reach at least 1 accepted production outcome.
-7. Collect attributable feedback from both customer and developer.
+1. Recruit a bounded set of qualified product suppliers and freelance teams.
+2. Onboard real third-party products beside clearly labelled `OVERVA Apps`
+   products under identical rules.
+3. Conduct direct Market and optional Platform-assisted customer tests.
+4. Produce confirmed orders and invite qualified proposals.
+5. Observe product purchases or freelance selections without operator steering.
+6. Reach attributable accepted outcomes.
+7. Collect customer/supplier feedback and audit evidence of operator neutrality.
 
 These are validation targets, not claims of current adoption.
 
-The leading product measure is first-pass requirement accuracy: after the first
-guided discovery, how much of the structured requirement can the organization
-confirm without substantive correction. Corrections must be retained as
-learning evidence rather than hidden by a rewritten final answer.
+Leading measures include product findability, customer choice without Platform
+assistance, proposal confidentiality, and supplier-neutral treatment. For
+custom work, first-pass requirement accuracy remains important: how much of a
+structured order can the customer confirm without substantive correction.
+Corrections remain learning evidence rather than being hidden.
 
 Other core measures are discovery completion, requirement confirmation,
 qualified proposals per request, time to selection, scope stability, production
@@ -157,7 +182,7 @@ Start with common, bounded organizational needs that can show value quickly:
 For the initial validation period, do not make the following primary build
 targets:
 
-- a broad public app store;
+- mass unverified product listings or pay-to-win ranking;
 - hundreds of connectors;
 - a universal ERP for every industry;
 - consumer e-commerce;
@@ -175,8 +200,8 @@ Before material product work, answer:
 
 1. Which observed customer or developer problem does this solve?
 2. What evidence shows the problem is current and repeated?
-3. Does it improve discovery, a confirmed requirement, trustworthy selection,
-   governed delivery, production acceptance, or verified learning?
+3. Does it improve product discovery, a confirmed order, trustworthy selection,
+   supplier neutrality, delivery outcome, or verified learning?
 4. Is it needed for the next real pilot outcome?
 
 If the fourth answer is no, preserve the idea in the ecosystem horizon instead

@@ -29,6 +29,7 @@ function createApp() {
   app.use("/api/auth", require("./routes/auth"));
   app.use("/api/public", require("./routes/public"));
   app.use("/api/platform", require("./routes/platform"));
+  app.use("/api/market", require("./routes/market"));
   app.use("/api/organizations", require("./routes/organization"));
   app.use("/api/organization-blueprints", require("./routes/organization-blueprints"));
   app.use("/api/users", require("./routes/users"));

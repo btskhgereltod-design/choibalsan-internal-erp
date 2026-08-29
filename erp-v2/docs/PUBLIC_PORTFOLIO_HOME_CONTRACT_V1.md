@@ -148,7 +148,47 @@ identity and proposals exist, provider proposal/job views show an explicit
 empty concierge-pilot state and sample request actions cannot pretend to apply
 for real work.
 
-The delivery explanation follows D-020: selected scope, milestones, delivery
+For legacy V24 behavior, the delivery explanation follows the still-valid
+privacy and bilateral-acceptance parts of D-020: selected scope, milestones, delivery
 evidence, customer acceptance or change, production verification, commercial
-reconciliation, bilateral review, and closure remain OVERVA's control record
-even when implementation artifacts live in external tools.
+reconciliation, bilateral review, and closure remain available when parties
+choose the governed delivery record. For V26 and later Market work, D-023
+supersedes any implication that this full record or a Platform workspace is
+mandatory for every product purchase or freelance delivery.
+
+## V26 public market areas
+
+The public Home primary navigation is:
+
+1. `Маркет` — the default arrival area for comparing ready products;
+2. `Форум` — community questions, answers, and implementation experience;
+3. `Захиалгат ажил` — customer orders, provider proposals, and delivery context.
+
+`Захиалгат ажил` is the preferred Mongolian product label; `Freelance` is not a
+primary navigation label. Customer/provider role switching belongs only to this
+area and must not make Market appear to be an OVERVA Apps sales department.
+
+OVERVA Apps may appear in Market only as a clearly identified supplier, using
+the same product-card structure and future eligibility rules as other
+suppliers. Operator controls, ranking, moderation, enforcement, and
+competitor-private data are not supplier capabilities.
+
+Until server-backed capabilities exist, product cards and forum topics must be
+labelled as samples. Prices, purchase actions, product submission, posting,
+accounts, supplier onboarding, reviews, and real order counts must remain
+disabled or absent. A preview shell is not evidence of an operating market or
+community.
+
+## V27 Group-aligned terminology
+
+The third public area is named `Захиалгат ажил ба үйлчилгээ`. Its future scope
+includes work orders, developers, implementation partners, consulting, support,
+and maintenance; the current browser-local request board does not claim those
+directories or services are live.
+
+Product Market uses the categories `Аппууд`, `Модулиуд`, `Холбогчид`,
+`Загварууд`, and `AI агентууд`. `Маркетын засаглал` may be explained as an
+operator responsibility, but it is not a fourth customer marketplace and must
+not expose operator controls to suppliers. Until real policies and backend
+controls exist, its action remains disabled and its wording must not imply
+certification or dispute handling is operational.

@@ -4,7 +4,7 @@ const { STORAGE_VERSION, createCheckpoint, describeCheckpoint, answerMemory, cla
 const { deriveLifecycle, missingFor } = window.OvervaWorkspaceLifecycle;
 const { normalizeRegistry, currentCheckpoint, upsertCheckpoint, startNewWorkspace, selectWorkspace } = window.OvervaWorkspaceRegistry;
 const { inferGuide, extractOrganizationProfile, shouldChooseWorkspace } = window.OvervaWorkspaceIntake;
-const { normalizeRegistry:normalizeRequestDraftRegistry, upsertDraft:upsertRequestDraft } = window.OvervaRequestDraftRegistry;
+const { normalizeRegistry:normalizeRequestDraftRegistry, upsertDraft:upsertRequestDraft, confirmRequirement, buildRequirementArtifact } = window.OvervaRequestDraftRegistry;
 
 const guidePaths = {
   import: {
@@ -130,6 +130,13 @@ const requestMaterialIcon = document.getElementById("requestMaterialIcon");
 const myRequestList = document.getElementById("myRequestList");
 const requestDetailGrid = document.getElementById("requestDetailGrid");
 const requestReviewButton = document.getElementById("requestReviewButton");
+const requestConfirmButton = document.getElementById("requestConfirmButton");
+const requestDownloadButton = document.getElementById("requestDownloadButton");
+const marketAuthDialog = document.getElementById("marketAuthDialog");
+const marketLoginForm = document.getElementById("marketLoginForm");
+const marketRegisterForm = document.getElementById("marketRegisterForm");
+const MARKET_TOKEN_KEY = "overva.market.token.v1";
+let marketIdentity = null;
 const HOME_INTENT_HELP = "Асуудлаа нэг өгүүлбэрээр бичнэ үү. Дараагийн маягт төрөл, төсөв, хугацаа болон харагдах хүрээг цэгцэлнэ.";
 const LEGACY_WORKSPACE_STORAGE_KEY = "overva.public.workspace.v2";
 const WORKSPACE_REGISTRY_KEY = "overva.public.workspaces.v1";
@@ -149,6 +156,8 @@ let pendingRequestMaterial = null;
 let activeMarketView = "all";
 let activeMarketCategory = "all";
 let activeMarketRole = "customer";
+let activeMarketArea = "products";
+let activeProductCategory = "all";
 let activeRequestDraftId = null;
 
 function scrollChat() { chatStream.scrollTop = chatStream.scrollHeight; }
@@ -257,7 +266,8 @@ function renderMyRequests() {
     const title = document.createElement("h3"); title.textContent = draft.title || "Гарчиггүй хүсэлт";
     const summary = document.createElement("p"); summary.textContent = String(draft.packageText || "").split("\n").find(line => line.startsWith("ОДООГИЙН АСУУДАЛ:"))?.replace("ОДООГИЙН АСУУДАЛ:", "").trim() || "Хүсэлтийн ажлын өрөөнд дэлгэрэнгүйг шалгана.";
     const reviewState = draft.reviewWorkspaceId ? " · Хүсэлтийн шалгалттай" : "";
-    const state = document.createElement("small"); state.textContent = `${draft.published ? "Нийтэлсэн" : "Ноорог · нийтлээгүй"}${reviewState} · ${new Date(draft.updatedAt).toLocaleString("mn-MN")}`;
+    const requestState = draft.status === "requirement-confirmed" ? "Шаардлага баталсан · нийтлээгүй" : draft.published ? "Нийтэлсэн" : "Ноорог · нийтлээгүй";
+    const state = document.createElement("small"); state.textContent = `${requestState}${reviewState} · ${new Date(draft.updatedAt).toLocaleString("mn-MN")}`;
     const open = document.createElement("button"); open.type = "button"; open.dataset.openRequestDetail = draft.id; open.textContent = "Хүсэлтээ нээх →";
     copy.append(title,summary,state); row.append(copy,open); myRequestList.append(row);
   });
@@ -279,7 +289,8 @@ function showRequestDetail(draftId) {
   document.querySelectorAll("[data-market-panel]").forEach(panel => panel.classList.toggle("hidden", panel.dataset.marketPanel !== "request-detail"));
   document.querySelectorAll("[data-market-view]").forEach(button => button.classList.toggle("active", button.dataset.marketView === "mine"));
   document.getElementById("requestDetailTitle").textContent = draft.title || "Гарчиггүй хүсэлт";
-  document.getElementById("requestDetailState").textContent = `${draft.published ? "Нийтэлсэн" : "Ноорог · нийтлээгүй"} · Энэ хүсэлт төсөл болоогүй`;
+  const requirementConfirmed = draft.status === "requirement-confirmed";
+  document.getElementById("requestDetailState").textContent = `${requirementConfirmed ? "Шаардлага баталсан" : draft.published ? "Нийтэлсэн" : "Ноорог"} · нийтлээгүй · Энэ хүсэлт төсөл болоогүй`;
   const fields = requestPackageFields(draft.packageText);
   const labels = [
     ["АЖЛЫН ТӨРӨЛ","Ямар ажил хэрэгтэй вэ?"], ["ЧИГЛЭЛ","Ажлын чиглэл"],
@@ -294,6 +305,76 @@ function showRequestDetail(draftId) {
     small.textContent = label; value.textContent = fields[key] || "Тодорхойлоогүй"; card.append(small,value); requestDetailGrid.append(card);
   });
   requestReviewButton.textContent = draft.reviewWorkspaceId ? "Хүсэлтийн шалгалтаа нээх" : "OVERVA-аар хүсэлтээ шалгах";
+  document.getElementById("requestConfirmationTitle").textContent = requirementConfirmed ? "Шаардлага баталгаажсан" : "Шаардлагаа баталгаажуулах";
+  document.getElementById("requestConfirmationText").textContent = requirementConfirmed
+    ? `${new Date(draft.requirementConfirmedAt).toLocaleString("mn-MN")}-д энэ хувилбарыг зөв гэж баталсан. Нийтлээгүй, гүйцэтгэгчид илгээгээгүй, төсөл үүсгээгүй.`
+    : "Дээрх асуудал, хүссэн үр дүн, хэрэгтэй боломж болон хүлээн авах шалгуур зөв бол батална уу. Батлах нь хүсэлтийг нийтлэхгүй, гүйцэтгэгчид илгээхгүй, төсөл үүсгэхгүй.";
+  requestConfirmButton.classList.toggle("hidden", requirementConfirmed);
+  requestDownloadButton.disabled = !requirementConfirmed;
+  document.querySelector(".portfolio-scroll").scrollTo({ top:0, behavior:"smooth" });
+}
+
+function downloadConfirmedRequirement(draft) {
+  const content = `\uFEFF${buildRequirementArtifact(draft)}`;
+  const blob = new Blob([content], { type:"text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `overva-requirement-${draft.id.replace(/[^a-z0-9-]+/gi, "-")}.txt`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function filterProductMarket(searchText = "") {
+  const query = String(searchText || "").trim().toLocaleLowerCase("mn-MN");
+  let visibleCount = 0;
+  document.querySelectorAll("[data-product-card]").forEach(card => {
+    const categoryMatch = activeProductCategory === "all" || card.dataset.productCategoryRow === activeProductCategory;
+    const searchMatch = !query || card.textContent.toLocaleLowerCase("mn-MN").includes(query);
+    const visible = categoryMatch && searchMatch;
+    card.classList.toggle("hidden", !visible);
+    if (visible) visibleCount += 1;
+  });
+  document.getElementById("productMarketEmpty").classList.toggle("hidden", visibleCount > 0);
+}
+
+function filterForumTopics(searchText = "") {
+  const query = String(searchText || "").trim().toLocaleLowerCase("mn-MN");
+  let visibleCount = 0;
+  document.querySelectorAll("[data-forum-topic]").forEach(topic => {
+    const visible = !query || topic.textContent.toLocaleLowerCase("mn-MN").includes(query);
+    topic.classList.toggle("hidden", !visible);
+    if (visible) visibleCount += 1;
+  });
+  document.getElementById("forumSearchEmpty").classList.toggle("hidden", visibleCount > 0);
+}
+
+function showMarketArea(area = "products") {
+  const allowedAreas = ["products","community","freelance"];
+  activeMarketArea = allowedAreas.includes(area) ? area : "products";
+  portfolioHome.classList.remove("products-area","community-area","freelance-area");
+  portfolioHome.classList.add(`${activeMarketArea}-area`);
+  document.querySelectorAll("[data-market-area]").forEach(button => button.classList.toggle("active", button.dataset.marketArea === activeMarketArea));
+  document.querySelectorAll("[data-market-area-panel]").forEach(panel => panel.classList.toggle("hidden", panel.dataset.marketAreaPanel !== activeMarketArea));
+  document.querySelectorAll("[data-market-area-sidebar]").forEach(panel => panel.classList.toggle("hidden", panel.dataset.marketAreaSidebar !== activeMarketArea));
+  document.getElementById("publicConnectors").classList.add("hidden");
+  document.getElementById("homeConnectorsButton").classList.remove("active");
+  const searchInput = document.getElementById("homeSearchInput");
+  searchInput.value = "";
+  if (activeMarketArea === "products") {
+    searchInput.placeholder = "Бүтээгдэхүүн, нийлүүлэгч, боломж хайх…";
+    filterProductMarket();
+  } else if (activeMarketArea === "community") {
+    searchInput.placeholder = "Сэдэв, асуулт, хариулт хайх…";
+    filterForumTopics();
+  } else {
+    searchInput.placeholder = activeMarketRole === "provider"
+      ? "Ажил, чиглэл, шаардлагатай чадвар хайх…"
+      : "Хүсэлт, чиглэл, хэрэгтэй боломж хайх…";
+    showMarketView("all");
+  }
   document.querySelector(".portfolio-scroll").scrollTo({ top:0, behavior:"smooth" });
 }
 
@@ -339,10 +420,93 @@ function showMarketRole(role = "customer") {
   document.getElementById("marketHeroCopy").textContent = activeMarketRole === "provider"
     ? "Баталгаажсан хүсэлтийг уншиж, өөрийн туршлага болон боломжид тохирох ажилд санал өгнө."
     : "Жишиг хүсэлтээс санаа авч, хийх ажил болон хүлээн авах үр дүнгээ нэг дор бичнэ.";
-  document.getElementById("homeSearchInput").placeholder = activeMarketRole === "provider"
+  if (activeMarketArea === "freelance") document.getElementById("homeSearchInput").placeholder = activeMarketRole === "provider"
     ? "Ажил, чиглэл, шаардлагатай чадвар хайх…"
     : "Хүсэлт, чиглэл, хэрэгтэй боломж хайх…";
   showMarketView("all");
+}
+
+function marketToken() {
+  try { return sessionStorage.getItem(MARKET_TOKEN_KEY) || ""; } catch { return ""; }
+}
+
+function storeMarketToken(token = "") {
+  try {
+    if (token) sessionStorage.setItem(MARKET_TOKEN_KEY, token);
+    else sessionStorage.removeItem(MARKET_TOKEN_KEY);
+  } catch { /* Session storage may be disabled. */ }
+}
+
+async function marketApi(path, options = {}) {
+  const headers = { accept:"application/json", ...(options.body ? { "content-type":"application/json" } : {}), ...(options.headers || {}) };
+  const token = marketToken();
+  if (token) headers.authorization = `Bearer ${token}`;
+  const response = await fetch(`/api/market${path}`, { ...options, headers });
+  const data = response.status === 204 ? null : await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(data?.error || "Market request failed");
+    error.code = data?.code;
+    error.status = response.status;
+    throw error;
+  }
+  return data;
+}
+
+function renderMarketIdentity() {
+  const guest = document.getElementById("marketIdentityGuest");
+  const session = document.getElementById("marketIdentitySession");
+  guest.classList.toggle("hidden", Boolean(marketIdentity));
+  session.classList.toggle("hidden", !marketIdentity);
+  const active = new Set(marketIdentity?.active_memberships || []);
+  document.querySelectorAll("[data-market-role]").forEach(button => {
+    button.classList.toggle("membership-required", Boolean(marketIdentity) && !active.has(button.dataset.marketRole));
+    button.title = marketIdentity && !active.has(button.dataset.marketRole) ? "Идэвхтэй membership шаардлагатай" : "";
+  });
+  if (!marketIdentity) return;
+  document.getElementById("marketIdentityName").textContent = marketIdentity.display_name;
+  document.getElementById("marketIdentityMemberships").textContent = active.size
+    ? `${active.has("customer") ? "Захиалагч" : ""}${active.size === 2 ? " · " : ""}${active.has("provider") ? "Гүйцэтгэгч" : ""} · operator эрхээс тусдаа`
+    : "Membership хараахан алга · operator эрхгүй";
+  document.querySelectorAll("[data-add-market-membership]").forEach(button => {
+    button.classList.toggle("hidden", active.has(button.dataset.addMarketMembership));
+  });
+}
+
+async function requestMarketRole(role) {
+  const view = role === "provider" ? "provider" : "customer";
+  if (!marketIdentity) {
+    showMarketRole(view);
+    return;
+  }
+  if (!(marketIdentity.active_memberships || []).includes(view)) {
+    document.getElementById("marketIdentityMemberships").textContent = `${view === "provider" ? "Гүйцэтгэгч" : "Захиалагч"} membership идэвхтэй байх шаардлагатай.`;
+    document.querySelector(`[data-add-market-membership="${view}"]`)?.focus();
+    return;
+  }
+  try {
+    const data = await marketApi("/view", { method:"POST", body:JSON.stringify({ view }) });
+    marketIdentity = data.identity;
+    renderMarketIdentity();
+    showMarketRole(view);
+  } catch (error) {
+    if (error.status === 401) { marketIdentity = null; storeMarketToken(); renderMarketIdentity(); }
+  }
+}
+
+async function restoreMarketIdentity() {
+  if (!marketToken()) return renderMarketIdentity();
+  try {
+    const data = await marketApi("/auth/me");
+    marketIdentity = data.identity;
+    renderMarketIdentity();
+    if (marketIdentity.selected_view && marketIdentity.active_memberships.includes(marketIdentity.selected_view)) {
+      showMarketRole(marketIdentity.selected_view);
+    }
+  } catch {
+    marketIdentity = null;
+    storeMarketToken();
+    renderMarketIdentity();
+  }
 }
 
 function showPortfolioHome() {
@@ -1034,7 +1198,67 @@ document.getElementById("homeNewWorkButton").addEventListener("click", () => ope
 document.getElementById("marketCreateRequestButton").addEventListener("click", () => openRequestDialog());
 document.querySelectorAll("[data-open-request]").forEach(button => button.addEventListener("click", () => openRequestDialog()));
 document.querySelectorAll("[data-market-view]").forEach(button => button.addEventListener("click", () => showMarketView(button.dataset.marketView)));
-document.querySelectorAll("[data-market-role]").forEach(button => button.addEventListener("click", () => showMarketRole(button.dataset.marketRole)));
+document.querySelectorAll("[data-market-role]").forEach(button => button.addEventListener("click", () => requestMarketRole(button.dataset.marketRole)));
+document.getElementById("marketAuthOpen").addEventListener("click", () => marketAuthDialog.showModal());
+document.querySelectorAll("[data-market-auth-tab]").forEach(button => button.addEventListener("click", () => {
+  const register = button.dataset.marketAuthTab === "register";
+  document.querySelectorAll("[data-market-auth-tab]").forEach(item => item.classList.toggle("active", item === button));
+  marketLoginForm.classList.toggle("hidden", register);
+  marketRegisterForm.classList.toggle("hidden", !register);
+}));
+marketLoginForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  const errorElement = document.getElementById("marketLoginError");
+  errorElement.textContent = "";
+  const values = Object.fromEntries(new FormData(marketLoginForm));
+  try {
+    const data = await marketApi("/auth/login", { method:"POST", body:JSON.stringify(values) });
+    storeMarketToken(data.token);
+    marketIdentity = data.identity;
+    renderMarketIdentity();
+    marketLoginForm.reset();
+    marketAuthDialog.close();
+    if (marketIdentity.selected_view) showMarketRole(marketIdentity.selected_view);
+  } catch (error) { errorElement.textContent = error.message; }
+});
+marketRegisterForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  const errorElement = document.getElementById("marketRegisterError");
+  errorElement.textContent = "";
+  const values = Object.fromEntries(new FormData(marketRegisterForm));
+  try {
+    const data = await marketApi("/auth/register", { method:"POST", body:JSON.stringify(values) });
+    storeMarketToken(data.token);
+    marketIdentity = data.identity;
+    renderMarketIdentity();
+    marketRegisterForm.reset();
+    marketAuthDialog.close();
+  } catch (error) { errorElement.textContent = error.message; }
+});
+document.querySelectorAll("[data-add-market-membership]").forEach(button => button.addEventListener("click", async() => {
+  try {
+    const membershipType = button.dataset.addMarketMembership;
+    const data = await marketApi("/memberships", { method:"POST", body:JSON.stringify({ membershipType }) });
+    marketIdentity = data.identity;
+    renderMarketIdentity();
+    await requestMarketRole(membershipType);
+  } catch (error) {
+    if (error.status === 401) { marketIdentity = null; storeMarketToken(); renderMarketIdentity(); }
+  }
+}));
+document.getElementById("marketLogout").addEventListener("click", async() => {
+  try { await marketApi("/auth/logout", { method:"POST" }); } catch { /* Local session still ends. */ }
+  marketIdentity = null;
+  storeMarketToken();
+  renderMarketIdentity();
+  showMarketRole("customer");
+});
+document.querySelectorAll("[data-market-area]").forEach(button => button.addEventListener("click", () => showMarketArea(button.dataset.marketArea)));
+document.querySelectorAll("[data-product-category]").forEach(button => button.addEventListener("click", () => {
+  activeProductCategory = button.dataset.productCategory;
+  document.querySelectorAll("[data-product-category]").forEach(item => item.classList.toggle("active", item === button));
+  filterProductMarket(document.getElementById("homeSearchInput").value);
+}));
 document.querySelectorAll("[data-market-category]").forEach(button => button.addEventListener("click", () => {
   activeMarketCategory = button.dataset.marketCategory;
   document.querySelectorAll("[data-market-category]").forEach(item => item.classList.toggle("active", item === button));
@@ -1042,8 +1266,10 @@ document.querySelectorAll("[data-market-category]").forEach(button => button.add
 }));
 document.getElementById("showAllWorkspacesButton").addEventListener("click", () => { document.getElementById("homeSearchInput").value = ""; renderPortfolioHome("", { includeCreate:false }); showMarketView("labs"); });
 document.getElementById("homeSearchInput").addEventListener("input", event => {
-  if (activeMarketView === "all") filterMarketRequests(event.target.value);
-  if (activeMarketView === "labs") renderPortfolioHome(event.target.value, { includeCreate:false });
+  if (activeMarketArea === "products") filterProductMarket(event.target.value);
+  else if (activeMarketArea === "community") filterForumTopics(event.target.value);
+  else if (activeMarketView === "all") filterMarketRequests(event.target.value);
+  else if (activeMarketView === "labs") renderPortfolioHome(event.target.value, { includeCreate:false });
 });
 homeIntentForm.addEventListener("submit", event => {
   event.preventDefault();
@@ -1077,6 +1303,18 @@ myRequestList.addEventListener("click", event => {
   if (button) showRequestDetail(button.dataset.openRequestDetail);
 });
 document.getElementById("requestDetailBack").addEventListener("click", () => showMarketView("mine"));
+requestConfirmButton.addEventListener("click", () => {
+  const draft = loadRequestDraftRegistry().items.find(item => item.id === activeRequestDraftId);
+  if (!draft || draft.status === "requirement-confirmed") return;
+  if (!window.confirm("Дээрх мэдээлэл энэ хувилбараараа зөв гэдгийг батлах уу? Энэ үйлдэл хүсэлтийг нийтлэхгүй, төсөл үүсгэхгүй.")) return;
+  const confirmed = confirmRequirement(draft, new Date().toISOString());
+  saveRequestDraft(confirmed);
+  showRequestDetail(confirmed.id);
+});
+requestDownloadButton.addEventListener("click", () => {
+  const draft = loadRequestDraftRegistry().items.find(item => item.id === activeRequestDraftId);
+  if (draft?.status === "requirement-confirmed") downloadConfirmedRequirement(draft);
+});
 requestReviewButton.addEventListener("click", () => {
   const registry = loadRequestDraftRegistry();
   const draft = registry.items.find(item => item.id === activeRequestDraftId);
@@ -1169,13 +1407,14 @@ const storedCheckpoint = loadCheckpoint();
 function showPublicWorkView() {
   document.getElementById("publicConnectors").classList.add("hidden");
   document.getElementById("homeConnectorsButton").classList.remove("active");
-  showMarketView("all");
+  showMarketArea(activeMarketArea);
 }
 
 async function showPublicConnectors() {
   workspaceStudio.classList.add("hidden");
   portfolioHome.classList.remove("hidden");
   document.querySelectorAll("[data-portfolio-work-view]").forEach(element => element.classList.add("hidden"));
+  document.querySelectorAll("[data-market-area-panel]").forEach(element => element.classList.add("hidden"));
   const view = document.getElementById("publicConnectors");
   const grid = document.getElementById("publicConnectorGrid");
   view.classList.remove("hidden");
@@ -1212,6 +1451,8 @@ renderDeliveryLifecycle(storedCheckpoint);
 const initialParams = new URLSearchParams(location.search);
 if (initialParams.get("view") === "connectors") showPublicConnectors();
 else if (initialParams.get("role") === "provider") {
+  showMarketArea("freelance");
   showMarketRole("provider");
   if (["proposals","deliveries"].includes(initialParams.get("section"))) showMarketView(initialParams.get("section"));
-}
+} else showMarketArea(initialParams.get("area") || "products");
+restoreMarketIdentity();

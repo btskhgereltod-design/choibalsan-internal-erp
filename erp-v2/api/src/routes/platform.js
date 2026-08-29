@@ -8,7 +8,7 @@ const { rateLimit } = require("express-rate-limit");
 const { z } = require("zod");
 const { getPool } = require("../db");
 const { signPlatformToken } = require("../security/token");
-const { authenticatePlatform } = require("../middleware/auth");
+const { authenticatePlatform, requirePlatformPermissions } = require("../middleware/auth");
 const { writeSecurityAudit } = require("../services/audit");
 const { provisionTenant } = require("../services/tenant-provisioning");
 const { validateModuleManifest } = require("../services/module-contract");
@@ -215,8 +215,131 @@ const externalAiUsageSchema=z.object({
   artifactReference:z.string().trim().max(1000).optional().default(""),
   outcome:z.enum(["accepted","rejected","partial","error"]).default("partial"),
 });
+const supportAccessSchema=z.object({
+  organizationId:z.uuid(),
+  reason:z.string().trim().min(12).max(1000),
+  durationMinutes:z.coerce.number().int().min(5).max(60).default(30),
+  scopes:z.array(z.enum(["diagnostics","configuration","audit"])).min(1).max(3)
+    .transform(scopes=>[...new Set(scopes)]),
+});
 
-router.get("/ai-knowledge/overview", asyncHandler(async(_req,res)=>{
+router.get("/founder/control", requirePlatformPermissions("platform.founder.read"), asyncHandler(async(req,res)=>{
+  const [assignments,grants]=await Promise.all([
+    getPool().query(`SELECT role.code,role.name,assignment.assigned_at
+      FROM platform_admin_role_assignments assignment
+      JOIN platform_admin_roles role ON role.id=assignment.role_id
+      WHERE assignment.platform_admin_id=$1 AND assignment.revoked_at IS NULL AND role.active=true
+      ORDER BY role.code`,[req.platformAdmin.id]),
+    getPool().query(`SELECT g.id,g.organization_id,organization.name AS organization_name,
+      g.reason,g.scopes,g.issued_at,g.expires_at,g.revoked_at,
+      CASE WHEN g.revoked_at IS NOT NULL THEN 'revoked'
+           WHEN g.expires_at<=now() THEN 'expired' ELSE 'active' END AS status
+      FROM platform_support_access_grants g
+      JOIN organizations organization ON organization.id=g.organization_id
+      WHERE g.platform_admin_id=$1
+      ORDER BY g.issued_at DESC LIMIT 50`,[req.platformAdmin.id]),
+  ]);
+  res.json({
+    founder:{id:req.platformAdmin.id,roles:assignments.rows,permissions:req.platformAdmin.permissions},
+    contexts:[
+      {code:"platform",state:"live",authority:"platform-rbac",description:"Tenant lifecycle, runtime, governance, billing, support, and Platform audit"},
+      {code:"apps",state:"planned",authority:"separate-future-boundary",description:"Developer/vendor membership is not a Platform permission"},
+      {code:"market-customer",state:"preview",authority:"market-membership",description:"Customer mode is currently a public browser preview"},
+      {code:"market-provider",state:"preview",authority:"market-membership",description:"Provider mode is currently a public browser preview"},
+      {code:"market-operator",state:"planned",authority:"separate-future-boundary",description:"Operator authority must remain separate from vendor participation"},
+      {code:"system-operator",state:"external",authority:"host-and-deployment",description:"Deployment, migration, backup, and restore remain outside application RBAC"},
+      {code:"break-glass",state:"external",authority:"offline-recovery",description:"Explicit recovery script; never a daily web session or Market outcome override"},
+    ],
+    supportGrants:grants.rows,
+    boundaries:{tenantApiBypass:false,marketOutcomeOverride:false,auditMutable:false,maxSupportMinutes:60},
+  });
+}));
+
+router.post("/support-access", requirePlatformPermissions("platform.support-access.manage"), asyncHandler(async(req,res)=>{
+  const parsed=supportAccessSchema.safeParse(req.body);
+  if(!parsed.success)return res.status(400).json({error:"Invalid support access request",details:parsed.error.flatten()});
+  const value=parsed.data,client=await getPool().connect();
+  try{await client.query("BEGIN");
+    const organization=await client.query("SELECT id,name,status FROM organizations WHERE id=$1 FOR SHARE",[value.organizationId]);
+    if(!organization.rowCount){await client.query("ROLLBACK");return res.status(404).json({error:"Organization not found"});}
+    const result=await client.query(`INSERT INTO platform_support_access_grants
+      (platform_admin_id,organization_id,reason,scopes,expires_at)
+      VALUES($1,$2,$3,$4,now()+($5::int*interval '1 minute'))
+      RETURNING id,organization_id,reason,scopes,issued_at,expires_at,revoked_at`,
+      [req.platformAdmin.id,value.organizationId,value.reason,value.scopes,value.durationMinutes]);
+    const grant=result.rows[0],detail={organizationId:value.organizationId,scopes:value.scopes,durationMinutes:value.durationMinutes};
+    await client.query(`INSERT INTO platform_support_access_events
+      (grant_id,platform_admin_id,event_type,detail,ip_address)
+      VALUES($1,$2,'issued',$3::jsonb,$4)`,[grant.id,req.platformAdmin.id,JSON.stringify(detail),req.ip||null]);
+    await client.query(`INSERT INTO platform_audit_logs(platform_admin_id,action,entity_type,entity_id,detail,ip_address)
+      VALUES($1,'platform.support_access.issued','support_access',$2,$3::jsonb,$4)`,
+      [req.platformAdmin.id,grant.id,JSON.stringify(detail),req.ip||null]);
+    await client.query("COMMIT");res.status(201).json({item:{...grant,organization_name:organization.rows[0].name,status:"active"}});
+  }catch(error){await client.query("ROLLBACK").catch(()=>{});throw error;}finally{client.release();}
+}));
+
+router.post("/support-access/:id/revoke", requirePlatformPermissions("platform.support-access.manage"), asyncHandler(async(req,res)=>{
+  const id=z.uuid().safeParse(req.params.id);
+  if(!id.success)return res.status(400).json({error:"Invalid support grant id"});
+  const client=await getPool().connect();
+  try{await client.query("BEGIN");
+    const result=await client.query(`UPDATE platform_support_access_grants
+      SET revoked_at=now(),revoked_by=$2
+      WHERE id=$1 AND platform_admin_id=$2 AND revoked_at IS NULL
+      RETURNING id,organization_id,revoked_at`,[id.data,req.platformAdmin.id]);
+    if(!result.rowCount){await client.query("ROLLBACK");return res.status(404).json({error:"Active support grant not found"});}
+    const grant=result.rows[0],detail={organizationId:grant.organization_id};
+    await client.query(`INSERT INTO platform_support_access_events
+      (grant_id,platform_admin_id,event_type,detail,ip_address)
+      VALUES($1,$2,'revoked',$3::jsonb,$4)`,[grant.id,req.platformAdmin.id,JSON.stringify(detail),req.ip||null]);
+    await client.query(`INSERT INTO platform_audit_logs(platform_admin_id,action,entity_type,entity_id,detail,ip_address)
+      VALUES($1,'platform.support_access.revoked','support_access',$2,$3::jsonb,$4)`,
+      [req.platformAdmin.id,grant.id,JSON.stringify(detail),req.ip||null]);
+    await client.query("COMMIT");res.json({item:grant});
+  }catch(error){await client.query("ROLLBACK").catch(()=>{});throw error;}finally{client.release();}
+}));
+
+router.get("/support-access/:id/snapshot", requirePlatformPermissions("platform.support-access.manage"), asyncHandler(async(req,res)=>{
+  const id=z.uuid().safeParse(req.params.id);
+  if(!id.success)return res.status(400).json({error:"Invalid support grant id"});
+  const client=await getPool().connect();
+  try{await client.query("BEGIN");
+    const access=await client.query(`SELECT g.*,organization.name AS organization_name,organization.slug,
+      organization.status AS organization_status
+      FROM platform_support_access_grants g JOIN organizations organization ON organization.id=g.organization_id
+      WHERE g.id=$1 AND g.platform_admin_id=$2 FOR UPDATE`,[id.data,req.platformAdmin.id]);
+    if(!access.rowCount){await client.query("ROLLBACK");return res.status(404).json({error:"Support grant not found"});}
+    const grant=access.rows[0];
+    if(grant.revoked_at||new Date(grant.expires_at)<=new Date()){
+      await client.query(`INSERT INTO platform_support_access_events
+        (grant_id,platform_admin_id,event_type,detail,ip_address)
+        VALUES($1,$2,'expired_denied',$3::jsonb,$4)`,[grant.id,req.platformAdmin.id,JSON.stringify({revoked:Boolean(grant.revoked_at)}),req.ip||null]);
+      await client.query("COMMIT");return res.status(403).json({error:"Support grant is revoked or expired",code:"SUPPORT_ACCESS_INACTIVE"});
+    }
+    const snapshot={organization:{id:grant.organization_id,name:grant.organization_name,slug:grant.slug,status:grant.organization_status}};
+    if(grant.scopes.includes("diagnostics"))snapshot.diagnostics=(await client.query(`SELECT
+      (SELECT count(*)::int FROM users WHERE organization_id=$1 AND active=true AND can_login=true) AS active_accounts,
+      (SELECT count(*)::int FROM assets WHERE organization_id=$1) AS assets,
+      (SELECT count(*)::int FROM work_orders WHERE organization_id=$1) AS work_orders,
+      (SELECT count(*)::int FROM integration_executions WHERE organization_id=$1 AND status='dead_letter') AS dead_letters,
+      (SELECT count(*)::int FROM security_audit_events WHERE organization_id=$1 AND outcome IN('failure','denied') AND created_at>=now()-interval '24 hours') AS security_events_24h`,[grant.organization_id])).rows[0];
+    if(grant.scopes.includes("configuration"))snapshot.configuration=(await client.query(`SELECT module.code,module.name,module.category,
+      COALESCE(enabled.enabled,module.core) AS enabled
+      FROM module_catalog module LEFT JOIN organization_modules enabled
+      ON enabled.organization_id=$1 AND enabled.module_code=module.code
+      WHERE module.active=true ORDER BY module.code`,[grant.organization_id])).rows;
+    if(grant.scopes.includes("audit"))snapshot.audit=(await client.query(`SELECT action,outcome,count(*)::int AS events,max(created_at) AS last_at
+      FROM security_audit_events WHERE organization_id=$1 AND created_at>=now()-interval '24 hours'
+      GROUP BY action,outcome ORDER BY max(created_at) DESC LIMIT 20`,[grant.organization_id])).rows;
+    await client.query(`INSERT INTO platform_support_access_events
+      (grant_id,platform_admin_id,event_type,detail,ip_address)
+      VALUES($1,$2,'snapshot_read',$3::jsonb,$4)`,[grant.id,req.platformAdmin.id,JSON.stringify({scopes:grant.scopes}),req.ip||null]);
+    await client.query("COMMIT");res.json({grant:{id:grant.id,reason:grant.reason,scopes:grant.scopes,expires_at:grant.expires_at},snapshot,
+      boundaries:{rawTenantRows:false,tenantApiBypass:false,mutationsAllowed:false}});
+  }catch(error){await client.query("ROLLBACK").catch(()=>{});throw error;}finally{client.release();}
+}));
+
+router.get("/ai-knowledge/overview", requirePlatformPermissions("platform.ai-knowledge.read"), asyncHandler(async(_req,res)=>{
   const [methods,sessions,feedback,candidates,outcomes,sources,coverage]=await Promise.all([
     getPool().query(`SELECT code,version,name,description,status,approved_at,created_at
       FROM ai_method_versions ORDER BY code,version DESC`),
@@ -246,7 +369,7 @@ router.get("/ai-knowledge/overview", asyncHandler(async(_req,res)=>{
     privacy:{rawTenantEvidenceExposed:false,sharedKnowledgeRequiresAnonymization:true,humanApprovalRequired:true}});
 }));
 
-router.post("/ai-knowledge/methods/:code/:version/activate", asyncHandler(async(req,res)=>{
+router.post("/ai-knowledge/methods/:code/:version/activate", requirePlatformPermissions("platform.ai-knowledge.manage"), asyncHandler(async(req,res)=>{
   const methodCode=z.string().trim().regex(/^[a-z0-9-]{2,80}$/).safeParse(req.params.code);
   const version=z.coerce.number().int().positive().safeParse(req.params.version);
   if(!methodCode.success||!version.success)return res.status(400).json({error:"Invalid method version"});
@@ -263,7 +386,7 @@ router.post("/ai-knowledge/methods/:code/:version/activate", asyncHandler(async(
   }catch(error){await client.query("ROLLBACK").catch(()=>{});throw error;}finally{client.release();}
 }));
 
-router.patch("/ai-knowledge/candidates/:id", asyncHandler(async(req,res)=>{
+router.patch("/ai-knowledge/candidates/:id", requirePlatformPermissions("platform.ai-knowledge.manage"), asyncHandler(async(req,res)=>{
   const id=z.uuid().safeParse(req.params.id),parsed=knowledgeReviewSchema.safeParse(req.body);
   if(!id.success||!parsed.success)return res.status(400).json({error:"Invalid knowledge review"});
   if(parsed.data.reviewStatus==="approved"&&parsed.data.anonymizationStatus!=="verified")return res.status(400).json({error:"Anonymization must be verified before approval"});
@@ -280,7 +403,7 @@ router.patch("/ai-knowledge/candidates/:id", asyncHandler(async(req,res)=>{
   }catch(error){await client.query("ROLLBACK").catch(()=>{});throw error;}finally{client.release();}
 }));
 
-router.get("/ai-usage/overview", asyncHandler(async(req,res)=>{
+router.get("/ai-usage/overview", requirePlatformPermissions("platform.ai-usage.read"), asyncHandler(async(req,res)=>{
   const days=z.coerce.number().int().min(1).max(365).catch(30).parse(req.query.days);
   const [summary,breakdown,recent,manifests,routes]=await Promise.all([
     getPool().query(`SELECT count(*)::int AS events,
@@ -309,7 +432,7 @@ router.get("/ai-usage/overview", asyncHandler(async(req,res)=>{
     moduleGovernance:{modules:manifests.rows,routes:routes.rows}});
 }));
 
-router.post("/ai-usage/external", asyncHandler(async(req,res)=>{
+router.post("/ai-usage/external", requirePlatformPermissions("platform.ai-usage.manage"), asyncHandler(async(req,res)=>{
   const parsed=externalAiUsageSchema.safeParse(req.body);
   if(!parsed.success)return res.status(400).json({error:"Invalid external AI usage",details:parsed.error.flatten()});
   const value=parsed.data,client=await getPool().connect();
@@ -325,13 +448,13 @@ router.post("/ai-usage/external", asyncHandler(async(req,res)=>{
   }catch(error){await client.query("ROLLBACK").catch(()=>{});throw error;}finally{client.release();}
 }));
 
-router.post("/module-governance/validate", asyncHandler(async(req,res)=>{
+router.post("/module-governance/validate", requirePlatformPermissions("platform.catalog.validate"), asyncHandler(async(req,res)=>{
   const routes=await getPool().query(`SELECT route_prefix,owner_code,active FROM platform_route_registry WHERE active=true`);
   const result=validateModuleManifest(req.body,routes.rows);
   res.status(result.valid?200:400).json(result);
 }));
 
-router.get("/command-center", asyncHandler(async (_req, res) => {
+router.get("/command-center", requirePlatformPermissions("platform.operations.read"), asyncHandler(async (_req, res) => {
   const [summary, attention, activity] = await Promise.all([
     getPool().query(
       `SELECT count(*)::int AS organizations,
@@ -386,7 +509,7 @@ router.get("/command-center", asyncHandler(async (_req, res) => {
   res.json({ summary: summary.rows[0], attention: attention.rows, activity: activity.rows });
 }));
 
-router.post("/organizations/:id/journey-events", asyncHandler(async (req,res)=>{
+router.post("/organizations/:id/journey-events", requirePlatformPermissions("platform.adoption.manage"), asyncHandler(async (req,res)=>{
   const organizationId=z.uuid().safeParse(req.params.id);
   const parsed=journeyEventSchema.safeParse(req.body||{});
   if(!organizationId.success||!parsed.success)return res.status(400).json({error:"Invalid customer journey event",details:parsed.error?.flatten()});
@@ -413,7 +536,7 @@ router.post("/organizations/:id/journey-events", asyncHandler(async (req,res)=>{
   }catch(error){await client.query("ROLLBACK").catch(()=>{});throw error;}finally{client.release();}
 }));
 
-router.get("/adoption/overview", asyncHandler(async (_req, res) => {
+router.get("/adoption/overview", requirePlatformPermissions("platform.adoption.read"), asyncHandler(async (_req, res) => {
   const result = await getPool().query(
     `WITH organization_milestones AS (
        SELECT o.id,o.slug,o.name,o.status,o.created_at,
@@ -563,7 +686,7 @@ router.get("/adoption/overview", asyncHandler(async (_req, res) => {
   });
 }));
 
-router.get("/system/status", asyncHandler(async (_req,res)=>{
+router.get("/system/status", requirePlatformPermissions("platform.system.read"), asyncHandler(async (_req,res)=>{
   const [database,governance,governanceOrganizations,uploads,backupNames] = await Promise.all([
     getPool().query(
       `SELECT pg_database_size(current_database())::bigint AS database_bytes,
@@ -655,7 +778,7 @@ router.get("/system/status", asyncHandler(async (_req,res)=>{
     api_uptime_seconds:Math.floor(process.uptime()) });
 }));
 
-router.get("/organizations", asyncHandler(async (_req, res) => {
+router.get("/organizations", requirePlatformPermissions("platform.organizations.read"), asyncHandler(async (_req, res) => {
   const result = await getPool().query(
     `SELECT o.id,o.slug,o.name,o.status,o.created_at,
             s.plan_code,s.status AS subscription_status,s.starts_at,s.ends_at,
@@ -673,7 +796,7 @@ router.get("/organizations", asyncHandler(async (_req, res) => {
   res.json({ items: result.rows });
 }));
 
-router.get("/organizations/:id/control", asyncHandler(async (req, res) => {
+router.get("/organizations/:id/control", requirePlatformPermissions("platform.organizations.read"), asyncHandler(async (req, res) => {
   const id = z.uuid().safeParse(req.params.id);
   if (!id.success) return res.status(400).json({ error: "Invalid organization id" });
   const organizationId = id.data;
@@ -763,7 +886,7 @@ router.get("/organizations/:id/control", asyncHandler(async (req, res) => {
   });
 }));
 
-router.post("/organizations", asyncHandler(async (req, res) => {
+router.post("/organizations", requirePlatformPermissions("platform.organizations.manage"), asyncHandler(async (req, res) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Байгууллагын мэдээлэл дутуу эсвэл буруу байна" });
   const value = parsed.data;
@@ -785,7 +908,7 @@ router.post("/organizations", asyncHandler(async (req, res) => {
   }
 }));
 
-router.patch("/organizations/:id", asyncHandler(async (req, res) => {
+router.patch("/organizations/:id", requirePlatformPermissions("platform.organizations.manage"), asyncHandler(async (req, res) => {
   const id = z.uuid().safeParse(req.params.id);
   const parsed = updateSchema.safeParse(req.body);
   if (!id.success || !parsed.success) return res.status(400).json({ error: "Invalid organization update" });

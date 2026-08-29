@@ -25,6 +25,17 @@ function signPlatformToken(adminId) {
   });
 }
 
+function signMarketToken(identityId) {
+  const config = loadConfig();
+  return jwt.sign({ kind: "market" }, config.JWT_SECRET, {
+    subject: identityId,
+    issuer: config.JWT_ISSUER,
+    audience: config.JWT_AUDIENCE,
+    expiresIn: "8h",
+    algorithm: "HS256",
+  });
+}
+
 function verifyAccessToken(token) {
   const config = loadConfig();
   return jwt.verify(token, config.JWT_SECRET, {
@@ -34,4 +45,4 @@ function verifyAccessToken(token) {
   });
 }
 
-module.exports = { signAccessToken, signPlatformToken, verifyAccessToken };
+module.exports = { signAccessToken, signPlatformToken, signMarketToken, verifyAccessToken };

@@ -1,6 +1,6 @@
 # OVERVA Architecture
 
-Last reviewed: 2026-08-24
+Last reviewed: 2026-08-29
 
 This is a current map and a stable default, not a permanent restriction. For
 production operations, see `../PRODUCTION_DEPLOYMENT.md`. For data rules, see
@@ -47,6 +47,63 @@ public application endpoints.
 - `admin.overva.com` — provider/platform administration.
 - Additional auth, IoT, map, and status hostnames remain separable routing
   boundaries when their deployment requires it.
+
+## Accepted Platform and Market Boundary
+
+OVERVA Group is not a runtime or authorization boundary. It has three peer
+operating roles: Platform, OVERVA Apps vendor, and Market operator.
+
+`app.overva.com` is the governed organization Platform, App Factory, review, and
+runtime boundary. The future multi-supplier Market is a separate product,
+authorization, data, administration, and commercial boundary; `market.overva.com`
+is the intended hostname but is not yet a deployed production application.
+
+`OVERVA Apps` may sell Platform-produced apps and bid for freelance work only as
+a normal Market supplier. Market operator access must not expose competing
+supplier proposals, private discussions, ranking controls, complaints, or
+enforcement data to `OVERVA Apps`. Shared sign-in may use scoped federation but
+must not merge Market profiles with tenant employees, roles, private evidence,
+builder projects, runtime data, or tenant audit journals.
+
+The full accepted separation and equal-participation contract is
+`MARKET_PLATFORM_SEPARATION_CONTRACT_V1.md`; the canonical Group hierarchy is
+`OVERVA_GROUP_OPERATING_MODEL_V1.md`.
+
+Administrative work follows the same boundary. Group consumes aggregates and
+attestations; Platform, OVERVA Apps, and Market keep separately attributable
+roles, queues, approvals, and audit evidence. Cross-boundary collaboration uses
+explicit redacted handoffs rather than raw source access. The accepted control
+model is `ADMIN_OPERATING_MODEL_V1.md`.
+
+The existing Platform control plane derives active role and permission arrays
+from `platform_admin_role_assignments` on every authenticated request. Route
+guards enforce Platform-only organization, adoption, operations, system,
+AI-governance, usage, validation, and billing permissions. This live lookup
+allows revocation without waiting for an access token to expire. It is not an
+identity federation or a permission bridge to Group, OVERVA Apps, or Market.
+
+Founder-led operation is layered on this Platform boundary rather than added as
+a universal application super-admin. `founder-operator` is Platform-scoped.
+Tenant support requires an attributable grant with a reason, explicit
+diagnostic/configuration/audit scope, and a maximum sixty-minute lifetime. The
+grant exposes only a redacted read-only snapshot through Platform routes; it
+does not mint a tenant user/token, enter ordinary tenant APIs, or permit tenant
+mutation. Its issue, snapshot read, expiry denial, and revocation are recorded
+in an append-only event journal. Host deployment/migration/restore and offline
+break-glass recovery remain external operational authorities. Market customer,
+provider, and operator identities remain outside this Platform authorization
+model.
+
+The first local Market identity slice is an extraction-compatible boundary in
+the current single-host deployment. `market_identities`, `market_memberships`,
+`market_operator_assignments`, and `market_audit_events` have no foreign keys to
+tenant organizations/users or Platform administrators. `/api/market/*` accepts
+only an explicitly typed Market token and derives active memberships plus the
+separate operator assignment from PostgreSQL on every request. Tenant and
+Platform middleware reject that token; the Market middleware rejects tenant and
+Platform tokens. `customer` / `provider` view selection is authorized by an
+active participant membership and changes no authority. No person-level
+federation is implemented in this slice.
 
 ## Tenant and Identity Model
 

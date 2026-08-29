@@ -71,5 +71,37 @@
     return registry?.items?.find(item => item.reviewWorkspaceId === workspaceId) || null;
   }
 
-  return { REGISTRY_VERSION, isDraft, normalizeRegistry, upsertDraft, findDraftByWorkspace };
+  function confirmRequirement(draft, confirmedAt) {
+    if (!isDraft(draft)) throw new Error("Invalid request draft");
+    if (!confirmedAt || Number.isNaN(Date.parse(confirmedAt))) throw new Error("A valid confirmation time is required");
+    return {
+      ...draft,
+      revision:draft.revision + 1,
+      updatedAt:confirmedAt,
+      status:"requirement-confirmed",
+      requirementArtifactVersion:1,
+      requirementConfirmedAt:confirmedAt
+    };
+  }
+
+  function buildRequirementArtifact(draft) {
+    if (!isDraft(draft) || draft.status !== "requirement-confirmed" || !draft.requirementConfirmedAt) {
+      throw new Error("Requirement must be confirmed before export");
+    }
+    return [
+      "OVERVA БАТАЛГААЖСАН ШААРДЛАГА",
+      `Artifact version: ${draft.requirementArtifactVersion || 1}`,
+      `Request ID: ${draft.id}`,
+      `Request revision: ${draft.revision}`,
+      `Confirmed at: ${draft.requirementConfirmedAt}`,
+      "Publication: unpublished",
+      "Project: not created",
+      "",
+      draft.title || "Гарчиггүй хүсэлт",
+      "",
+      draft.packageText
+    ].join("\n");
+  }
+
+  return { REGISTRY_VERSION, isDraft, normalizeRegistry, upsertDraft, findDraftByWorkspace, confirmRequirement, buildRequirementArtifact };
 });

@@ -47,6 +47,7 @@ test("public site starts with a portfolio Home and opens the governed workspace 
   const registryJs = fs.readFileSync(path.join(publicRoot, "workspace-registry.js"), "utf8");
   const intakeJs = fs.readFileSync(path.join(publicRoot, "workspace-intake.js"), "utf8");
   const requestDraftRegistryJs = fs.readFileSync(path.join(publicRoot, "request-draft-registry.js"), "utf8");
+  const trialDialogHtml = html.match(/<dialog class="trial-dialog" id="trialDialog">[\s\S]*?<\/dialog>/)?.[0] || "";
   assert.match(html, /Таны байгууллагын хэрэгцээг хамтдаа тодорхойлъё/);
   assert.match(html, /class="studio-sidebar"/);
   assert.match(html, /class="chat-panel"/);
@@ -70,8 +71,8 @@ test("public site starts with a portfolio Home and opens the governed workspace 
   assert.match(html, /data-market-view="proposals"/);
   assert.match(html, /data-market-view="deliveries"/);
   assert.match(html, /data-market-view="provider-rules"/);
-  const customerNav = html.match(/<nav class="market-side-nav" data-market-role-nav="customer"[\s\S]*?<\/nav>/)?.[0] || "";
-  const providerNav = html.match(/<nav class="market-side-nav hidden" data-market-role-nav="provider"[\s\S]*?<\/nav>/)?.[0] || "";
+  const customerNav = html.match(/<nav class="market-side-nav[^\"]*" data-market-role-nav="customer"[\s\S]*?<\/nav>/)?.[0] || "";
+  const providerNav = html.match(/<nav class="market-side-nav[^\"]*" data-market-role-nav="provider"[\s\S]*?<\/nav>/)?.[0] || "";
   assert.doesNotMatch(customerNav, /data-market-view="labs"/);
   assert.doesNotMatch(customerNav, /data-market-view="rules"/);
   assert.doesNotMatch(providerNav, /data-market-view="provider-rules"/);
@@ -124,9 +125,28 @@ test("public site starts with a portfolio Home and opens the governed workspace 
   assert.match(html, /Миний ажлууд/);
   assert.doesNotMatch(html, /data-home-view=/);
   assert.doesNotMatch(html, />Холболтын ажил</);
-  assert.match(html, /site\.css\?v=24/);
-  assert.match(html, /site\.js\?v=24/);
-  assert.match(html, /request-draft-registry\.js\?v=2/);
+  assert.match(html, /class="portfolio-home products-area"/);
+  assert.match(html, /data-market-area="products"/);
+  assert.match(html, /data-market-area="community"/);
+  assert.match(html, /data-market-area="freelance"/);
+  assert.match(html, /Маркет/);
+  assert.match(html, /Форум/);
+  assert.match(html, /Захиалгат ажил ба үйлчилгээ/);
+  assert.match(html, /data-product-category="apps"/);
+  assert.match(html, /data-product-category="modules"/);
+  assert.match(html, /data-product-category="connectors"/);
+  assert.match(html, /data-product-category="templates"/);
+  assert.match(html, /data-product-category="agents"/);
+  assert.match(html, /МАРКЕТЫН ЗАСАГЛАЛ/);
+  assert.match(html, /Нийлүүлэгч бүрт ижил дүрэм/);
+  assert.match(html, /OVERVA Apps · нийлүүлэгч/);
+  assert.match(html, /Нийлүүлэгчийн жишээ/);
+  assert.match(html, /бодит худалдаа биш/);
+  assert.match(html, /Одоогоор бодит нийтлэл, хэрэглэгчийн бүртгэл нээгдээгүй/);
+  assert.match(html, /data-forum-topic/);
+  assert.match(html, /site\.css\?v=28/);
+  assert.match(html, /site\.js\?v=28/);
+  assert.match(html, /request-draft-registry\.js\?v=3/);
   assert.match(html, /conversation-memory\.js\?v=15/);
   assert.match(html, /workspace-lifecycle\.js\?v=14/);
   assert.match(html, /workspace-registry\.js\?v=14/);
@@ -156,8 +176,8 @@ test("public site starts with a portfolio Home and opens the governed workspace 
   assert.doesNotMatch(html, /<label>Байгууллагын код/);
   assert.doesNotMatch(html, /<label>Хэрэглэгчийн нэр/);
   assert.doesNotMatch(html, /<legend>Турших модулиуд/);
-  assert.doesNotMatch(html, /name="email"/);
-  assert.doesNotMatch(html, /name="password"/);
+  assert.doesNotMatch(trialDialogHtml, /name="email"/);
+  assert.doesNotMatch(trialDialogHtml, /name="password"/);
   assert.doesNotMatch(html, /id="successLogin"/);
   assert.match(css, /html, body \{ width:100%; height:100%; overflow:hidden;/);
   assert.match(css, /grid-template-columns:220px/);
@@ -181,10 +201,18 @@ test("public site starts with a portfolio Home and opens the governed workspace 
   assert.match(js, /Тохирох ажлаа олох/);
   assert.match(js, /Нээлттэй бодит ажил биш/);
   assert.match(js, /showRequestDetail/);
+  assert.match(html, /id="requestConfirmButton"/);
+  assert.match(html, /id="requestDownloadButton"/);
+  assert.match(js, /confirmRequirement/);
+  assert.match(js, /buildRequirementArtifact/);
+  assert.match(js, /Шаардлага баталсан · нийтлээгүй/);
   assert.match(js, /reviewWorkspaceId/);
   assert.match(js, /renderMyRequests/);
   assert.match(js, /filterMarketRequests/);
   assert.match(js, /showMarketView/);
+  assert.match(js, /showMarketArea/);
+  assert.match(js, /filterProductMarket/);
+  assert.match(js, /filterForumTopics/);
   assert.match(js, /beginWorkspaceFromHome/);
   assert.match(js, /dataset\.homeText/);
   assert.match(js, /openRequestDialog/);
@@ -424,4 +452,28 @@ test("conversation memory transitions never promote preview activity to confirme
   assert.equal(confirmed.memory.executionVerification.length, 0);
   assert.deepEqual(memory.classifyContextIntent("svvld hiisen ajil yuu bna haana zogsoo"), { greeting:false, focus:"overview" });
   assert.deepEqual(memory.classifyContextIntent("sain uu"), { greeting:true, focus:"overview" });
+});
+
+test("a human-confirmed requirement exports without publishing or creating a project", () => {
+  const drafts = require("../../public-site/request-draft-registry");
+  const draft = {
+    id:"request-draft:pilot-1",
+    revision:2,
+    title:"Inventory requirement",
+    packageText:"ОДООГИЙН АСУУДАЛ: Үлдэгдэл зөрдөг\nХҮЛЭЭН АВАХ ШАЛГУУР: Хоёр тайлан ижил гарна",
+    published:false,
+    status:"draft"
+  };
+  assert.throws(() => drafts.buildRequirementArtifact(draft), /must be confirmed/);
+  const confirmed = drafts.confirmRequirement(draft, "2026-08-28T10:15:00.000Z");
+  assert.equal(confirmed.revision, 3);
+  assert.equal(confirmed.status, "requirement-confirmed");
+  assert.equal(confirmed.published, false);
+  assert.equal(confirmed.projectId, undefined);
+  const artifact = drafts.buildRequirementArtifact(confirmed);
+  assert.match(artifact, /OVERVA БАТАЛГААЖСАН ШААРДЛАГА/);
+  assert.match(artifact, /Request revision: 3/);
+  assert.match(artifact, /Publication: unpublished/);
+  assert.match(artifact, /Project: not created/);
+  assert.match(artifact, /ХҮЛЭЭН АВАХ ШАЛГУУР: Хоёр тайлан ижил гарна/);
 });

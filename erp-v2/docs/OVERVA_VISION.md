@@ -1,6 +1,6 @@
 # OVERVA Vision
 
-Last reviewed: 2026-08-27
+Last reviewed: 2026-08-28
 
 ## Purpose
 
@@ -27,16 +27,38 @@ Each organization retains its own tenant, data, authorization, and audit
 boundary. Cross-organization activity requires explicit contracts, permissions,
 and attributable evidence.
 
-The active entry position is narrower:
+The active family has two distinct entry positions:
 
-> Help an organization define its digital need correctly, find a trusted
-> delivery path or developer, and govern the work through production outcome.
+> Platform — understand, build, review, and operate organizational apps in a
+> governed environment.
 
-OVERVA therefore does not initially lead as another ERP, a module catalogue, or
-a generic AI app builder. Guided discovery and the governed workspace are the
-entry experience; building and a future marketplace are delivery paths from the
-same confirmed requirement. `MARKET_ENTRY_STRATEGY_V1.md` defines the accepted
-validation scope and guardrails.
+> Market — find ready products, order custom work, and meet suppliers in a
+> well-governed market where the customer chooses freely.
+
+Guided discovery and the App Factory belong to the Platform. Product Market,
+Custom Work and Services, and Forum belong to the separate Market. Explicit, versioned
+handoffs may connect them, but neither is a mandatory funnel into the other.
+`MARKET_ENTRY_STRATEGY_V1.md` defines the accepted validation scope and
+guardrails.
+
+## Group, Platform, Market, and vendor separation
+
+OVERVA Group is the ownership and strategy umbrella, not a shared data or
+authorization boundary. Platform, OVERVA Apps, and Market are peer operating
+roles.
+
+OVERVA Platform at `app.overva.com` is the controlled organizational environment,
+App Factory, review surface, and runtime. OVERVA Market is a separate
+multi-supplier market for ready products, freelance work, and community
+knowledge. Strong Market governance protects integrity and confidentiality; it
+does not choose winners or force customers into the Platform.
+
+Apps built by the Platform may be sold through the clearly labelled peer
+`OVERVA Apps` vendor arm. That vendor competes under the same listing, ranking, fee,
+review, enforcement, and appeal rules as other suppliers. Common ownership must
+not create common access to operator-only or competitor-private data. The
+accepted boundary is `OVERVA_GROUP_OPERATING_MODEL_V1.md`,
+`MARKET_PLATFORM_SEPARATION_CONTRACT_V1.md`, D-023, and D-024.
 
 ## Product Promise
 

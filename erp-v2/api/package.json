@@ -21,6 +21,7 @@
     "release:check": "node scripts/release-check.js",
     "smoke:session": "node scripts/session-smoke.js",
     "smoke:platform-status": "node scripts/platform-status-smoke.js",
+    "smoke:market-identity": "node scripts/market-identity-integration-smoke.js",
     "smoke:safety": "node scripts/safety-smoke.js",
     "smoke:administration": "node scripts/administration-smoke.js",
     "smoke:builder": "node scripts/builder-smoke.js",

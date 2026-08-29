@@ -6,45 +6,79 @@
   <meta name="description" content="OVERVA — байгууллагын цахим хэрэгцээг бүтэцтэй хүсэлт болгож, тохирох хэрэгжүүлэх замыг сонгон, ажлыг pilot-аас production хүртэл хяналттай хүргэх орчин.">
   <meta name="color-scheme" content="light">
   <title>OVERVA — Байгууллагын цахим хэрэгцээний зах</title>
-  <link rel="stylesheet" href="/site.css?v=24">
+  <link rel="stylesheet" href="/site.css?v=28">
   <script src="/conversation-memory.js?v=15" defer></script>
   <script src="/workspace-lifecycle.js?v=14" defer></script>
   <script src="/workspace-registry.js?v=14" defer></script>
   <script src="/workspace-intake.js?v=14.1" defer></script>
-  <script src="/request-draft-registry.js?v=2" defer></script>
-  <script src="/site.js?v=24" defer></script>
+  <script src="/request-draft-registry.js?v=3" defer></script>
+  <script src="/site.js?v=28" defer></script>
 </head>
 <body>
-  <section class="portfolio-home" id="portfolioHome" aria-label="OVERVA үндсэн нүүр">
+  <section class="portfolio-home products-area" id="portfolioHome" aria-label="OVERVA үндсэн нүүр">
     <aside class="portfolio-sidebar">
       <a class="brand" href="/" aria-label="OVERVA нүүр"><span>OV</span><strong>OVERVA</strong></a>
-      <div class="market-role-switch" aria-label="OVERVA Market ашиглах горим">
+      <nav class="market-primary-nav" aria-label="OVERVA Market үндсэн хэсэг">
+        <button class="active" type="button" data-market-area="products"><span>▦</span><strong>Маркет</strong><small>Бэлэн бүтээгдэхүүн</small></button>
+        <button type="button" data-market-area="community"><span>◌</span><strong>Форум</strong><small>Асуулт, туршлага</small></button>
+        <button type="button" data-market-area="freelance"><span>◇</span><strong>Захиалгат ажил ба үйлчилгээ</strong><small>Захиалга, түнш, дэмжлэг</small></button>
+      </nav>
+      <div class="market-area-sidebar" data-market-area-sidebar="products"><strong>МАРКЕТ</strong><p>OVERVA Apps болон бусад нийлүүлэгчийн бэлэн бүтээгдэхүүнийг ижил нөхцөлөөр харьцуулна.</p><button type="button" disabled>＋ Бүтээгдэхүүн нэмэх · Удахгүй</button></div>
+      <div class="market-area-sidebar hidden" data-market-area-sidebar="community"><strong>ФОРУМ</strong><p>Хэрэглэгч, хөгжүүлэгчид асуулт асууж, шийдэл болон туршлагаа хуваалцана.</p><button type="button" disabled>＋ Сэдэв нээх · Удахгүй</button></div>
+      <div class="market-role-switch freelance-only" aria-label="Захиалгат ажил ба үйлчилгээ ашиглах горим">
         <button class="active" type="button" data-market-role="customer">Захиалагч</button>
         <button type="button" data-market-role="provider">Гүйцэтгэгч</button>
       </div>
-      <button class="new-work" id="homeNewWorkButton" type="button"><span>＋</span> Хүсэлт гаргах</button>
-      <nav class="market-side-nav" data-market-role-nav="customer" aria-label="Захиалагчийн хэсэг">
+      <button class="new-work freelance-only" id="homeNewWorkButton" type="button"><span>＋</span> Хүсэлт гаргах</button>
+      <nav class="market-side-nav freelance-only" data-market-role-nav="customer" aria-label="Захиалагчийн хэсэг">
         <button class="active" type="button" data-market-view="all"><span>▤</span> Бүх хүсэлт</button>
         <button type="button" data-market-view="mine"><span>♙</span> Миний хүсэлт</button>
         <button type="button" data-market-view="projects"><span>◇</span> Миний төслүүд</button>
       </nav>
-      <nav class="market-side-nav hidden" data-market-role-nav="provider" aria-label="Гүйцэтгэгчийн хэсэг">
+      <nav class="market-side-nav freelance-only hidden" data-market-role-nav="provider" aria-label="Гүйцэтгэгчийн хэсэг">
         <button class="active" type="button" data-market-view="all"><span>▤</span> Ажил олох</button>
         <button type="button" data-market-view="proposals"><span>♙</span> Миний саналууд</button>
         <button type="button" data-market-view="deliveries"><span>◇</span> Гүйцэтгэх ажлууд</button>
       </nav>
-      <div class="market-side-guides" data-market-role-guide="customer"><strong>ТУСЛАМЖ</strong><button type="button" data-market-view="rules">Үйлчилгээ хэрхэн явах вэ?</button><button type="button" data-market-view="labs">Өмнөх туршилтуудаа харах</button></div>
-      <div class="market-side-guides hidden" data-market-role-guide="provider"><strong>ТУСЛАМЖ</strong><button type="button" data-market-view="provider-rules">Ажил хэрхэн явах вэ?</button></div>
-      <div class="portfolio-privacy"><strong>Таны хүсэлтийн ноорог</strong><p>Нэвтрээгүй үед хүсэлтийн ноорог зөвхөн энэ төхөөрөмжид хадгалагдана. Бусад хүнд харагдахгүй.</p></div>
+      <div class="market-side-guides freelance-only" data-market-role-guide="customer"><strong>ТУСЛАМЖ</strong><button type="button" data-market-view="rules">Үйлчилгээ хэрхэн явах вэ?</button><button type="button" data-market-view="labs">Өмнөх туршилтуудаа харах</button></div>
+      <div class="market-side-guides freelance-only hidden" data-market-role-guide="provider"><strong>ТУСЛАМЖ</strong><button type="button" data-market-view="provider-rules">Ажил хэрхэн явах вэ?</button></div>
+      <div class="portfolio-privacy freelance-only"><strong>Таны хүсэлтийн ноорог</strong><p>Нэвтрээгүй үед хүсэлтийн ноорог зөвхөн энэ төхөөрөмжид хадгалагдана. Бусад хүнд харагдахгүй.</p></div>
       <button class="portfolio-nav-button" id="homeConnectorsButton" type="button"><span>⌁</span> Холболтууд</button>
-      <a class="portfolio-login" href="https://app.overva.com">Нэвтрэх</a>
+      <section class="market-identity-card" id="marketIdentityCard" aria-live="polite">
+        <div id="marketIdentityGuest"><strong>Market identity</strong><small>Захиалагч / Гүйцэтгэгч membership бодитоор ашиглах</small><button type="button" id="marketAuthOpen">Market-д нэвтрэх</button></div>
+        <div class="hidden" id="marketIdentitySession"><strong id="marketIdentityName"></strong><small id="marketIdentityMemberships"></small><div><button type="button" data-add-market-membership="customer">＋ Захиалагч</button><button type="button" data-add-market-membership="provider">＋ Гүйцэтгэгч</button></div><button class="market-logout" type="button" id="marketLogout">Гарах</button></div>
+      </section>
+      <a class="portfolio-login" href="https://app.overva.com">Байгууллагын Platform-д нэвтрэх</a>
     </aside>
     <section class="portfolio-main">
       <header class="portfolio-topbar">
-        <label><span class="sr-only">Хүсэлт хайх</span><input id="homeSearchInput" type="search" placeholder="Хүсэлт, чиглэл, хэрэгтэй боломж хайх…"></label>
+        <label><span class="sr-only">OVERVA Market-ээс хайх</span><input id="homeSearchInput" type="search" placeholder="Бүтээгдэхүүн, нийлүүлэгч, боломж хайх…"></label>
         <span>OVERVA · See Your Organization as One</span>
       </header>
       <div class="portfolio-scroll">
+        <section class="market-area-panel product-market-home" data-market-area-panel="products" aria-labelledby="productMarketTitle">
+          <div class="market-area-hero"><span>OVERVA MARKET · ЖИШИГ ХАРАГДАЦ</span><h1 id="productMarketTitle">Бэлэн бүтээгдэхүүнээ сонгох</h1><p>OVERVA Apps болон бусад хөгжүүлэгчийн бүтээгдэхүүн нэг зах зээлд, ижил нөхцөлөөр байрлана. Доорх бүтээгдэхүүнүүд нь V26 харагдацыг тайлбарлах жишээ бөгөөд бодит худалдаа биш.</p></div>
+          <div class="market-category-bar" aria-label="Бүтээгдэхүүний захын ангилал"><strong>Бүтээгдэхүүний зах</strong><div><button class="active" type="button" data-product-category="all">Бүгд</button><button type="button" data-product-category="apps">Аппууд</button><button type="button" data-product-category="modules">Модулиуд</button><button type="button" data-product-category="connectors">Холбогчид</button><button type="button" data-product-category="templates">Загварууд</button><button type="button" data-product-category="agents">AI агентууд</button></div></div>
+          <div class="product-market-grid" id="productMarketGrid">
+            <article class="product-market-card" data-product-card data-product-category-row="apps"><div class="product-cover overva-cover"><span>OV</span><small>ЖИШИГ</small></div><div class="product-card-body"><span class="vendor-label overva-vendor">OVERVA Apps · нийлүүлэгч</span><h2>Агуулахын удирдлага</h2><p>Бараа, хөдөлгөөн, үлдэгдэл болон хариуцагчийн бэлэн шийдлийн жишээ.</p><div><span>Аппууд</span><strong>Үнэ тогтоогоогүй</strong></div><button type="button" disabled>Дэлгэрэнгүй · Удахгүй</button></div></article>
+            <article class="product-market-card" data-product-card data-product-category-row="modules"><div class="product-cover people-cover"><span>HR</span><small>ЖИШИГ</small></div><div class="product-card-body"><span class="vendor-label">Нийлүүлэгчийн жишээ</span><h2>Ажилтны өөртөө үйлчлэх модуль</h2><p>Чөлөө, хүсэлт, мэдээлэл шинэчлэх ажилтны гар утасны шийдлийн жишээ.</p><div><span>Модулиуд</span><strong>Үнэ тогтоогоогүй</strong></div><button type="button" disabled>Дэлгэрэнгүй · Удахгүй</button></div></article>
+            <article class="product-market-card" data-product-card data-product-category-row="templates"><div class="product-cover sales-cover"><span>CRM</span><small>ЖИШИГ</small></div><div class="product-card-body"><span class="vendor-label">Нийлүүлэгчийн жишээ</span><h2>Жижиг бизнесийн CRM загвар</h2><p>Харилцагч, уулзалт, санал болон борлуулалтын үе шатны загварын жишээ.</p><div><span>Загварууд</span><strong>Үнэ тогтоогоогүй</strong></div><button type="button" disabled>Дэлгэрэнгүй · Удахгүй</button></div></article>
+            <article class="product-market-card" data-product-card data-product-category-row="connectors"><div class="product-cover connect-cover"><span>API</span><small>ЖИШИГ</small></div><div class="product-card-body"><span class="vendor-label overva-vendor">OVERVA Apps · нийлүүлэгч</span><h2>Excel Smart Import холбогч</h2><p>Хүснэгтийн өгөгдлийг шалгаж, хүнээр батлуулаад оруулах холбогчийн жишээ.</p><div><span>Холбогчид</span><strong>Үнэ тогтоогоогүй</strong></div><button type="button" disabled>Дэлгэрэнгүй · Удахгүй</button></div></article>
+            <article class="product-market-card" data-product-card data-product-category-row="agents"><div class="product-cover agent-cover"><span>AI</span><small>ЖИШИГ</small></div><div class="product-card-body"><span class="vendor-label">Нийлүүлэгчийн жишээ</span><h2>Баримт шалгах AI агент</h2><p>Баримтын бүрдэл, зөрүүг санал болгож, хүний шийдвэрийг хүлээдэг агентын жишээ.</p><div><span>AI агентууд</span><strong>Үнэ тогтоогоогүй</strong></div><button type="button" disabled>Дэлгэрэнгүй · Удахгүй</button></div></article>
+          </div>
+          <div class="market-empty hidden" id="productMarketEmpty">Энэ хайлт, ангилалд тохирох жишиг бүтээгдэхүүн олдсонгүй.</div>
+          <aside class="market-governance-note" aria-label="Маркетын засаглал"><div><span>МАРКЕТЫН ЗАСАГЛАЛ</span><strong>Нийлүүлэгч бүрт ижил дүрэм</strong><p>Бүтээгдэхүүний үнэн зөв байдал, техникийн болон аюулгүй байдлын шалгуур, лиценз, хувилбарын нийцтэй байдал, шимтгэлийн ил тод байдал, гомдол ба давж заалдах зам адил байна.</p></div><button type="button" disabled>Дүрэм үзэх · Удахгүй</button></aside>
+        </section>
+        <section class="market-area-panel forum-home hidden" data-market-area-panel="community" aria-labelledby="forumTitle">
+          <div class="market-area-hero"><span>OVERVA COMMUNITY · УДАХГҮЙ</span><h1 id="forumTitle">Асууж, хуваалцаж, хамтдаа шийдэх форум</h1><p>Хэрэглэгч, хөгжүүлэгч, шинжээчид бүтээгдэхүүн, хэрэгжүүлэлт болон байгууллагын цахим ажлын талаар хэлэлцэнэ. Одоогоор бодит нийтлэл, хэрэглэгчийн бүртгэл нээгдээгүй.</p></div>
+          <div class="forum-toolbar"><div><button class="active" type="button">Сүүлийн сэдэв</button><button type="button" disabled>Хариултгүй</button><button type="button" disabled>Шийдэгдсэн</button></div><button type="button" disabled>＋ Сэдэв нээх · Удахгүй</button></div>
+          <div class="forum-topic-list" id="forumTopicList">
+            <article data-forum-topic><span>ЖИШИГ</span><div><h2>Агуулахын систем сонгохдоо юуг эхэлж шалгах вэ?</h2><p>Бэлэн бүтээгдэхүүн, захиалгат хөгжүүлэлт хоёрын ялгааг хэлэлцэх сэдвийн жишээ.</p></div><small>Агуулах · 0 хариулт</small></article>
+            <article data-forum-topic><span>ЖИШИГ</span><div><h2>Excel өгөгдлөө шинэ системд хэрхэн аюулгүй оруулах вэ?</h2><p>Өгөгдлийн чанар, туршилт, хүний баталгаажуулалтын тухай сэдвийн жишээ.</p></div><small>Өгөгдөл · 0 хариулт</small></article>
+            <article data-forum-topic><span>ЖИШИГ</span><div><h2>Хөгжүүлэгчийн саналыг зөвхөн үнээр харьцуулах уу?</h2><p>Хугацаа, дэмжлэг, аюулгүй байдал, эзэмшил болон нийт өртгийн тухай сэдвийн жишээ.</p></div><small>Захиалгат ажил ба үйлчилгээ · 0 хариулт</small></article>
+          </div>
+          <div class="market-empty hidden" id="forumSearchEmpty">Энэ хайлтад тохирох жишиг сэдэв олдсонгүй.</div>
+        </section>
         <section class="portfolio-hero market-panel" data-portfolio-work-view data-market-panel="all">
           <span id="marketHeroEyebrow">БАЙГУУЛЛАГЫН ЦАХИМ ХЭРЭГЦЭЭНИЙ ЗАХ</span>
           <div class="market-hero-row"><div><h1 id="marketHeroTitle">Хэрэгтэй ажлаа ойлгомжтой хүсэлт болгох</h1><p class="portfolio-hero-copy" id="marketHeroCopy">Жишиг хүсэлтээс санаа авч, хийх ажил болон хүлээн авах үр дүнгээ нэг дор бичнэ.</p></div><button class="market-create-button" id="marketCreateRequestButton" type="button">＋ Хүсэлт гаргах</button></div>
@@ -89,6 +123,10 @@
           <button class="request-detail-back" id="requestDetailBack" type="button">← Миний хүсэлт</button>
           <div class="market-page-head"><div><span>ХҮСЭЛТИЙН ДЭЛГЭРЭНГҮЙ</span><h1 id="requestDetailTitle">Хүсэлтийн гарчиг</h1><p id="requestDetailState">Ноорог · нийтлээгүй</p></div><button class="market-create-button" id="requestReviewButton" type="button">OVERVA-аар дутууг шалгуулах</button></div>
           <div class="request-detail-grid" id="requestDetailGrid"></div>
+          <div class="request-confirmation" id="requestConfirmationPanel">
+            <div><strong id="requestConfirmationTitle">Шаардлагаа баталгаажуулах</strong><p id="requestConfirmationText">Дээрх асуудал, хүссэн үр дүн, хэрэгтэй боломж болон хүлээн авах шалгуур зөв бол батална уу. Батлах нь хүсэлтийг нийтлэхгүй, гүйцэтгэгчид илгээхгүй, төсөл үүсгэхгүй.</p></div>
+            <div class="request-confirmation-actions"><button class="market-create-button" id="requestConfirmButton" type="button">Шаардлага зөв гэж батлах</button><button id="requestDownloadButton" type="button" disabled>Баталсан шаардлага татах</button></div>
+          </div>
           <div class="request-next-step"><strong>Дараагийн зөв алхам</strong><p id="requestNextStep">Хүсэлтээ шалгаж баталгаажуулсны дараа л нийтлэх, санал авах шат руу орно. Энэ хүсэлт одоогоор төсөл болоогүй.</p></div>
         </section>
         <section class="market-panel market-role-empty hidden" data-portfolio-work-view data-market-panel="projects" aria-labelledby="customerProjectsTitle">
@@ -245,6 +283,25 @@
       </div>
     </section>
   </main>
+
+  <dialog class="market-auth-dialog" id="marketAuthDialog">
+    <form method="dialog" class="dialog-close-form"><button aria-label="Market нэвтрэх цонх хаах">×</button></form>
+    <div class="market-auth-head"><span>OVERVA MARKET IDENTITY</span><h2>Market-д тусдаа нэвтрэх</h2><p>Энэ identity нь байгууллагын tenant болон Platform admin эрхээс тусдаа. Membership нэмэх нь Market operator эрх өгөхгүй.</p></div>
+    <div class="market-auth-tabs"><button class="active" type="button" data-market-auth-tab="login">Нэвтрэх</button><button type="button" data-market-auth-tab="register">Шинээр бүртгүүлэх</button></div>
+    <form class="market-auth-form" id="marketLoginForm">
+      <label>Имэйл<input name="email" type="email" autocomplete="email" required maxlength="200"></label>
+      <label>Нууц үг<input name="password" type="password" autocomplete="current-password" required minlength="8" maxlength="200"></label>
+      <p class="form-error" id="marketLoginError" role="alert"></p>
+      <button class="primary-button" type="submit">Market-д нэвтрэх</button>
+    </form>
+    <form class="market-auth-form hidden" id="marketRegisterForm">
+      <label>Нэр<input name="displayName" autocomplete="name" required minlength="2" maxlength="120"></label>
+      <label>Имэйл<input name="email" type="email" autocomplete="email" required maxlength="200"></label>
+      <label>Нууц үг<input name="password" type="password" autocomplete="new-password" required minlength="12" maxlength="200"><small>12-оос дээш тэмдэгт</small></label>
+      <p class="form-error" id="marketRegisterError" role="alert"></p>
+      <button class="primary-button" type="submit">Market identity үүсгэх</button>
+    </form>
+  </dialog>
 
   <dialog class="request-dialog" id="requestDialog">
     <form method="dialog" class="dialog-close-form"><button id="requestDialogCloseButton" aria-label="Хүсэлтийн маягт хаах">×</button></form>

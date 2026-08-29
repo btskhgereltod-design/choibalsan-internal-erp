@@ -1,6 +1,6 @@
 # OVERVA Decisions
 
-Last updated: 2026-08-27
+Last updated: 2026-08-29
 
 This is a lightweight decision log. It preserves rationale without freezing
 implementation. Hypotheses are labelled separately from accepted decisions.
@@ -223,6 +223,168 @@ governed agreement, delivery, evidence, acceptance, and outcome control record.
 Legacy browser-local trial checkpoints remain recoverable but do not occupy a
 primary customer or provider navigation position.
 
+### D-023 — Separate the Platform, Market operator, and OVERVA Apps vendor arm
+
+Accepted: 2026-08-28
+
+OVERVA Platform at `app.overva.com` is the governed organization environment,
+App Factory, review surface, and runtime. OVERVA Market is a separate
+multi-supplier product, freelance, and community business. `OVERVA Apps` is a
+vendor that may publish Platform-produced apps and bid for freelance work, but
+it participates under the same listing, ranking, fee, review, enforcement, and
+appeal rules as comparable suppliers.
+
+This decision replaces D-019's mandatory one-workspace coupling and the part of
+D-020 that made OVERVA the mandatory official control record for every delivery.
+The Market keeps the minimum attributable
+records required for the market service a participant chooses; source code,
+internal project management, operational tenant data, and every delivery step
+need not live in OVERVA. D-020's customer/provider separation, proposal privacy,
+bilateral acceptance, and verified-review protections remain valid.
+
+Market control means integrity, safety, confidentiality, moderation, and policy
+enforcement. It does not mean controlling customer choice, choosing winners,
+forcing Platform adoption, or preferring `OVERVA Apps`. Operator-only proposals,
+private discussions, ranking controls, complaints, investigations, and policy
+administration must be inaccessible to the vendor arm. Operator access and
+interventions remain attributable and audited.
+
+Market and Platform records require separate data, authorization, administration,
+and commercial boundaries. Scoped shared sign-in may be added later without
+merging Market profiles with tenant employees, private organization evidence,
+builder/runtime data, or tenant audit journals. Even under common ownership, the
+Market operator and `OVERVA Apps` must be technically, operationally, and
+financially separated before accepting real competing suppliers.
+
+Current production has no server-backed multi-supplier Market, product commerce,
+freelance proposal system, forum, payments, or neutral ranking engine. This is an
+accepted target boundary, not an implementation claim. Compatibility is
+non-destructive: existing V25 browser-local requests and Platform tenant data
+remain in place. Future Market records must be introduced in a new boundary,
+not by relabelling existing tenant tables. Rollback of future implementation
+means disabling Market publication/commerce without altering Platform tenant
+operation. `MARKET_PLATFORM_SEPARATION_CONTRACT_V1.md` is the canonical contract.
+
+### D-024 — OVERVA Group has three peer operating roles
+
+Accepted: 2026-08-28
+
+`OVERVA Group` is an ownership and strategy umbrella, not a tenant, data store,
+authorization scope, or permission shortcut. Its three peer operating roles are
+`OVERVA Platform`, `OVERVA Apps`, and `OVERVA Market`.
+
+The Platform owns the governed App Factory and organization runtime. OVERVA Apps
+is the first-party product vendor. Market is the supplier-neutral product,
+custom-work/service, forum, and governance business. OVERVA Apps may use the
+Platform, but it is not nested under Platform administration and receives no
+Market operator power.
+
+This decision refines D-023's two-business wording without weakening its
+separation rules. Common Group ownership never merges operator access, tenant
+data, vendor data, finances, rankings, reviews, complaints, investigations,
+enforcement, or audit. Legal-entity separation is not claimed as implemented;
+technical, operational, authorization, accounting, and conflict-of-interest
+separation are required before real competing suppliers are accepted.
+
+The public Market product categories are Apps, Modules, Connectors, Templates,
+and AI Agents. Its other customer-facing domains are `Захиалгат ажил ба
+үйлчилгээ` and `Форум`. `Маркетын засаглал` is an operator control domain, not a
+supplier privilege or a false claim that current preview commerce exists.
+
+`OVERVA_GROUP_OPERATING_MODEL_V1.md` is the canonical Group structure contract.
+
+### D-025 — Administration follows bounded business responsibilities
+
+Accepted: 2026-08-28
+
+OVERVA administration is divided into Group oversight, Platform operations,
+OVERVA Apps vendor operations, and Market operator contexts. There is no
+universal Group super-admin. Group sees aggregate boundary health and
+attestations, not raw tenant, vendor, proposal, complaint, investigation, or
+operator records. Each operating context owns its work queues, permissions,
+decisions, and audit evidence.
+
+Consequential changes use separately attributable initiation, specialist
+review, and completion roles. OVERVA Apps can send a reviewed, redacted release
+package to Market, but cannot enter Market administration or approve its own
+listing. Context handoffs are explicit contracts; shared ownership and UI
+context switching never imply data access.
+
+The initial implementation is an isolated test simulation with twenty virtual
+roles in each of the four contexts. These eighty personas create no production
+accounts and cannot substitute for real independent human approval. The model
+is defined in `ADMIN_OPERATING_MODEL_V1.md`.
+
+The first production-oriented foundation is bounded to the existing Platform
+control plane: active Platform roles and permissions are resolved from the
+database for every request and enforced on each control-plane route. Existing
+administrators migrate to a backward-compatible `platform-owner` assignment.
+No Platform role contains or implies Group, OVERVA Apps, or Market authority.
+
+### D-026 — Founder operation uses layered authority, not one universal super-admin
+
+Accepted: 2026-08-29
+
+During the founder-led phase, one attributable person may hold several
+non-conflicting assignments needed to build, test, deploy, and recover OVERVA.
+The daily Founder account may hold Platform owner, founder operator, Apps
+developer, Market customer/provider, and system-operator responsibilities, but
+each remains a separately identified context. A Market customer/provider switch
+selects a participant capacity; it never grants Market operator or super-admin
+power.
+
+Application authorization and infrastructure recovery remain separate. The
+first real implementation is Platform-scoped: `founder-operator`, Founder
+Control visibility, and reason/scope/time-bound tenant diagnostic grants. A
+support grant lasts at most sixty minutes, belongs to the issuing administrator,
+exposes only an explicitly scoped redacted snapshot, permits no tenant API
+bypass or mutation, and creates append-only lifecycle evidence.
+
+Root/break-glass is an offline recovery procedure requiring production migration
+credentials, explicit confirmation, a named target, and a recorded reason. It
+is not a daily web session, cannot suppress audit evidence, and grants no Market
+ranking, listing, review, proposal, complaint, dispute, or IoT-safety override.
+Apps and Market identities/backends remain separate future implementations;
+Founder Control must describe them truthfully as preview or planned states.
+
+This decision refines D-025 for the current one-person operating reality without
+creating a Group-wide authorization shortcut or weakening tenant, audit, Market
+neutrality, or device-safety boundaries.
+
+### D-027 — Market identity owns participant memberships without inheriting Platform or tenant authority
+
+Accepted: 2026-08-29
+
+The first Market identity slice uses a Market-owned login, token context, tables,
+routes, and append-only audit journal. It does not link to or reference tenant
+users, employees, organizations, Platform administrators, or Platform role
+assignments. Person-level federation is deliberately absent from this slice; a
+future shared-sign-in link requires a separate reviewed contract and may map
+identity only, never copy authority.
+
+One Market identity may hold zero, one, or both `customer` and `provider`
+memberships. These are self-service participation capacities, not supplier
+verification. A selected participant view is a stored presentation/work-queue
+preference and can be changed only when its corresponding membership is active.
+It never changes permissions or creates another membership.
+
+Market operator authority is a separately attributable live assignment. It is
+not bootstrapped from founder, Platform, tenant, customer, or provider roles.
+Operator suspension and reactivation of participant memberships require the
+Market authentication context, a current operator assignment, a reason, and
+append-only Market evidence. A Platform or tenant token is rejected at the
+Market boundary, and a Market token is rejected at the tenant and Platform
+boundaries.
+
+For the current single-host pilot, the boundary is implemented as additive
+`market_*` tables and `/api/market/*` routes in the existing PostgreSQL/API
+deployment. Naming, foreign-key isolation, token typing, route isolation, and a
+separate journal keep it extraction-compatible with a later independent Market
+service/database. No listing, proposal, payment, dispute, forum, ranking, or
+supplier-verification record is introduced. Rollback disables the Market route
+and public identity controls while leaving the additive tables intact; V31
+Platform and tenant operation remain compatible.
+
 ## Active Hypotheses
 
 ### H-001 — Customer journey
@@ -267,15 +429,14 @@ projects and contributor rules; introduce marketplace, commercial certification,
 or academy positioning only after repeatable contribution and customer value are
 observed.
 
-### H-007 — Concierge digital-needs marketplace
+### H-007 — Bounded supplier-neutral market
 
-A small assisted market can resolve the two-sided cold-start problem before
-marketplace automation. The initial target is 10 qualified developer teams, 20
-real organization discovery conversations, 5 confirmed request packages,
-approximately 3 qualified proposals per request, 3 selected deliveries, and at
-least 1 accepted production outcome with attributable feedback from both sides.
-These targets validate or reject the market mechanism; they are not claims of
-current adoption.
+A small assisted market can resolve the multi-sided cold-start problem before
+ranking, payment, and onboarding automation. Validate both ready products and
+freelance orders with third-party suppliers and `OVERVA Apps` under equal rules.
+Measure discovery, customer choice, qualified proposals, completion, complaints,
+supplier satisfaction, and operator neutrality. These are validation targets,
+not claims of current adoption.
 
 ## Decision Change Format
 

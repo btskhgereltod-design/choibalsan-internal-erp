@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { requireModule, requireWorkspace, requirePermissions, requireSystemRoles } = require("../src/middleware/auth");
+const { requireModule, requireWorkspace, requirePermissions, requireSystemRoles, requirePlatformPermissions } = require("../src/middleware/auth");
 
 function response() {
   return {
@@ -67,4 +67,24 @@ test("primary-admin middleware requires the owner system role", () => {
   const denied = response();
   requireSystemRoles("owner")({ user:{ system_roles:["administrator"] } }, denied, () => assert.fail("must not continue"));
   assert.equal(denied.statusCode, 403);
+});
+
+test("Platform permission middleware requires every live server-derived grant", () => {
+  let continued = false;
+  requirePlatformPermissions("platform.organizations.read", "platform.adoption.read")(
+    { platformAdmin:{ permissions:["platform.organizations.read", "platform.adoption.read"] } },
+    response(),
+    () => { continued = true; }
+  );
+  assert.equal(continued, true);
+
+  const denied = response();
+  requirePlatformPermissions("platform.billing.manage")(
+    { platformAdmin:{ permissions:["platform.billing.read"] } },
+    denied,
+    () => assert.fail("must not continue")
+  );
+  assert.equal(denied.statusCode, 403);
+  assert.equal(denied.body.code, "PLATFORM_PERMISSION_REQUIRED");
+  assert.deepEqual(denied.body.permissions, ["platform.billing.manage"]);
 });

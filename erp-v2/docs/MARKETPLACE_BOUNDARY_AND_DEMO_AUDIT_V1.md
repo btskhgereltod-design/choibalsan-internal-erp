@@ -1,9 +1,15 @@
 # OVERVA Market Boundary and Demo Audit V1
 
-Status: repository audit and test-only simulation; no production marketplace
-backend is claimed
+Status: repository audit and test-only simulation; amended by D-023; no
+production marketplace backend is claimed
 
 Date: 2026-08-27
+
+D-023 requires Market records, administration, and commercial activity to
+remain separate from Platform tenant records. Individual Market participation
+must not fabricate a tenant. The earlier organization-owned simulation remains
+valid test evidence for organizational participants, not the universal Market
+identity model. `MARKET_PLATFORM_SEPARATION_CONTRACT_V1.md` is authoritative.
 
 ## Audit conclusion
 

@@ -2,6 +2,7 @@
 
 const { getPool } = require("../db");
 const { verifyAccessToken } = require("../security/token");
+const { loadMarketIdentity, writeMarketAudit } = require("../services/market-identity");
 const { asyncHandler } = require("../utils/async-handler");
 
 const authenticate = asyncHandler(async (req, res, next) => {
@@ -17,7 +18,7 @@ const authenticate = asyncHandler(async (req, res, next) => {
     return res.status(401).json({ error: "Invalid or expired token" });
   }
 
-  if (payload.kind === "platform") return res.status(401).json({ error: "Tenant authentication required" });
+  if (payload.kind) return res.status(401).json({ error: "Tenant authentication required" });
 
   const result = await getPool().query(
     `SELECT u.id, u.organization_id, u.email, u.username, u.full_name, u.role,
@@ -82,11 +83,42 @@ const authenticatePlatform = asyncHandler(async (req, res, next) => {
   }
   if (payload.kind !== "platform") return res.status(401).json({ error: "Platform authentication required" });
   const result = await getPool().query(
-    "SELECT id,email,full_name FROM platform_admins WHERE id=$1 AND active=true",
+    `SELECT admin.id,admin.email,admin.full_name,
+            ARRAY(SELECT DISTINCT role.code
+                    FROM platform_admin_role_assignments assignment
+                    JOIN platform_admin_roles role ON role.id=assignment.role_id
+                   WHERE assignment.platform_admin_id=admin.id
+                     AND assignment.revoked_at IS NULL AND role.active=true
+                   ORDER BY role.code) AS roles,
+            ARRAY(SELECT DISTINCT permission.permission_code
+                    FROM platform_admin_role_assignments assignment
+                    JOIN platform_admin_roles role ON role.id=assignment.role_id
+                    JOIN platform_admin_role_permissions permission ON permission.role_id=role.id
+                   WHERE assignment.platform_admin_id=admin.id
+                     AND assignment.revoked_at IS NULL AND role.active=true
+                   ORDER BY permission.permission_code) AS permissions
+       FROM platform_admins admin
+      WHERE admin.id=$1 AND admin.active=true`,
     [payload.sub]
   );
   if (!result.rowCount) return res.status(401).json({ error: "Platform administrator is inactive" });
   req.platformAdmin = result.rows[0];
+  next();
+});
+
+const authenticateMarket = asyncHandler(async (req, res, next) => {
+  const authorization = String(req.headers.authorization || "");
+  if (!authorization.startsWith("Bearer ")) return res.status(401).json({ error: "Market authentication required" });
+  let payload;
+  try {
+    payload = verifyAccessToken(authorization.slice(7));
+  } catch {
+    return res.status(401).json({ error: "Invalid or expired Market token" });
+  }
+  if (payload.kind !== "market") return res.status(401).json({ error: "Market authentication required" });
+  const identity = await loadMarketIdentity(payload.sub);
+  if (!identity) return res.status(401).json({ error: "Market identity is inactive or unavailable" });
+  req.marketIdentity = identity;
   next();
 });
 
@@ -152,4 +184,38 @@ function requireSystemRoles(...roles) {
   };
 }
 
-module.exports = { authenticate, authenticatePlatform, requireRoles, requireModule, requireWorkspace, requirePermissions, requireSystemRoles };
+function requirePlatformPermissions(...permissions) {
+  const required = new Set(permissions);
+  return (req, res, next) => {
+    const granted = new Set(req.platformAdmin?.permissions || []);
+    if (!req.platformAdmin || ![...required].every(code => granted.has(code))) {
+      return res.status(403).json({
+        error: "Insufficient Platform permission",
+        code: "PLATFORM_PERMISSION_REQUIRED",
+        permissions:[...required]
+      });
+    }
+    next();
+  };
+}
+
+const requireMarketOperator = asyncHandler(async(req, res, next) => {
+  if (!req.marketIdentity?.operator_roles?.includes("market-operator")) {
+    await writeMarketAudit({
+      marketIdentityId: req.marketIdentity?.id || null,
+      actorType: req.marketIdentity ? "market_identity" : "anonymous",
+      actorIdentityId: req.marketIdentity?.id || null,
+      eventType: "market.operator.access",
+      outcome: "denied",
+      detail: { method: req.method, path: req.originalUrl },
+      ipAddress: req.ip || null,
+    });
+    return res.status(403).json({
+      error: "Market operator assignment required",
+      code: "MARKET_OPERATOR_REQUIRED",
+    });
+  }
+  next();
+});
+
+module.exports = { authenticate, authenticatePlatform, authenticateMarket, requireRoles, requireModule, requireWorkspace, requirePermissions, requireSystemRoles, requirePlatformPermissions, requireMarketOperator };

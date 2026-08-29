@@ -1,8 +1,25 @@
 # OVERVA Marketplace Operating Model V1
 
-Status: accepted product boundary; concierge-first implementation
+Status: amended by D-023 and D-024; supplier-neutral Market, concierge-first implementation
 
-Date: 2026-08-27
+Date: 2026-08-27; amended 2026-08-28
+
+## D-023 amendment
+
+OVERVA Market is not the same business or data boundary as OVERVA Platform/App
+Factory. `OVERVA Apps` is one Market supplier and receives no operator privilege.
+Customers may buy products, order custom work, or use the community without
+opening a Platform workspace. `MARKET_PLATFORM_SEPARATION_CONTRACT_V1.md` is
+authoritative wherever this older document implies that every delivery must be
+controlled by the Platform or by the vendor arm.
+
+## D-024 Group amendment
+
+OVERVA Group has three peer operating roles: Platform, OVERVA Apps, and Market.
+Market customer-facing domains are Product Market, Custom Work and Services,
+and Forum. Market Governance is an operator control domain inaccessible to
+suppliers, including OVERVA Apps. `OVERVA_GROUP_OPERATING_MODEL_V1.md` is
+authoritative for the Group hierarchy.
 
 ## Core business
 
@@ -24,10 +41,11 @@ project is created only after provider selection and bilateral scope/agreement;
 earlier request drafts and trial workspaces stay in their own clearly labelled
 contexts.
 
-## Contract control plane
+## Market integrity record
 
-Implementation may use GitHub, Figma, Zoom, cloud hosting, or another authorized
-tool. OVERVA retains the official control record:
+Implementation may use GitHub, Figma, Zoom, cloud hosting, the OVERVA Platform,
+or another authorized tool. The Market retains only the attributable record
+needed for the market service the parties choose:
 
 ```text
 confirmed request -> proposal -> selection -> bilateral scope/agreement
@@ -36,18 +54,27 @@ confirmed request -> proposal -> selection -> bilateral scope/agreement
 -> closed outcome
 ```
 
-After selection, the path may optionally branch through a provider-proposed
+This sequence is available for governed freelance delivery; it is not mandatory
+for a ready-product purchase or for work managed outside the Market. After
+selection, the path may optionally branch through a provider-proposed
 `Joint Clarification` before bilateral agreement. The customer must explicitly
 accept the invitation, and either party may proceed without it. The surface may
 map the customer's real workflow, participants, information, decisions, and
 acceptance outcome; it is neither a coding environment nor a mandatory project
 stage. A project still begins only after bilateral agreement.
 
-A provider cannot unilaterally mark work complete. A customer must accept the
+A provider cannot unilaterally create a verified completion or review. A customer must accept the
 submitted evidence or make an attributable change/rejection decision. A
 verified review is allowed only for a closed, accepted engagement and is unique
-per party. Real use requires server-side identity, organization membership,
-authorization, audit, and idempotency.
+per party. Real use requires server-side identity, authorization, audit, and
+idempotency. Organization membership is required only when an organization
+participates; individual Market participation must not fabricate a Platform
+tenant.
+
+Market integrity controls listing truth, supplier eligibility, proposal privacy,
+moderation, complaints, enforcement, and verified reviews. The customer retains
+free choice. The operator must not prefer `OVERVA Apps` in access, ranking, fees,
+reviews, enforcement, or appeals.
 
 ## Revenue hypothesis
 
@@ -68,8 +95,9 @@ appropriate legal/payment operating model exist.
 
 ## Concierge-first release boundary
 
-The public site may explain and separate the roles, show sample requests, and
-explain completion. It must label samples and empty provider state truthfully.
+The public site may explain Product Market, Custom Work and Services, and Forum, separate customer
+and supplier roles, show sample requests/products, and explain completion. It
+must label samples and empty supplier state truthfully.
 It must not fabricate developers, proposals, payments, completed jobs, or
 reviews.
 
@@ -78,6 +106,7 @@ requests/projects and provider opportunities/proposals/delivery jobs. Rules,
 legacy trial checkpoints, and optional clarification guidance belong in
 contextual or secondary help rather than appearing as mandatory work stages.
 
-The next real proof remains D-019/H-007: qualify a small group of providers and
-customers, package real confirmed requests, compare proposals, and carry at
-least one engagement to attributable accepted production outcome.
+The next real proof includes both supply paths: qualify a small group of product
+suppliers and freelance providers, onboard real products and confirmed requests,
+observe free customer selection, and complete at least one attributable product
+or service outcome without operator preference.
