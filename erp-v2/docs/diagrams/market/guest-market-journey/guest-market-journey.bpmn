@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_GuestMarketJourney" targetNamespace="https://overva.com/bpmn/market">
+  <bpmn:process id="Process_GuestMarketJourney" name="OVERVA Market Guest Journey v1" isExecutable="false">
+    <bpmn:startEvent id="Start_Guest" name="Зочин Market-д орно / Guest enters Market"><bpmn:outgoing>Flow_1</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:task id="Task_Browse" name="Чөлөөтэй хэсэх / Browse freely"><bpmn:incoming>Flow_1</bpmn:incoming><bpmn:outgoing>Flow_2</bpmn:outgoing></bpmn:task>
+    <bpmn:exclusiveGateway id="Gateway_Need" name="Юу хэрэгтэй вэ? / What is needed?"><bpmn:incoming>Flow_2</bpmn:incoming><bpmn:outgoing>Flow_Ready</bpmn:outgoing><bpmn:outgoing>Flow_Custom</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:task id="Task_Search" name="App хайх / Search apps"><bpmn:incoming>Flow_Ready</bpmn:incoming><bpmn:outgoing>Flow_3</bpmn:outgoing></bpmn:task>
+    <bpmn:task id="Task_Compare" name="Боломж, үнэ, дэмжлэг харьцуулах / Compare"><bpmn:incoming>Flow_3</bpmn:incoming><bpmn:outgoing>Flow_4</bpmn:outgoing></bpmn:task>
+    <bpmn:task id="Task_AskVendor" name="Нийлүүлэгчээс тодруулах / Ask vendor"><bpmn:incoming>Flow_4</bpmn:incoming><bpmn:outgoing>Flow_5</bpmn:outgoing></bpmn:task>
+    <bpmn:exclusiveGateway id="Gateway_Fit" name="Тохирох уу? / Good fit?"><bpmn:incoming>Flow_5</bpmn:incoming><bpmn:outgoing>Flow_Purchase</bpmn:outgoing><bpmn:outgoing>Flow_NotFit</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:task id="Task_Purchase" name="App авах нөхцөл тохирох / Agree purchase terms"><bpmn:incoming>Flow_Purchase</bpmn:incoming><bpmn:outgoing>Flow_EndReady</bpmn:outgoing></bpmn:task>
+    <bpmn:endEvent id="End_Ready" name="Бэлэн app сонгосон / Ready app selected"><bpmn:incoming>Flow_EndReady</bpmn:incoming></bpmn:endEvent>
+    <bpmn:task id="Task_DescribeNeed" name="Хэрэгцээг энгийн хэлээр тайлбарлах / Describe need"><bpmn:incoming>Flow_Custom</bpmn:incoming><bpmn:incoming>Flow_NotFit</bpmn:incoming><bpmn:outgoing>Flow_6</bpmn:outgoing></bpmn:task>
+    <bpmn:task id="Task_PrepareDraft" name="OVERVA зарын draft бэлтгэх / Prepare draft"><bpmn:incoming>Flow_6</bpmn:incoming><bpmn:outgoing>Flow_7</bpmn:outgoing></bpmn:task>
+    <bpmn:task id="Task_Confirm" name="Захиалагч шалгаж батлах / Review and confirm"><bpmn:incoming>Flow_7</bpmn:incoming><bpmn:outgoing>Flow_8</bpmn:outgoing></bpmn:task>
+    <bpmn:task id="Task_PayPostingFee" name="20,000₮ зарын төлбөр / Posting fee"><bpmn:incoming>Flow_8</bpmn:incoming><bpmn:outgoing>Flow_9</bpmn:outgoing></bpmn:task>
+    <bpmn:task id="Task_Publish" name="Захиалгын зар нийтлэх / Publish request"><bpmn:incoming>Flow_9</bpmn:incoming><bpmn:outgoing>Flow_10</bpmn:outgoing></bpmn:task>
+    <bpmn:task id="Task_CompareProposals" name="Саналуудыг харьцуулах / Compare proposals"><bpmn:incoming>Flow_10</bpmn:incoming><bpmn:outgoing>Flow_11</bpmn:outgoing></bpmn:task>
+    <bpmn:task id="Task_Contract" name="Гүйцэтгэгч сонгож гэрээлэх / Select and contract"><bpmn:incoming>Flow_11</bpmn:incoming><bpmn:outgoing>Flow_12</bpmn:outgoing></bpmn:task>
+    <bpmn:endEvent id="End_Custom" name="Custom app ажил эхэлнэ / Delivery starts"><bpmn:incoming>Flow_12</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="Start_Guest" targetRef="Task_Browse"/>
+    <bpmn:sequenceFlow id="Flow_2" sourceRef="Task_Browse" targetRef="Gateway_Need"/>
+    <bpmn:sequenceFlow id="Flow_Ready" name="Бэлэн app" sourceRef="Gateway_Need" targetRef="Task_Search"/>
+    <bpmn:sequenceFlow id="Flow_3" sourceRef="Task_Search" targetRef="Task_Compare"/>
+    <bpmn:sequenceFlow id="Flow_4" sourceRef="Task_Compare" targetRef="Task_AskVendor"/>
+    <bpmn:sequenceFlow id="Flow_5" sourceRef="Task_AskVendor" targetRef="Gateway_Fit"/>
+    <bpmn:sequenceFlow id="Flow_Purchase" name="Тийм / Yes" sourceRef="Gateway_Fit" targetRef="Task_Purchase"/>
+    <bpmn:sequenceFlow id="Flow_EndReady" sourceRef="Task_Purchase" targetRef="End_Ready"/>
+    <bpmn:sequenceFlow id="Flow_Custom" name="Custom app" sourceRef="Gateway_Need" targetRef="Task_DescribeNeed"/>
+    <bpmn:sequenceFlow id="Flow_NotFit" name="Үгүй / No" sourceRef="Gateway_Fit" targetRef="Task_DescribeNeed"/>
+    <bpmn:sequenceFlow id="Flow_6" sourceRef="Task_DescribeNeed" targetRef="Task_PrepareDraft"/>
+    <bpmn:sequenceFlow id="Flow_7" sourceRef="Task_PrepareDraft" targetRef="Task_Confirm"/>
+    <bpmn:sequenceFlow id="Flow_8" sourceRef="Task_Confirm" targetRef="Task_PayPostingFee"/>
+    <bpmn:sequenceFlow id="Flow_9" sourceRef="Task_PayPostingFee" targetRef="Task_Publish"/>
+    <bpmn:sequenceFlow id="Flow_10" sourceRef="Task_Publish" targetRef="Task_CompareProposals"/>
+    <bpmn:sequenceFlow id="Flow_11" sourceRef="Task_CompareProposals" targetRef="Task_Contract"/>
+    <bpmn:sequenceFlow id="Flow_12" sourceRef="Task_Contract" targetRef="End_Custom"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_GuestMarketJourney"><bpmndi:BPMNPlane id="Plane_GuestMarketJourney" bpmnElement="Process_GuestMarketJourney">
+    <bpmndi:BPMNShape id="Shape_Start" bpmnElement="Start_Guest"><dc:Bounds x="60" y="250" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Shape_Browse" bpmnElement="Task_Browse"><dc:Bounds x="130" y="220" width="130" height="96"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Shape_Need" bpmnElement="Gateway_Need" isMarkerVisible="true"><dc:Bounds x="300" y="243" width="50" height="50"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Shape_Search" bpmnElement="Task_Search"><dc:Bounds x="400" y="90" width="130" height="96"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Shape_Compare" bpmnElement="Task_Compare"><dc:Bounds x="580" y="90" width="150" height="96"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Shape_Ask" bpmnElement="Task_AskVendor"><dc:Bounds x="780" y="90" width="150" height="96"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Shape_Fit" bpmnElement="Gateway_Fit" isMarkerVisible="true"><dc:Bounds x="980" y="113" width="50" height="50"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Shape_Purchase" bpmnElement="Task_Purchase"><dc:Bounds x="1080" y="90" width="170" height="96"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Shape_EndReady" bpmnElement="End_Ready"><dc:Bounds x="1300" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Shape_Describe" bpmnElement="Task_DescribeNeed"><dc:Bounds x="400" y="360" width="160" height="96"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Shape_Draft" bpmnElement="Task_PrepareDraft"><dc:Bounds x="610" y="360" width="160" height="96"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Shape_Confirm" bpmnElement="Task_Confirm"><dc:Bounds x="820" y="360" width="160" height="96"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Shape_Fee" bpmnElement="Task_PayPostingFee"><dc:Bounds x="1030" y="360" width="160" height="96"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Shape_Publish" bpmnElement="Task_Publish"><dc:Bounds x="1240" y="360" width="160" height="96"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Shape_Proposals" bpmnElement="Task_CompareProposals"><dc:Bounds x="1240" y="540" width="160" height="96"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Shape_Contract" bpmnElement="Task_Contract"><dc:Bounds x="1030" y="540" width="160" height="96"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Shape_EndCustom" bpmnElement="End_Custom"><dc:Bounds x="940" y="570" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="Edge_1" bpmnElement="Flow_1"><di:waypoint x="96" y="268"/><di:waypoint x="130" y="268"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="Edge_2" bpmnElement="Flow_2"><di:waypoint x="260" y="268"/><di:waypoint x="300" y="268"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="Edge_Ready" bpmnElement="Flow_Ready"><di:waypoint x="325" y="243"/><di:waypoint x="325" y="138"/><di:waypoint x="400" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="Edge_3" bpmnElement="Flow_3"><di:waypoint x="530" y="138"/><di:waypoint x="580" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="Edge_4" bpmnElement="Flow_4"><di:waypoint x="730" y="138"/><di:waypoint x="780" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="Edge_5" bpmnElement="Flow_5"><di:waypoint x="930" y="138"/><di:waypoint x="980" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="Edge_Purchase" bpmnElement="Flow_Purchase"><di:waypoint x="1030" y="138"/><di:waypoint x="1080" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="Edge_EndReady" bpmnElement="Flow_EndReady"><di:waypoint x="1250" y="138"/><di:waypoint x="1300" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="Edge_Custom" bpmnElement="Flow_Custom"><di:waypoint x="325" y="293"/><di:waypoint x="325" y="408"/><di:waypoint x="400" y="408"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="Edge_NotFit" bpmnElement="Flow_NotFit"><di:waypoint x="1005" y="163"/><di:waypoint x="1005" y="320"/><di:waypoint x="480" y="320"/><di:waypoint x="480" y="360"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="Edge_6" bpmnElement="Flow_6"><di:waypoint x="560" y="408"/><di:waypoint x="610" y="408"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="Edge_7" bpmnElement="Flow_7"><di:waypoint x="770" y="408"/><di:waypoint x="820" y="408"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="Edge_8" bpmnElement="Flow_8"><di:waypoint x="980" y="408"/><di:waypoint x="1030" y="408"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="Edge_9" bpmnElement="Flow_9"><di:waypoint x="1190" y="408"/><di:waypoint x="1240" y="408"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="Edge_10" bpmnElement="Flow_10"><di:waypoint x="1320" y="456"/><di:waypoint x="1320" y="540"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="Edge_11" bpmnElement="Flow_11"><di:waypoint x="1240" y="588"/><di:waypoint x="1190" y="588"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="Edge_12" bpmnElement="Flow_12"><di:waypoint x="1030" y="588"/><di:waypoint x="976" y="588"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>

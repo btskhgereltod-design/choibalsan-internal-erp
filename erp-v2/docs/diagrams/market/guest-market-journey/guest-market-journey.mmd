@@ -1,0 +1,66 @@
+%%{init: {"theme":"base","flowchart":{"curve":"basis","htmlLabels":true,"nodeSpacing":42,"rankSpacing":54},"themeVariables":{"fontFamily":"Segoe UI, Arial, sans-serif","fontSize":"16px","lineColor":"#64748b","primaryTextColor":"#10233f","background":"#ffffff"}}}%%
+flowchart TD
+    G["Зочин захад орно<br/>Guest enters Market"]
+    B["Зах дээгүүр чөлөөтэй хэснэ<br/>Browse freely"]
+    Q{"Юу хийхийг хүсэж байна?<br/>What do they need?"}
+    G --> B --> Q
+
+    Q -->|"Бэлэн app хэрэгтэй<br/>Need a ready app"| A1["Ижил төрлийн app-ууд хайх<br/>Find similar apps"]
+    A1 --> A2["Capability · Үнэ · Support харьцуулах<br/>Compare capability · price · support"]
+    A2 --> A3["App-ийн дэлгэрэнгүйг харах<br/>Review app details"]
+    A3 --> A4["Нийлүүлэгчээс тодруулах<br/>Ask the supplier"]
+    A4 --> A5{"Тохирох уу?<br/>Is it a good fit?"}
+    A5 -->|"Тийм / Yes"| A6["App авах<br/>Acquire app"]
+    A5 -->|"Үгүй / No"| C1["Custom app захиалах<br/>Request a custom app"]
+
+    Q -->|"App зармаар байна<br/>Want to sell apps"| S1["Seller / Publisher болох"]
+    S1 --> S2["Дэлгүүрийн plan сонгох<br/>Choose storefront plan"]
+    S2 --> S3["200,000₮ / сар<br/>Monthly storefront rent"]
+    S3 --> S4["Дэлгүүр нээх<br/>Open storefront"]
+    S4 --> S5["Бэлэн app-уудаа байрлуулах<br/>Publish ready-made apps"]
+    S5 --> S6["Customer асуултад хариулах<br/>Answer customer questions"]
+    S6 --> A6
+
+    Q -->|"Тохирох app олдохгүй<br/>No suitable app"| C1
+    C1 --> C2["Энгийн асуултад хариулах<br/>Describe the need in plain language"]
+    C2 --> C3["OVERVA зарын эх бэлтгэнэ<br/>OVERVA prepares request draft"]
+    C3 --> C4["Customer шалгаж батална<br/>Customer reviews and confirms"]
+    C4 --> C5["20,000₮ зарын төлбөр<br/>Request posting fee"]
+    C5 --> C6["Захиалгын зар нийтлэгдэнэ<br/>Request is published"]
+
+    C6 --> P1["Developer / Provider-ууд зар харна<br/>Providers discover the request"]
+    P0["Developer суудал авна<br/>Buy developer seat"] --> P1
+    S4 -. "Storefront plan-д<br/>1 seat багтаж болно" .-> P1
+    P1 --> P2["Санал өгнө<br/>Submit proposals"]
+    P2 --> P3["Customer саналуудыг харьцуулна<br/>Compare proposals"]
+    P3 --> P4["Гүйцэтгэгч сонгоно<br/>Select provider"]
+    P4 --> P5["Асууж тодруулна<br/>Clarify scope"]
+    P5 --> P6["Гэрээ байгуулна<br/>Form contract"]
+    P6 --> P7["App хөгжүүлнэ<br/>Build the app"]
+    P7 --> P8["Customer шалгаж хүлээн авна<br/>Review and accept"]
+    P8 --> P9["Баталгаатай үр дүн, review<br/>Verified outcome and review"]
+
+    R["OVERVA Market үндсэн орлого<br/>Core Market revenue"]
+    C5 -.-> R
+    S3 -.-> R
+    P0 -.-> R
+
+    L1["Хэрэгжсэн<br/>Implemented"]
+    L2["Төлөвлөсөн<br/>Planned"]
+    L3["Хэрэгжээгүй<br/>Not implemented"]
+    L4["Орлогын цэг<br/>Revenue point"]
+    L1 ~~~ L2 ~~~ L3 ~~~ L4
+
+    classDef implemented fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d;
+    classDef planned fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a8a;
+    classDef future fill:#f1f5f9,stroke:#64748b,stroke-width:2px,color:#334155;
+    classDef revenue fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f;
+
+    class G,B,A1,A2,A3 implemented;
+    class Q,A4,A5,S1,S2,S4,S5,S6,C1,C2,C3,C4,C6,P1,P2,P3,P4,P5,P6,P7,P8,P9 planned;
+    class A6 future;
+    class S3,C5,P0,R revenue;
+    class L1 implemented;
+    class L2 planned;
+    class L3 future;
+    class L4 revenue;
