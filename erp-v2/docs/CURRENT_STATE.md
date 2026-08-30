@@ -1,6 +1,6 @@
 # OVERVA Current State
 
-Last updated: 2026-08-29
+Last updated: 2026-08-30
 
 This document answers one question: **what exists in the repository now?** It
 does not claim that every implemented foundation is complete or production-
@@ -23,6 +23,38 @@ validated at enterprise scale.
   A guarded local-only launcher builds the Market with an API proxy at
   `http://localhost:4174`; it creates no volume and refuses to replace an
   existing container. This work is local and not production-deployed.
+
+## Canonical Market business-process diagram
+
+- The canonical Guest Market Journey is stored under
+  `docs/diagrams/market/guest-market-journey/`. Its editable source is
+  `guest-market-journey.mmd`; `guest-market-journey.svg` is the single scalable
+  review image. Small revisions overwrite those files in place. Do not create
+  `v2`, `final`, `copy`, dated, or duplicate images for the same journey; Git
+  history preserves earlier revisions.
+- Every business-process diagram uses one implementation-status standard:
+  gray = not planned, gold = planned, blue = in progress, green = implemented,
+  purple = verified, red = blocked, and orange = decision required. Arrows are
+  neutral flow only. Each diagram carries a compact vertical legend. Approved
+  business logic without code remains gold. Revenue is identified by
+  `ОРЛОГО / REVENUE` text, not by a separate status color.
+- `guest-market-journey.bpmn` is the BPMN 2.0 source. A real `.vsdx` has not
+  been fabricated because Microsoft Visio is not installed on this computer;
+  it must be created later through Visio import and Save As.
+
+## Next chat start
+
+1. Run `git status`. If clean, continue from the current `main`; on another
+   computer, use `git pull --ff-only origin main` first.
+2. Read this file, `docs/HOME_DEVELOPMENT_SETUP.md`, and
+   `docs/diagrams/market/guest-market-journey/README.md` before changing the
+   Market or its process diagrams.
+3. Treat `guest-market-journey.mmd` and `guest-market-journey.svg` as the one
+   canonical Guest Market Journey. Update them in place and keep the compact
+   seven-status legend.
+4. Local Market preview uses `http://localhost:4174`. Do not infer permission
+   to deploy, touch production, copy secrets, reset databases, or delete Docker
+   volumes.
 
 ## Operating Baseline
 

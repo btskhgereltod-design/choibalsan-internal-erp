@@ -15,7 +15,7 @@ flowchart TD
 
     Q -->|"App зармаар байна<br/>Want to sell apps"| S1["Seller / Publisher болох"]
     S1 --> S2["Дэлгүүрийн plan сонгох<br/>Choose storefront plan"]
-    S2 --> S3["200,000₮ / сар<br/>Monthly storefront rent"]
+    S2 --> S3["ОРЛОГО · 200,000₮ / сар<br/>REVENUE · Monthly storefront rent"]
     S3 --> S4["Дэлгүүр нээх<br/>Open storefront"]
     S4 --> S5["Бэлэн app-уудаа байрлуулах<br/>Publish ready-made apps"]
     S5 --> S6["Customer асуултад хариулах<br/>Answer customer questions"]
@@ -25,11 +25,11 @@ flowchart TD
     C1 --> C2["Энгийн асуултад хариулах<br/>Describe the need in plain language"]
     C2 --> C3["OVERVA зарын эх бэлтгэнэ<br/>OVERVA prepares request draft"]
     C3 --> C4["Customer шалгаж батална<br/>Customer reviews and confirms"]
-    C4 --> C5["20,000₮ зарын төлбөр<br/>Request posting fee"]
+    C4 --> C5["ОРЛОГО · 20,000₮ зарын төлбөр<br/>REVENUE · Request posting fee"]
     C5 --> C6["Захиалгын зар нийтлэгдэнэ<br/>Request is published"]
 
     C6 --> P1["Developer / Provider-ууд зар харна<br/>Providers discover the request"]
-    P0["Developer суудал авна<br/>Buy developer seat"] --> P1
+    P0["Developer суудлын үнэ шийдэх<br/>Developer seat · decision required"] --> P1
     S4 -. "Storefront plan-д<br/>1 seat багтаж болно" .-> P1
     P1 --> P2["Санал өгнө<br/>Submit proposals"]
     P2 --> P3["Customer саналуудыг харьцуулна<br/>Compare proposals"]
@@ -45,22 +45,25 @@ flowchart TD
     S3 -.-> R
     P0 -.-> R
 
-    L1["Хэрэгжсэн<br/>Implemented"]
-    L2["Төлөвлөсөн<br/>Planned"]
-    L3["Хэрэгжээгүй<br/>Not implemented"]
-    L4["Орлогын цэг<br/>Revenue point"]
-    L1 ~~~ L2 ~~~ L3 ~~~ L4
+    subgraph LEGEND["Өнгөний тайлбар / Status legend"]
+        direction TB
+        LEGEND_ITEMS["<div style='text-align:left'>⚪  Саарал — Төлөвлөөгүй / Not planned<br/>🟡  Шар — Төлөвлөсөн / Planned<br/>🔵  Цэнхэр — Хөгжүүлж байгаа / In progress<br/>🟢  Ногоон — Хэрэгжсэн / Implemented<br/>🟣  Нил ягаан — Шалгаж баталгаажсан / Verified<br/>🔴  Улаан — Асуудалтай, зогссон / Blocked<br/>🟠  Улбар шар — Шийдвэр шаардлагатай / Decision required</div>"]
+    end
 
+    classDef notPlanned fill:#f1f5f9,stroke:#94a3b8,stroke-width:2px,color:#334155;
+    classDef planned fill:#fef3c7,stroke:#d4a017,stroke-width:2px,color:#713f12;
+    classDef inProgress fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a8a;
     classDef implemented fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d;
-    classDef planned fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a8a;
-    classDef future fill:#f1f5f9,stroke:#64748b,stroke-width:2px,color:#334155;
-    classDef revenue fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f;
+    classDef verified fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#4c1d95;
+    classDef blocked fill:#fee2e2,stroke:#dc2626,stroke-width:2px,color:#7f1d1d;
+    classDef decisionRequired fill:#ffedd5,stroke:#f97316,stroke-width:2px,color:#7c2d12;
+    classDef legendItem fill:transparent,stroke:transparent,stroke-width:0px,color:#334155;
 
-    class G,B,A1,A2,A3 implemented;
-    class Q,A4,A5,S1,S2,S4,S5,S6,C1,C2,C3,C4,C6,P1,P2,P3,P4,P5,P6,P7,P8,P9 planned;
-    class A6 future;
-    class S3,C5,P0,R revenue;
-    class L1 implemented;
-    class L2 planned;
-    class L3 future;
-    class L4 revenue;
+    class G,B implemented;
+    class A1,A2,A3 verified;
+    class S1,S2,S4,S5 inProgress;
+    class Q,A4,A5,S3,S6,C1,C2,C3,C4,C5,C6,P1,P2,P3,P4,P5,P6,P7,P8,P9,R planned;
+    class A6 notPlanned;
+    class P0 decisionRequired;
+    class LEGEND_ITEMS legendItem;
+    style LEGEND fill:#ffffff,stroke:#cbd5e1,stroke-width:1px,color:#10233f;

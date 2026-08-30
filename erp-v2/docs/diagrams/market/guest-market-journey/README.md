@@ -18,10 +18,15 @@ This folder keeps one canonical Guest Market Journey. Small visual or logic revi
 
 ## Status colors
 
+- Gray — not planned.
+- Gold — planned.
+- Blue — in progress.
 - Green — implemented.
-- Blue — planned or foundation available.
-- Gray — not implemented.
-- Gold — proposed OVERVA revenue point.
+- Purple — verified.
+- Red — blocked.
+- Orange — decision required.
+
+Color always represents the process node's current implementation status. Arrow color does not represent status; arrows only show flow. Every diagram must contain its own status legend. A business idea that is approved but not coded remains gold. Revenue points are identified by `ОРЛОГО / REVENUE` text rather than a separate status color.
 
 ## Revenue hypotheses
 
