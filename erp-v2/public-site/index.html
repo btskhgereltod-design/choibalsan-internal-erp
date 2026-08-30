@@ -6,15 +6,15 @@
   <meta name="description" content="OVERVA — байгууллагын цахим хэрэгцээг бүтэцтэй хүсэлт болгож, тохирох хэрэгжүүлэх замыг сонгон, ажлыг pilot-аас production хүртэл хяналттай хүргэх орчин.">
   <meta name="color-scheme" content="light">
   <title>OVERVA — Байгууллагын цахим хэрэгцээний зах</title>
-  <link rel="stylesheet" href="/site.css?v=34">
-  <link rel="stylesheet" href="/market-catalog.css?v=1">
+  <link rel="stylesheet" href="/site.css?v=36">
+  <link rel="stylesheet" href="/market-catalog.css?v=2">
   <script src="/conversation-memory.js?v=15" defer></script>
   <script src="/workspace-lifecycle.js?v=14" defer></script>
   <script src="/workspace-registry.js?v=14" defer></script>
   <script src="/workspace-intake.js?v=14.1" defer></script>
   <script src="/request-draft-registry.js?v=3" defer></script>
   <script src="/site.js?v=34" defer></script>
-  <script src="/market-catalog.js?v=1" defer></script>
+  <script src="/market-catalog.js?v=2" defer></script>
 </head>
 <body>
   <section class="portfolio-home products-area" id="portfolioHome" aria-label="OVERVA үндсэн нүүр">
@@ -25,7 +25,7 @@
         <button type="button" data-market-area="community"><span>◌</span><strong>Форум</strong><small>Асуулт, туршлага</small></button>
         <button type="button" data-market-area="freelance"><span>◇</span><strong>Захиалгат ажил ба үйлчилгээ</strong><small>Захиалга, түнш, дэмжлэг</small></button>
       </nav>
-      <div class="market-area-sidebar" data-market-area-sidebar="products"><strong>МАРКЕТ</strong><p>OVERVA Apps болон бусад нийлүүлэгчийн бэлэн бүтээгдэхүүнийг ижил нөхцөлөөр харьцуулна.</p><button type="button" disabled>＋ Бүтээгдэхүүн нэмэх · Удахгүй</button></div>
+      <div class="market-area-sidebar" data-market-area-sidebar="products"><strong>МАРКЕТ</strong><p>Хэрэгтэй бүтээгдэхүүнээ хайх эсвэл өөрийн бүтээгдэхүүний нооргийг шууд эхлүүлнэ.</p><button type="button" data-catalog-sell>＋ Бүтээгдэхүүн нэмэх</button></div>
       <div class="market-area-sidebar hidden" data-market-area-sidebar="community"><strong>ФОРУМ</strong><p>Хэрэглэгч, хөгжүүлэгчид асуулт асууж, шийдэл болон туршлагаа хуваалцана.</p><button type="button" disabled>＋ Сэдэв нээх · Удахгүй</button></div>
       <div class="market-role-switch freelance-only hidden" aria-label="Идэвхтэй Market орчин солих">
         <button class="active" type="button" data-market-role="customer">Захиалагч</button>
@@ -61,6 +61,11 @@
       <div class="portfolio-scroll">
         <section class="market-area-panel product-market-home" data-market-area-panel="products" aria-labelledby="productMarketTitle">
           <div class="market-area-hero"><span>OVERVA MARKET · ЖИШИГ ХАРАГДАЦ</span><h1 id="productMarketTitle">Бэлэн бүтээгдэхүүнээ сонгох</h1><p>OVERVA Apps болон бусад хөгжүүлэгчийн бүтээгдэхүүн нэг зах зээлд, ижил нөхцөлөөр байрлана. Доорх бүтээгдэхүүнүүд нь V26 харагдацыг тайлбарлах жишээ бөгөөд бодит худалдаа биш.</p></div>
+          <div class="catalog-entry-actions" aria-label="Market-д хийх үндсэн үйлдэл">
+            <button type="button" data-catalog-buy><span>ХУДАЛДАН АВАГЧ</span><strong>Бүтээгдэхүүн хайх</strong><small>Нэр, боломж эсвэл нийлүүлэгчээр хайна.</small></button>
+            <button type="button" data-catalog-sell><span>НИЙЛҮҮЛЭГЧ</span><strong>Бүтээгдэхүүн нэмэх</strong><small>Дөрвөн мэдээллээр нооргоо эхлүүлнэ.</small></button>
+            <button type="button" data-catalog-custom><span>ТОХИРОХГҮЙ БОЛ</span><strong>Хийлгэх ажлаа бичих</strong><small>Захиалгат ажил руу шууд шилжинэ.</small></button>
+          </div>
           <div class="market-category-bar" aria-label="Бүтээгдэхүүний захын ангилал"><strong>Бүтээгдэхүүний зах</strong><div><button class="active" type="button" data-product-category="all">Бүгд</button><button type="button" data-product-category="apps">Аппууд</button><button type="button" data-product-category="modules">Модулиуд</button><button type="button" data-product-category="connectors">Холбогчид</button><button type="button" data-product-category="templates">Загварууд</button><button type="button" data-product-category="agents">AI агентууд</button></div></div>
           <div class="product-market-grid" id="productMarketGrid">
             <article class="product-market-card" data-product-card data-product-category-row="apps"><div class="product-cover overva-cover"><span>OV</span><small>ЖИШИГ</small></div><div class="product-card-body"><span class="vendor-label overva-vendor">OVERVA Apps · нийлүүлэгч</span><h2>Агуулахын удирдлага</h2><p>Бараа, хөдөлгөөн, үлдэгдэл болон хариуцагчийн бэлэн шийдлийн жишээ.</p><div><span>Аппууд</span><strong>Үнэ тогтоогоогүй</strong></div><button type="button" disabled>Дэлгэрэнгүй · Удахгүй</button></div></article>
@@ -70,6 +75,10 @@
             <article class="product-market-card" data-product-card data-product-category-row="agents"><div class="product-cover agent-cover"><span>AI</span><small>ЖИШИГ</small></div><div class="product-card-body"><span class="vendor-label">Нийлүүлэгчийн жишээ</span><h2>Баримт шалгах AI агент</h2><p>Баримтын бүрдэл, зөрүүг санал болгож, хүний шийдвэрийг хүлээдэг агентын жишээ.</p><div><span>AI агентууд</span><strong>Үнэ тогтоогоогүй</strong></div><button type="button" disabled>Дэлгэрэнгүй · Удахгүй</button></div></article>
           </div>
           <div class="market-empty hidden" id="productMarketEmpty">Энэ хайлт, ангилалд тохирох жишиг бүтээгдэхүүн олдсонгүй.</div>
+          <section class="catalog-draft-section hidden" id="catalogDraftSection" aria-labelledby="catalogDraftTitle">
+            <div><span>ЗӨВХӨН ЭНЭ ТӨХӨӨРӨМЖИД</span><h2 id="catalogDraftTitle">Таны бүтээгдэхүүний ноорог</h2><p>Нийтлээгүй. Та санаагаа алдахгүй хадгалаад дараа нь үргэлжлүүлж болно.</p></div>
+            <div class="product-market-grid" id="catalogDraftGrid"></div>
+          </section>
           <section class="market-storefront-section" aria-labelledby="marketStorefrontTitle">
             <div class="portfolio-section-title"><div><span>ИДЭВХТЭЙ НИЙЛҮҮЛЭГЧИД</span><h2 id="marketStorefrontTitle">Цахим лангуунууд</h2><p>Market operator-ын баталсан Provider-уудын идэвхтэй үйлчилгээний лангуу. Лангууны төлбөр нь OVERVA үйлчилгээний эрх бөгөөд захиалагч, гүйцэтгэгчийн ажлын төлбөр биш.</p></div></div>
             <div class="market-storefront-grid" id="marketStorefrontGrid"></div>
@@ -397,6 +406,19 @@
       <li><strong>Захиалагчийн хүлээн авалтыг хүндэтгэнэ.</strong><p>Тохирсон шалгуураар хүлээн авах эсвэл засвар хүсэх шийдвэр гараагүй байхад ажлыг дууссан гэж тооцохгүй.</p></li>
       <li><strong>Үнэлгээ зөвхөн бодит дууссан ажлаас үүснэ.</strong><p>Гүйцэтгэгч өөртөө үнэлгээ өгөхгүй. Зочин болон хамааралгүй хүн үнэлэхгүй; зөвхөн тохирсон ажлын бодит оролцогч үнэлнэ.</p></li>
     </ol></div>
+  </dialog>
+
+  <dialog class="catalog-listing-dialog" id="catalogListingDialog">
+    <form method="dialog" class="dialog-close-form"><button aria-label="Бүтээгдэхүүний ноорог хаах">×</button></form>
+    <div class="market-auth-head"><span>БҮТЭЭГДЭХҮҮН НЭМЭХ</span><h2>Санаагаа хурдан хадгалъя</h2><p>Паспорт, баталгаа, plan шаардахгүй. Одоохондоо энэ төхөөрөмжид ноорог хэлбэрээр хадгална.</p></div>
+    <form class="catalog-listing-form" id="catalogListingForm">
+      <label>Бүтээгдэхүүний нэр<input name="title" required minlength="3" maxlength="120" placeholder="Жишээ: Борлуулалтын тайлангийн апп"></label>
+      <label>Төрөл<select name="category" required><option value="apps">Апп</option><option value="modules">Модуль</option><option value="connectors">Холбогч</option><option value="templates">Загвар</option><option value="agents">AI агент</option></select></label>
+      <label class="wide">Юу хийдэг вэ?<textarea name="summary" required minlength="10" maxlength="300" rows="3" placeholder="Нэг, хоёр өгүүлбэрээр энгийнээр тайлбарлана."></textarea></label>
+      <label class="wide">Үнэ эсвэл нөхцөл · сонголттой<input name="price" maxlength="100" placeholder="Жишээ: 250,000₮ эсвэл Тохиролцоно"></label>
+      <p class="catalog-listing-note">Хадгалах нь Market-д нийтлэхгүй, худалдан авагчид илгээхгүй, төлбөр үүсгэхгүй.</p>
+      <button class="primary-button" type="submit">Ноорог хадгалах</button>
+    </form>
   </dialog>
 
   <dialog class="request-dialog" id="requestDialog">

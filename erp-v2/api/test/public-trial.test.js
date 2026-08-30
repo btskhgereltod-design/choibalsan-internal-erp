@@ -148,7 +148,7 @@ test("public site starts with a portfolio Home and opens the governed workspace 
   assert.match(html, /бодит худалдаа биш/);
   assert.match(html, /Одоогоор бодит нийтлэл, хэрэглэгчийн бүртгэл нээгдээгүй/);
   assert.match(html, /data-forum-topic/);
-  assert.match(html, /site\.css\?v=34/);
+  assert.match(html, /site\.css\?v=36/);
   assert.match(html, /site\.js\?v=34/);
   assert.match(html, /request-draft-registry\.js\?v=3/);
   assert.match(html, /conversation-memory\.js\?v=15/);
@@ -267,8 +267,10 @@ test("public site starts with a portfolio Home and opens the governed workspace 
   assert.match(dockerfile, /COPY workspace-registry\.js/);
   assert.match(dockerfile, /COPY workspace-intake\.js/);
   assert.match(dockerfile, /COPY request-draft-registry\.js/);
-  assert.match(html, /market-catalog\.css\?v=1/);
-  assert.match(html, /market-catalog\.js\?v=1/);
+  assert.match(html, /market-catalog\.css\?v=2/);
+  assert.match(html, /market-catalog\.js\?v=2/);
+  assert.match(css, /\.portfolio-main\s*\{[^}]*min-height:0/);
+  assert.match(css, /\.portfolio-scroll\s*\{[^}]*min-height:0[^}]*overflow-y:auto/);
   assert.match(dockerfile, /COPY market-catalog\.css/);
   assert.match(dockerfile, /COPY market-catalog\.js/);
   assert.match(dockerfile, /ARG NGINX_CONFIG=nginx\.conf/);
@@ -281,6 +283,10 @@ test("public site starts with a portfolio Home and opens the governed workspace 
   assert.match(marketCatalogJs, /selected\.size<3/);
   assert.match(marketCatalogJs, /ЖИШИГ \/ SAMPLE/);
   assert.match(marketCatalogJs, /Бодит listing backend дараагийн хэрэгжүүлэлтийн шатанд орно/);
+  assert.match(html, /data-catalog-sell/);
+  assert.match(html, /id="catalogListingForm"/);
+  assert.match(marketCatalogJs, /overva:product-interest/);
+  assert.match(marketCatalogJs, /overva\.market\.listing-drafts\.v1/);
   assert.match(requestDraftRegistryJs, /Draft revision must increase/);
 });
 

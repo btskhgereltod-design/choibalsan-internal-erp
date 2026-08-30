@@ -23,6 +23,17 @@ validated at enterprise scale.
   A guarded local-only launcher builds the Market with an API proxy at
   `http://localhost:4174`; it creates no volume and refuses to replace an
   existing container. This work is local and not production-deployed.
+- The same local interaction layer now exposes three immediate guest intents:
+  search for a ready product, start a four-field product-listing draft, or move
+  directly to custom work when no ready product fits. Listing drafts stay only
+  in the current browser and are explicitly not published, sent to customers,
+  priced by OVERVA, or treated as a Seller/Provider grant.
+- A sample product detail now has a low-friction interest action. It carries the
+  selected product into the existing Market customer/request flow instead of
+  asking the visitor to rewrite the context. This remains a local UX slice: no
+  server-backed listing, supplier inquiry, purchase, payment, or publication
+  authority was added. Desktop interaction and a 390px responsive layout pass
+  without console errors or horizontal overflow.
 
 ## Canonical Market business-process diagram
 

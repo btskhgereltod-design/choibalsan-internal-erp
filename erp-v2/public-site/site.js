@@ -1598,6 +1598,14 @@ document.getElementById("workspaceHomeLink").addEventListener("click", event => 
 document.getElementById("workspaceHomeButton").addEventListener("click", showPortfolioHome);
 document.getElementById("homeNewWorkButton").addEventListener("click", () => openRequestDialog());
 document.getElementById("marketCreateRequestButton").addEventListener("click", () => openRequestDialog());
+document.addEventListener("overva:product-interest", event => {
+  showMarketArea("freelance");
+  openRequestDialog(event.detail || {});
+});
+document.addEventListener("overva:catalog-custom-request", () => {
+  showMarketArea("freelance");
+  openRequestDialog();
+});
 document.getElementById("marketProviderApplyButton").addEventListener("click", openProviderApplication);
 document.querySelectorAll("[data-open-request]").forEach(button => button.addEventListener("click", () => openRequestDialog()));
 document.querySelectorAll("[data-market-view]").forEach(button => button.addEventListener("click", () => showMarketView(button.dataset.marketView)));

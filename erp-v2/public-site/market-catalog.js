@@ -1,6 +1,8 @@
 "use strict";
 
 (() => {
+  const DRAFT_STORAGE_KEY = "overva.market.listing-drafts.v1";
+  const categoryLabels = { apps:"Апп", modules:"Модуль", connectors:"Холбогч", templates:"Загвар", agents:"AI агент" };
   const products = [
     { id:"inventory", eyebrow:"Апп · App", title:"Агуулахын удирдлага", vendor:"OVERVA Apps", summary:"Бараа, хөдөлгөөн, үлдэгдэл болон хариуцагчийг нэг урсгалаар хянах жишиг шийдэл.", fit:"Бараа материалын бүртгэлээ Excel болон цаасаар хөтөлдөг байгууллага", features:["Барааны нэгдсэн бүртгэл","Орлого, зарлагын хөдөлгөөн","Үлдэгдэл ба доод түвшний сануулга","Хариуцагч болон өөрчлөлтийн түүх"], support:"Нэвтрүүлэлтийн нөхцөлийг нийлүүлэгчтэй тохирно", price:"Үнэ тогтоогоогүй", tone:"blue" },
     { id:"people", eyebrow:"Модуль · Module", title:"Ажилтны өөртөө үйлчлэх модуль", vendor:"Нийлүүлэгчийн жишээ", summary:"Чөлөө, хүсэлт болон хувийн мэдээллийн шинэчлэлийг ажилтан өөрөө хийх гар утасны шийдлийн жишээ.", fit:"Ажилтны хүсэлт, мэдээлэл шинэчлэлтийг гараар дамжуулдаг байгууллага", features:["Чөлөөний хүсэлт","Хувийн мэдээлэл шинэчлэх","Хүсэлтийн төлөв харах","Гар утсанд тохирсон хэрэглээ"], support:"Нийлүүлэгчийн нөхцөл тодорхой болоогүй", price:"Үнэ тогтоогоогүй", tone:"green" },
@@ -14,6 +16,17 @@
 
   const selected = new Set();
   const byId = id => products.find(product => product.id === id);
+
+  function requestSeed(product) {
+    return {
+      type:"Одоогийн систем сайжруулах",
+      title:`${product.title} бүтээгдэхүүнийг сонирхож байна`,
+      problem:`${product.title} манай байгууллагын хэрэгцээнд тохирох эсэх, ашиглах нөхцөл болон үнийн саналыг тодруулах хүсэлтэй байна.`,
+      outcome:`${product.title}-ийг ашиглах боломж, үнэ, нэвтрүүлэлт болон дэмжлэгийн нөхцөлийг нийлүүлэгчтэй тохирох.`,
+      acceptance:"Нийлүүлэгч боломж, үнэ, хугацаа болон дэмжлэгийн нөхцөлийг ойлгомжтой санал болгосон байна.",
+      capabilities:["Бүртгэл, мастер өгөгдөл"]
+    };
+  }
 
   function el(tag, className, text) {
     const node = document.createElement(tag);
@@ -46,6 +59,14 @@
     main.append(list, el("h3", "", "Хэнд тохирох вэ? / Best fit"), el("p", "", product.fit));
     const facts = el("aside", "catalog-facts");
     [["Нийлүүлэгч / Vendor",product.vendor],["Үнэ / Price",product.price],["Дэмжлэг / Support",product.support]].forEach(([label,value]) => { const row=el("div",""); row.append(el("small","",label),el("strong","",value)); facts.append(row); });
+    const interest = el("button", "catalog-interest-button", "Сонирхож байна · Нөхцөл асуух");
+    interest.type = "button";
+    interest.addEventListener("click", () => {
+      overlay.hidden = true;
+      document.body.classList.remove("catalog-open");
+      document.dispatchEvent(new CustomEvent("overva:product-interest", { detail:requestSeed(product) }));
+    });
+    facts.append(interest);
     const notice = el("p", "catalog-sample-notice", "Энэ бол UX шалгах жишиг мэдээлэл. Бодит худалдаа, захиалга эсвэл нийлүүлэгчийн амлалт биш.");
     body.append(main, facts);
     content.append(hero, body, notice);
@@ -96,6 +117,73 @@
     compare.addEventListener("click",()=>{ if(selected.has(product.id)) selected.delete(product.id); else if(selected.size<3) selected.add(product.id); else return; syncCompareButtons(); renderCompare(); });
     button.after(compare);
   });
+
+  const listingDialog = document.getElementById("catalogListingDialog");
+  const listingForm = document.getElementById("catalogListingForm");
+  const draftSection = document.getElementById("catalogDraftSection");
+  const draftGrid = document.getElementById("catalogDraftGrid");
+
+  function readDrafts() {
+    try {
+      const value = JSON.parse(localStorage.getItem(DRAFT_STORAGE_KEY) || "[]");
+      return Array.isArray(value) ? value : [];
+    } catch { return []; }
+  }
+
+  function writeDrafts(items) {
+    localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(items));
+  }
+
+  function renderDrafts() {
+    const drafts = readDrafts();
+    draftSection.classList.toggle("hidden", drafts.length === 0);
+    draftGrid.replaceChildren();
+    drafts.forEach(draft => {
+      const card = el("article", "product-market-card catalog-draft-card");
+      card.dataset.productCategoryRow = draft.category;
+      const cover = el("div", "product-cover");
+      cover.append(el("span", "", draft.title.split(/\s+/).slice(0,2).map(word => word[0]).join("").toUpperCase()), el("small", "", "ТАНЫ НООРОГ"));
+      const body = el("div", "product-card-body");
+      body.append(el("span", "vendor-label", "Нийтлээгүй"), el("h2", "", draft.title), el("p", "", draft.summary));
+      const facts = el("div");
+      facts.append(el("span", "", categoryLabels[draft.category] || "Бүтээгдэхүүн"), el("strong", "", draft.price || "Үнэ оруулаагүй"));
+      const remove = el("button", "", "Ноорог устгах");
+      remove.type = "button";
+      remove.addEventListener("click", () => {
+        writeDrafts(readDrafts().filter(item => item.id !== draft.id));
+        renderDrafts();
+      });
+      body.append(facts, remove);
+      card.append(cover, body);
+      draftGrid.append(card);
+    });
+  }
+
+  document.querySelectorAll("[data-catalog-buy]").forEach(button => button.addEventListener("click", () => {
+    const search = document.getElementById("homeSearchInput");
+    search.focus();
+    search.scrollIntoView({ behavior:"smooth", block:"center" });
+  }));
+  document.querySelectorAll("[data-catalog-sell]").forEach(button => button.addEventListener("click", () => {
+    listingForm.reset();
+    listingDialog.showModal();
+    listingForm.elements.title.focus();
+  }));
+  document.querySelectorAll("[data-catalog-custom]").forEach(button => button.addEventListener("click", () => {
+    document.dispatchEvent(new CustomEvent("overva:catalog-custom-request"));
+  }));
+  listingForm.addEventListener("submit", event => {
+    event.preventDefault();
+    if (!listingForm.reportValidity()) return;
+    const values = Object.fromEntries(new FormData(listingForm));
+    const drafts = readDrafts();
+    drafts.unshift({ id:`draft-${Date.now()}`, title:values.title.trim(), category:values.category, summary:values.summary.trim(), price:values.price.trim(), savedAt:new Date().toISOString() });
+    writeDrafts(drafts.slice(0,20));
+    renderDrafts();
+    listingDialog.close();
+    draftSection.scrollIntoView({ behavior:"smooth", block:"start" });
+  });
+  renderDrafts();
 
   overlay.addEventListener("click", event => { if(event.target===overlay || event.target.closest(".catalog-close")){ overlay.hidden=true; document.body.classList.remove("catalog-open"); } });
   document.addEventListener("keydown",event=>{ if(event.key==="Escape"&&!overlay.hidden){ overlay.hidden=true; document.body.classList.remove("catalog-open"); } });
