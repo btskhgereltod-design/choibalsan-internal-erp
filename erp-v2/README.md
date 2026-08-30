@@ -9,8 +9,23 @@ hard-coded as the OVERVA product model.
 
 ## Local Docker startup
 
-1. Copy `.env.example` to `.env` and replace every `change-this-*` value.
-2. Start the stack:
+On a new Windows development computer, create a unique local-only `.env`
+without copying any production secrets:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\ops\initialize-development-env.ps1
+```
+
+The script refuses to overwrite an existing `.env`, generates strong local
+database/JWT/bootstrap passwords without printing them, and leaves Google,
+email, SMS, and AI integrations disabled. See
+`docs/HOME_DEVELOPMENT_SETUP.md` for the complete two-computer workflow and the
+prompt to give Codex on a new computer.
+
+Alternatively, copy `.env.example` to `.env` and replace every
+`change-this-*` value manually.
+
+Then start the stack:
 
 ```powershell
 docker compose up --build
