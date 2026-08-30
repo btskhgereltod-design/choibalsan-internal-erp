@@ -42,11 +42,15 @@ test("public site starts with a portfolio Home and opens the governed workspace 
   const html = fs.readFileSync(path.join(publicRoot, "index.html"), "utf8");
   const css = fs.readFileSync(path.join(publicRoot, "site.css"), "utf8");
   const js = fs.readFileSync(path.join(publicRoot, "site.js"), "utf8");
+  const marketCatalogCss = fs.readFileSync(path.join(publicRoot, "market-catalog.css"), "utf8");
+  const marketCatalogJs = fs.readFileSync(path.join(publicRoot, "market-catalog.js"), "utf8");
   const memoryJs = fs.readFileSync(path.join(publicRoot, "conversation-memory.js"), "utf8");
   const lifecycleJs = fs.readFileSync(path.join(publicRoot, "workspace-lifecycle.js"), "utf8");
   const registryJs = fs.readFileSync(path.join(publicRoot, "workspace-registry.js"), "utf8");
   const intakeJs = fs.readFileSync(path.join(publicRoot, "workspace-intake.js"), "utf8");
   const requestDraftRegistryJs = fs.readFileSync(path.join(publicRoot, "request-draft-registry.js"), "utf8");
+  const localNginx = fs.readFileSync(path.join(publicRoot, "nginx.local.conf"), "utf8");
+  const localMarketLauncher = fs.readFileSync(path.join(publicRoot, "..", "ops", "start-local-market-preview.ps1"), "utf8");
   const trialDialogHtml = html.match(/<dialog class="trial-dialog" id="trialDialog">[\s\S]*?<\/dialog>/)?.[0] || "";
   assert.match(html, /Таны байгууллагын хэрэгцээг хамтдаа тодорхойлъё/);
   assert.match(html, /class="studio-sidebar"/);
@@ -263,6 +267,20 @@ test("public site starts with a portfolio Home and opens the governed workspace 
   assert.match(dockerfile, /COPY workspace-registry\.js/);
   assert.match(dockerfile, /COPY workspace-intake\.js/);
   assert.match(dockerfile, /COPY request-draft-registry\.js/);
+  assert.match(html, /market-catalog\.css\?v=1/);
+  assert.match(html, /market-catalog\.js\?v=1/);
+  assert.match(dockerfile, /COPY market-catalog\.css/);
+  assert.match(dockerfile, /COPY market-catalog\.js/);
+  assert.match(dockerfile, /ARG NGINX_CONFIG=nginx\.conf/);
+  assert.match(localNginx, /proxy_pass http:\/\/host\.docker\.internal:4101/);
+  assert.match(localMarketLauncher, /127\.0\.0\.1:4174:8080/);
+  assert.match(localMarketLauncher, /will not replace or delete it/);
+  assert.doesNotMatch(localMarketLauncher, /docker (?:rm|volume)/);
+  assert.match(marketCatalogCss, /catalog-compare-tray/);
+  assert.match(marketCatalogCss, /@media\(max-width:780px\)/);
+  assert.match(marketCatalogJs, /selected\.size<3/);
+  assert.match(marketCatalogJs, /ЖИШИГ \/ SAMPLE/);
+  assert.match(marketCatalogJs, /Бодит listing backend дараагийн хэрэгжүүлэлтийн шатанд орно/);
   assert.match(requestDraftRegistryJs, /Draft revision must increase/);
 });
 

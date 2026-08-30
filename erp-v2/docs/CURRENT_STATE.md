@@ -6,6 +6,24 @@ This document answers one question: **what exists in the repository now?** It
 does not claim that every implemented foundation is complete or production-
 validated at enterprise scale.
 
+## Unreleased local work — Market guest catalog interaction
+
+- The public Market sample catalog now has a separate responsive interaction
+  layer for product detail and comparison. A guest can open a sample product,
+  review capabilities, intended fit, vendor, price state, and support state,
+  select up to three samples, and compare them side by side.
+- Every detail and comparison surface explicitly states that the records are
+  UX samples, not live listings, sale offers, orders, or vendor commitments.
+  No listing, purchase, payment, supplier-contact, or transaction authority was
+  added.
+- The implementation is isolated in `public-site/market-catalog.js` and
+  `public-site/market-catalog.css`. Desktop and 390px mobile browser checks pass
+  without console errors. The public-site image definition copies both assets,
+  and all 233 repository tests pass, including asset-wiring regression checks.
+  A guarded local-only launcher builds the Market with an API proxy at
+  `http://localhost:4174`; it creates no volume and refuses to replace an
+  existing container. This work is local and not production-deployed.
+
 ## Operating Baseline
 
 - OVERVA v2 is isolated under `erp-v2`; the legacy Choibalsan ERP remains a

@@ -30,6 +30,19 @@ Then open:
 - tenant UI: `http://localhost:4100`
 - direct API health check: `http://localhost:4101/health`
 
+To build and open the separate local Market public-site preview, run this from
+the repository's `erp-v2` directory in your own Windows PowerShell session:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\ops\start-local-market-preview.ps1
+```
+
+Then open `http://localhost:4174`. The preview container proxies `/api/*` only
+to the existing local API on `127.0.0.1:4101`. It creates no Docker volume and
+does not use a production Compose overlay, production secret, or production
+database. If a container named `overva-market-local` already exists, the script
+stops without replacing or deleting it.
+
 The generated local tenant login uses organization `local-overva` and email
 `admin@local.overva`. The local Platform login uses `platform@local.overva`.
 Their unique passwords are stored only in `erp-v2/.env`. Copy a password
