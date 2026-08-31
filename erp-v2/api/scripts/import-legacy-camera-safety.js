@@ -59,7 +59,10 @@ async function main(){
 
     const cameraType=(await client.query(`SELECT wt.id,r.organization_unit_id department_id,r.workflow_policy_id FROM organization_work_types wt LEFT JOIN organization_work_type_routes r ON r.organization_id=wt.organization_id AND r.work_type_id=wt.id WHERE wt.organization_id=$1 AND wt.code='camera-repair'`,[org])).rows[0];
     for(const row of data.cameraWork||[]){
-      const target=(await client.query("SELECT target_id::uuid id FROM source_import_records WHERE organization_id=$1 AND source_system=$2 AND source_table='asset_events' AND source_id=$3 AND target_type='work_order'",[org,source,String(row.id)])).rows[0];
+      const target=(await client.query(`SELECT target_id::uuid id FROM source_import_records
+        WHERE organization_id=$1 AND source_system IN ($2,'choibalsan-legacy-erp')
+          AND source_table='asset_events' AND source_id=$3 AND target_type='work_order'
+        ORDER BY CASE WHEN source_system=$2 THEN 0 ELSE 1 END LIMIT 1`,[org,source,String(row.id)])).rows[0];
       if(!target){counts.warnings.push(`Camera work ${row.id}: imported work order not found`);continue}
       const objectId=objectIds.get(Number(row.asset_id))||(await client.query("SELECT id FROM operational_objects WHERE organization_id=$1 AND source_system=$2 AND source_table='camera_assets' AND source_id=$3",[org,source,String(row.asset_id)])).rows[0]?.id||null;
       const current=(await client.query("SELECT status,workflow_stage FROM work_orders WHERE organization_id=$1 AND id=$2",[org,target.id])).rows[0],next=workState(row.status);

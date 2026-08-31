@@ -6,6 +6,44 @@ This document answers one question: **what exists in the repository now?** It
 does not claim that every implemented foundation is complete or production-
 validated at enterprise scale.
 
+## Choibalsan legacy ERP production reconciliation
+
+- The reviewed legacy SQLite source has now been reconciled into the production
+  `choibalsan-hugjil` tenant. The import matched all 21 legacy employees without
+  replacing their existing password hashes, enriched all 21 employee profiles,
+  and reconciled 1,715 effective attendance rows. Twenty-one newer/manual
+  attendance rows were intentionally preserved instead of being overwritten.
+- The operational import now retains 465 legacy master assets, 451 lighting
+  objects, 110 camera objects, and 106 canonical Work Orders: 78 lighting and
+  28 camera. Camera work reuses the same Work Orders and carries 103 legacy
+  approval decisions/events into append-only evidence. The camera history also
+  contains 76 daily snapshots; the safety workspace received 92 source risks,
+  19 route plans, two documents, and 42 acknowledgements.
+- Two legacy acknowledgement rows reference an employee that is not present in
+  the active 21-person source set. They remain reported import warnings rather
+  than being attributed to the wrong person. The production tenant also retains
+  one pre-existing master asset and one pre-existing safety risk; imported and
+  pre-existing records were not collapsed merely to make headline counts match.
+- Finance and inventory reconciliation imported 665 material masters, 124 stock
+  movements, 157 cash-journal rows, 61 payable source rows, 36 receivables, and
+  3,932 accounting fixed assets. Inventory quantity is 163,142.558 and inventory
+  value is MNT 607,277,288.28, matching both source and recalculated values.
+  Forty-three positive payable rows became obligations; 18 non-positive or
+  sub-cent rows remain immutable warning evidence. Fixed-asset initial value is
+  MNT 91,106,333,640.19 and book value is MNT 25,899,708,219.61.
+- Importers were rerun in dry-run mode after apply: all 465 assets, 327
+  lighting/work source rows, and 4,975 finance/inventory source rows were
+  skipped as already reconciled; camera and safety created no duplicate domain
+  records or approval evidence. All 284 repository tests pass.
+- The verified production restore point immediately before this data import is
+  `overva-20260831T063329Z`; the verified post-import backup is
+  `overva-20260831T063544Z`. All production services and public endpoints were
+  healthy after the import.
+- `ops/export-legacy-assets.js` is the reviewed read-only asset exporter.
+  `ops/export-legacy-lighting.js --all-work` provides the complete legacy work
+  set, while the camera/safety importer can reconcile those canonical Work
+  Orders even when their earlier provenance used the legacy ERP source label.
+
 ## Choibalsan accounting workspace
 
 - The local Choibalsan pilot now has a permission-backed **Санхүү, бүртгэл**
@@ -35,9 +73,9 @@ validated at enterprise scale.
   and inventory value; the accountant sees cash, obligations, and asset cost,
   depreciation, and book value. Accounting assets remain separate from
   operational objects and their dossiers.
-- A verified pre-import backup exists at `backups/overva-20260831T050355Z`.
-  Local Docker import and a second idempotency run passed; API and tenant web
-  are healthy. This is local pilot data, not a production deployment.
+- The earlier local rehearsal backup remains at
+  `backups/overva-20260831T050355Z`; the equivalent reviewed dataset is now also
+  reconciled into production as recorded above.
 
 ## Storekeeper workspace
 

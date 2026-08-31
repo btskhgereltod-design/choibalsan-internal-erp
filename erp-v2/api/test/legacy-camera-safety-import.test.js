@@ -30,6 +30,7 @@ test("camera and safety import preserves source records and master asset allocat
   }
   assert.match(importer,/allocatable_quantity=GREATEST/);
   assert.match(importer,/category='camera\.repair'/);
+  assert.match(importer,/source_system IN \(\$2,'choibalsan-legacy-erp'\)/);
   assert.match(importer,/GPS and file paths intentionally excluded/);
 });
 

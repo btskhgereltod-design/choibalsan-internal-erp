@@ -35,6 +35,8 @@ test("legacy export is read-only and excludes credentials",()=>{
   const exporter=read("..","ops","export-legacy-lighting.js");
   assert.match(exporter,/sqlite3\.OPEN_READONLY/);
   assert.match(exporter,/SELECT id,full_name,role FROM users/);
+  assert.match(exporter,/--all-work/);
+  assert.match(exporter,/SELECT \* FROM asset_events ORDER BY id/);
   assert.doesNotMatch(exporter,/password_hash|passwordHash/);
 });
 

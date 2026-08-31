@@ -7,9 +7,12 @@ const db=new sqlite3.Database(source,sqlite3.OPEN_READONLY);
 const all=(sql,params=[])=>new Promise((resolve,reject)=>db.all(sql,params,(error,rows)=>error?reject(error):resolve(rows)));
 
 async function main(){
-  const work=await all(`SELECT * FROM asset_events WHERE sl_point_id IS NOT NULL OR ger_inventory_id IS NOT NULL
-    OR lower(COALESCE(category,'')) LIKE '%гэрэлт%' OR lower(COALESCE(department,'')) LIKE '%цахилгаан%'
-    ORDER BY id`);
+  const includeAllWork=process.argv.includes("--all-work");
+  const work=await all(includeAllWork
+    ? "SELECT * FROM asset_events ORDER BY id"
+    : `SELECT * FROM asset_events WHERE sl_point_id IS NOT NULL OR ger_inventory_id IS NOT NULL
+      OR lower(COALESCE(category,'')) LIKE '%гэрэлт%' OR lower(COALESCE(department,'')) LIKE '%цахилгаан%'
+      ORDER BY id`);
   const ids=work.map(x=>x.id);
   const placeholders=ids.map(()=>"?").join(",")||"NULL";
   const data={

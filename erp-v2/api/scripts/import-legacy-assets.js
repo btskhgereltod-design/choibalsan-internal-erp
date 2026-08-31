@@ -42,7 +42,7 @@ async function main(){
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11) RETURNING id`,[
         organization.id,targetCode,name,text(row.category)||"Бусад",status,text(row.location),responsible,
         /^\d{4}-\d{2}-\d{2}/.test(text(row.installed_date))?text(row.installed_date).slice(0,10):null,
-        "Хуучин ERP-ээс локал demo хуулбар",JSON.stringify(metadata),users.get(Number(row.created_by))||actor.id,
+        "Хуучин ERP-ээс эх сурвалжтай импорт",JSON.stringify(metadata),users.get(Number(row.created_by))||actor.id,
       ]);
       const assetId=inserted.rows[0].id;
       await client.query(`INSERT INTO asset_events(organization_id,asset_id,actor_user_id,event_type,detail)
