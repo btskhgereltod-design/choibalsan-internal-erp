@@ -8,6 +8,7 @@ const { writeAudit } = require("../services/audit");
 const { emitAutomationEvent } = require("../services/automation");
 const { notifyUser, notifyManagement } = require("../services/notifications");
 const { canTransition, WORKFLOW_ACTIONS, availableWorkflowActions, canPerformWorkflowAction } = require("../services/work-order-flow");
+const { canTransitionMaterial } = require("../services/work-order-material-flow");
 const {
   WORK_ORDER_PERMISSIONS,
   hasPermission,
@@ -39,6 +40,18 @@ const scopeItemSchema = z.object({
 });
 const scopeProgressSchema=z.object({completedQuantity:z.number().min(0),unresolvedQuantity:z.number().min(0),deferredQuantity:z.number().min(0),exceptionReason:z.string().trim().max(2000).default(""),requestException:z.boolean().default(false)});
 const exceptionDecisionSchema=z.object({decision:z.enum(["accepted","rejected"]),note:z.string().trim().min(1).max(2000)});
+const materialRequestSchema=z.object({
+  inventoryItemId:z.string().uuid(),quantity:z.coerce.number().positive().max(100000000),
+  reason:z.string().trim().min(1).max(2000),idempotencyKey:z.string().uuid(),
+});
+const materialDecisionSchema=z.object({
+  decision:z.enum(["approved","rejected"]),approvedQuantity:z.coerce.number().positive().max(100000000).optional(),
+  note:z.string().trim().max(2000).default(""),
+}).superRefine((value,ctx)=>{
+  if(value.decision==="approved"&&!value.approvedQuantity)ctx.addIssue({code:"custom",path:["approvedQuantity"],message:"Approved quantity is required"});
+  if(value.decision==="rejected"&&!value.note)ctx.addIssue({code:"custom",path:["note"],message:"Rejection note is required"});
+});
+const materialIssueSchema=z.object({warehouseId:z.string().uuid(),idempotencyKey:z.string().uuid()});
 
 async function scopeClosure(client,organizationId,workOrderId){
   const result=await client.query(`SELECT count(*)::int item_count,
@@ -70,6 +83,12 @@ async function notifyAuthority(client, { organizationId, permission, excludeUser
 
 function deny(res, permission) {
   return res.status(403).json({error:"Work order permission required",code:"WORK_ORDER_PERMISSION_REQUIRED",permission});
+}
+
+function requireInventory(req,res) {
+  if((req.user.enabled_modules||[]).includes("inventory"))return true;
+  res.status(403).json({error:"Inventory module is not enabled for this organization",code:"MODULE_DISABLED",module:"inventory"});
+  return false;
 }
 
 router.use(authenticate, requireModule("work-orders"));
@@ -115,10 +134,12 @@ router.get("/", asyncHandler(async(req,res)=>{
 router.get("/:id/history", asyncHandler(async(req,res)=>{
   const id=z.string().uuid().safeParse(req.params.id);
   if(!id.success)return res.status(400).json({error:"Invalid work order"});
-  const order=await getPool().query("SELECT id,title,department_id,assigned_to,created_by FROM work_orders WHERE organization_id=$1 AND id=$2",[req.user.organization_id,id.data]);
+  const order=await getPool().query("SELECT id,title,status,department_id,assigned_to,created_by FROM work_orders WHERE organization_id=$1 AND id=$2",[req.user.organization_id,id.data]);
   if(!order.rowCount)return res.status(404).json({error:"Work order not found"});
   if(!canReadOrder(req.user,order.rows[0]))return deny(res,WORK_ORDER_PERMISSIONS.READ_ALL);
-  const [events,scopeItems]=await Promise.all([getPool().query(`SELECT e.id,e.event_type,e.from_status,e.to_status,e.note,e.detail,e.created_at,
+  const inventoryEnabled=(req.user.enabled_modules||[]).includes("inventory");
+  const canRequestMaterial=inventoryEnabled&&hasPermission(req.user,WORK_ORDER_PERMISSIONS.MATERIAL_REQUEST)&&canManageScope(req.user,order.rows[0])&&!['completed','cancelled'].includes(order.rows[0].status);
+  const [events,scopeItems,materials,materialOptions]=await Promise.all([getPool().query(`SELECT e.id,e.event_type,e.from_status,e.to_status,e.note,e.detail,e.created_at,
     u.full_name AS actor_name,u.role AS actor_role FROM work_order_events e
     LEFT JOIN users u ON u.organization_id=e.organization_id AND u.id=e.actor_user_id
     WHERE e.organization_id=$1 AND e.work_order_id=$2 ORDER BY e.created_at,e.id`,[req.user.organization_id,id.data]),
@@ -127,8 +148,125 @@ router.get("/:id/history", asyncHandler(async(req,res)=>{
       LEFT JOIN operational_objects o ON o.organization_id=si.organization_id AND o.id=si.operational_object_id
       LEFT JOIN assets a ON a.organization_id=si.organization_id AND a.id=si.asset_id
       LEFT JOIN users u ON u.organization_id=si.organization_id AND u.id=si.exception_accepted_by
-      WHERE si.organization_id=$1 AND si.work_order_id=$2 ORDER BY si.item_code`,[req.user.organization_id,id.data])]);
-  res.json({item:order.rows[0],events:events.rows,scopeItems:scopeItems.rows});
+      WHERE si.organization_id=$1 AND si.work_order_id=$2 ORDER BY si.item_code`,[req.user.organization_id,id.data]),
+    getPool().query(`SELECT mr.*,i.sku,i.name AS item_name,
+      requester.full_name AS requested_by_name,decider.full_name AS decided_by_name,
+      issuer.full_name AS issued_by_name,consumer.full_name AS consumed_by_name,
+      sm.id AS stock_movement_id,sm.from_warehouse_id,w.name AS warehouse_name
+      FROM work_order_material_requests mr
+      JOIN inventory_items i ON i.organization_id=mr.organization_id AND i.id=mr.inventory_item_id
+      LEFT JOIN users requester ON requester.organization_id=mr.organization_id AND requester.id=mr.requested_by
+      LEFT JOIN users decider ON decider.organization_id=mr.organization_id AND decider.id=mr.decided_by
+      LEFT JOIN users issuer ON issuer.organization_id=mr.organization_id AND issuer.id=mr.issued_by
+      LEFT JOIN users consumer ON consumer.organization_id=mr.organization_id AND consumer.id=mr.consumed_by
+      LEFT JOIN stock_movements sm ON sm.organization_id=mr.organization_id AND sm.work_order_material_request_id=mr.id
+      LEFT JOIN warehouses w ON w.organization_id=sm.organization_id AND w.id=sm.from_warehouse_id
+      WHERE mr.organization_id=$1 AND mr.work_order_id=$2 ORDER BY mr.requested_at,mr.id`,[req.user.organization_id,id.data]),
+    canRequestMaterial?getPool().query(`SELECT i.id,i.sku,i.name,i.unit,COALESCE(sum(b.quantity),0)::numeric AS total_quantity
+      FROM inventory_items i LEFT JOIN inventory_balances b ON b.organization_id=i.organization_id AND b.item_id=i.id
+      WHERE i.organization_id=$1 AND i.active=true GROUP BY i.id ORDER BY i.name`,[req.user.organization_id]):Promise.resolve({rows:[]})]);
+  res.json({item:order.rows[0],events:events.rows,scopeItems:scopeItems.rows,materials:materials.rows,materialOptions:materialOptions.rows,
+    materialCapabilities:{canRequest:canRequestMaterial,canApprove:hasPermission(req.user,WORK_ORDER_PERMISSIONS.MATERIAL_APPROVE),canConsume:hasPermission(req.user,WORK_ORDER_PERMISSIONS.MATERIAL_CONSUME)&&canManageScope(req.user,order.rows[0])}});
+}));
+
+router.post("/:id/materials",asyncHandler(async(req,res)=>{
+  if(!requireInventory(req,res))return;
+  if(!hasPermission(req.user,WORK_ORDER_PERMISSIONS.MATERIAL_REQUEST))return deny(res,WORK_ORDER_PERMISSIONS.MATERIAL_REQUEST);
+  const id=z.string().uuid().safeParse(req.params.id),parsed=materialRequestSchema.safeParse(req.body);
+  if(!id.success||!parsed.success)return res.status(400).json({error:"Invalid material request",issues:parsed.error?.issues});
+  const v=parsed.data,client=await getPool().connect();
+  try{await client.query("BEGIN");
+    const work=(await client.query("SELECT id,status,department_id,assigned_to,created_by FROM work_orders WHERE organization_id=$1 AND id=$2 FOR UPDATE",[req.user.organization_id,id.data])).rows[0];
+    if(!work){await client.query("ROLLBACK");return res.status(404).json({error:"Work order not found"});}
+    if(!canManageScope(req.user,work)){await client.query("ROLLBACK");return deny(res,WORK_ORDER_PERMISSIONS.MATERIAL_REQUEST);}
+    if(['completed','cancelled'].includes(work.status)){await client.query("ROLLBACK");return res.status(409).json({error:"Closed work cannot request material"});}
+    const item=(await client.query("SELECT id,unit FROM inventory_items WHERE organization_id=$1 AND id=$2 AND active=true",[req.user.organization_id,v.inventoryItemId])).rows[0];
+    if(!item){await client.query("ROLLBACK");return res.status(404).json({error:"Inventory item not found"});}
+    const inserted=await client.query(`INSERT INTO work_order_material_requests(organization_id,work_order_id,inventory_item_id,requested_quantity,unit,reason,request_idempotency_key,requested_by)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(organization_id,request_idempotency_key) DO NOTHING RETURNING *`,
+      [req.user.organization_id,id.data,item.id,v.quantity,item.unit,v.reason,v.idempotencyKey,req.user.id]);
+    if(!inserted.rowCount){
+      const existing=(await client.query("SELECT * FROM work_order_material_requests WHERE organization_id=$1 AND request_idempotency_key=$2",[req.user.organization_id,v.idempotencyKey])).rows[0];
+      const same=existing?.work_order_id===id.data&&existing.inventory_item_id===item.id&&Number(existing.requested_quantity)===v.quantity&&existing.reason===v.reason;
+      await client.query("COMMIT");
+      if(!same)return res.status(409).json({error:"Idempotency key was already used for another material request",code:"IDEMPOTENCY_CONFLICT"});
+      return res.json({item:existing,replayed:true});
+    }
+    const material=inserted.rows[0];
+    await client.query(`INSERT INTO work_order_material_events(organization_id,material_request_id,work_order_id,actor_user_id,action,detail)
+      VALUES($1,$2,$3,$4,'requested',$5::jsonb)`,[req.user.organization_id,material.id,id.data,req.user.id,JSON.stringify({quantity:v.quantity,unit:item.unit,reason:v.reason})]);
+    await writeAudit(req,"work_order.material.request","work_order_material_request",material.id,{workOrderId:id.data,itemId:item.id,quantity:v.quantity},client);
+    await client.query("COMMIT");res.status(201).json({item:material});
+  }catch(error){await client.query("ROLLBACK").catch(()=>{});throw error}finally{client.release()}
+}));
+
+router.post("/:id/materials/:materialId/decision",asyncHandler(async(req,res)=>{
+  if(!hasPermission(req.user,WORK_ORDER_PERMISSIONS.MATERIAL_APPROVE))return deny(res,WORK_ORDER_PERMISSIONS.MATERIAL_APPROVE);
+  const id=z.string().uuid().safeParse(req.params.id),materialId=z.string().uuid().safeParse(req.params.materialId),parsed=materialDecisionSchema.safeParse(req.body);
+  if(!id.success||!materialId.success||!parsed.success)return res.status(400).json({error:"Invalid material decision",issues:parsed.error?.issues});
+  const v=parsed.data,client=await getPool().connect();try{await client.query("BEGIN");
+    const current=(await client.query("SELECT * FROM work_order_material_requests WHERE organization_id=$1 AND work_order_id=$2 AND id=$3 FOR UPDATE",[req.user.organization_id,id.data,materialId.data])).rows[0];
+    if(!current){await client.query("ROLLBACK");return res.status(404).json({error:"Material request not found"});}
+    if(!canTransitionMaterial(current.status,v.decision)){await client.query("ROLLBACK");return res.status(409).json({error:"Material request is not awaiting a decision"});}
+    const approved=v.decision==="approved"?v.approvedQuantity:0;
+    if(approved>Number(current.requested_quantity)){await client.query("ROLLBACK");return res.status(400).json({error:"Approved quantity cannot exceed requested quantity"});}
+    const updated=await client.query(`UPDATE work_order_material_requests SET status=$1,approved_quantity=$2,decision_note=$3,decided_by=$4,decided_at=now(),updated_at=now()
+      WHERE organization_id=$5 AND id=$6 RETURNING *`,[v.decision,approved,v.note,req.user.id,req.user.organization_id,materialId.data]);
+    await client.query(`INSERT INTO work_order_material_events(organization_id,material_request_id,work_order_id,actor_user_id,action,detail)
+      VALUES($1,$2,$3,$4,$5,$6::jsonb)`,[req.user.organization_id,materialId.data,id.data,req.user.id,v.decision,JSON.stringify({approvedQuantity:approved,note:v.note})]);
+    await writeAudit(req,`work_order.material.${v.decision}`,"work_order_material_request",materialId.data,{workOrderId:id.data,approvedQuantity:approved,note:v.note},client);
+    await client.query("COMMIT");res.json({item:updated.rows[0]});
+  }catch(error){await client.query("ROLLBACK").catch(()=>{});throw error}finally{client.release()}
+}));
+
+router.post("/:id/materials/:materialId/issue",asyncHandler(async(req,res)=>{
+  if(!requireInventory(req,res))return;
+  if(!hasPermission(req.user,WORK_ORDER_PERMISSIONS.MATERIAL_ISSUE))return deny(res,WORK_ORDER_PERMISSIONS.MATERIAL_ISSUE);
+  const id=z.string().uuid().safeParse(req.params.id),materialId=z.string().uuid().safeParse(req.params.materialId),parsed=materialIssueSchema.safeParse(req.body);
+  if(!id.success||!materialId.success||!parsed.success)return res.status(400).json({error:"Invalid material issue",issues:parsed.error?.issues});
+  const v=parsed.data,client=await getPool().connect();try{await client.query("BEGIN");
+    const replay=(await client.query("SELECT * FROM stock_movements WHERE organization_id=$1 AND idempotency_key=$2 FOR UPDATE",[req.user.organization_id,v.idempotencyKey])).rows[0];
+    if(replay){await client.query("COMMIT");if(replay.work_order_material_request_id!==materialId.data)return res.status(409).json({error:"Idempotency key was already used for another stock movement",code:"IDEMPOTENCY_CONFLICT"});return res.json({item:replay,replayed:true});}
+    const current=(await client.query("SELECT * FROM work_order_material_requests WHERE organization_id=$1 AND work_order_id=$2 AND id=$3 FOR UPDATE",[req.user.organization_id,id.data,materialId.data])).rows[0];
+    if(!current){await client.query("ROLLBACK");return res.status(404).json({error:"Material request not found"});}
+    if(current.status==="issued"){
+      const concurrentReplay=(await client.query("SELECT * FROM stock_movements WHERE organization_id=$1 AND work_order_material_request_id=$2 AND idempotency_key=$3",[req.user.organization_id,materialId.data,v.idempotencyKey])).rows[0];
+      if(concurrentReplay){await client.query("COMMIT");return res.json({item:concurrentReplay,replayed:true});}
+    }
+    if(!canTransitionMaterial(current.status,"issued")){await client.query("ROLLBACK");return res.status(409).json({error:"Only an approved material request can be issued"});}
+    const balance=(await client.query("SELECT quantity FROM inventory_balances WHERE organization_id=$1 AND warehouse_id=$2 AND item_id=$3 FOR UPDATE",[req.user.organization_id,v.warehouseId,current.inventory_item_id])).rows[0];
+    const quantity=Number(current.approved_quantity);
+    if(!balance||Number(balance.quantity)<quantity){await client.query("ROLLBACK");return res.status(409).json({error:"Insufficient stock; the approved request remains unchanged",code:"INSUFFICIENT_STOCK",available:Number(balance?.quantity||0),required:quantity});}
+    await client.query("UPDATE inventory_balances SET quantity=quantity-$4,updated_at=now() WHERE organization_id=$1 AND warehouse_id=$2 AND item_id=$3",[req.user.organization_id,v.warehouseId,current.inventory_item_id,quantity]);
+    const movement=await client.query(`INSERT INTO stock_movements(organization_id,item_id,from_warehouse_id,movement_type,quantity,reference,note,created_by,work_order_id,work_order_material_request_id,idempotency_key)
+      VALUES($1,$2,$3,'issue',$4,$5,$6,$7,$8,$9,$10) RETURNING *`,[req.user.organization_id,current.inventory_item_id,v.warehouseId,quantity,`WORK:${id.data}`,current.reason,req.user.id,id.data,materialId.data,v.idempotencyKey]);
+    const updated=await client.query(`UPDATE work_order_material_requests SET status='issued',issued_quantity=approved_quantity,issued_by=$1,issued_at=now(),updated_at=now()
+      WHERE organization_id=$2 AND id=$3 RETURNING *`,[req.user.id,req.user.organization_id,materialId.data]);
+    await client.query(`INSERT INTO work_order_material_events(organization_id,material_request_id,work_order_id,actor_user_id,action,detail)
+      VALUES($1,$2,$3,$4,'issued',$5::jsonb)`,[req.user.organization_id,materialId.data,id.data,req.user.id,JSON.stringify({warehouseId:v.warehouseId,quantity,stockMovementId:movement.rows[0].id,idempotencyKey:v.idempotencyKey})]);
+    await writeAudit(req,"work_order.material.issued","work_order_material_request",materialId.data,{workOrderId:id.data,warehouseId:v.warehouseId,quantity,stockMovementId:movement.rows[0].id,idempotencyKey:v.idempotencyKey},client);
+    await client.query("COMMIT");res.status(201).json({item:updated.rows[0],movement:movement.rows[0]});
+  }catch(error){await client.query("ROLLBACK").catch(()=>{});throw error}finally{client.release()}
+}));
+
+router.post("/:id/materials/:materialId/consume",asyncHandler(async(req,res)=>{
+  if(!hasPermission(req.user,WORK_ORDER_PERMISSIONS.MATERIAL_CONSUME))return deny(res,WORK_ORDER_PERMISSIONS.MATERIAL_CONSUME);
+  const id=z.string().uuid().safeParse(req.params.id),materialId=z.string().uuid().safeParse(req.params.materialId);
+  if(!id.success||!materialId.success)return res.status(400).json({error:"Invalid consumption confirmation"});
+  const client=await getPool().connect();try{await client.query("BEGIN");
+    const current=(await client.query(`SELECT mr.*,w.department_id,w.assigned_to,w.created_by FROM work_order_material_requests mr
+      JOIN work_orders w ON w.organization_id=mr.organization_id AND w.id=mr.work_order_id
+      WHERE mr.organization_id=$1 AND mr.work_order_id=$2 AND mr.id=$3 FOR UPDATE`,[req.user.organization_id,id.data,materialId.data])).rows[0];
+    if(!current){await client.query("ROLLBACK");return res.status(404).json({error:"Material request not found"});}
+    if(!canManageScope(req.user,current)){await client.query("ROLLBACK");return deny(res,WORK_ORDER_PERMISSIONS.MATERIAL_CONSUME);}
+    if(!canTransitionMaterial(current.status,"consumed")){await client.query("ROLLBACK");return res.status(409).json({error:"Only issued material can be confirmed as consumed"});}
+    const updated=await client.query(`UPDATE work_order_material_requests SET status='consumed',consumed_quantity=issued_quantity,consumed_by=$1,consumed_at=now(),updated_at=now()
+      WHERE organization_id=$2 AND id=$3 RETURNING *`,[req.user.id,req.user.organization_id,materialId.data]);
+    await client.query(`INSERT INTO work_order_material_events(organization_id,material_request_id,work_order_id,actor_user_id,action,detail)
+      VALUES($1,$2,$3,$4,'consumed',$5::jsonb)`,[req.user.organization_id,materialId.data,id.data,req.user.id,JSON.stringify({quantity:Number(current.issued_quantity)})]);
+    await writeAudit(req,"work_order.material.consumed","work_order_material_request",materialId.data,{workOrderId:id.data,quantity:Number(current.issued_quantity)},client);
+    await client.query("COMMIT");res.json({item:updated.rows[0]});
+  }catch(error){await client.query("ROLLBACK").catch(()=>{});throw error}finally{client.release()}
 }));
 
 router.post("/",asyncHandler(async(req,res)=>{

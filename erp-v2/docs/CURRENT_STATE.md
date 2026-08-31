@@ -69,10 +69,11 @@ validated at enterprise scale.
   while fixed `users.role` / `employees.job_role` checks remain compatibility
   debt in several operational routes.
 - `ASSET_MAINTENANCE_VERTICAL_SLICE_CONTRACT_V1.md` is the approved first
-  end-to-end proof contract. Runtime completion remains planned: implementation
-  must reuse existing employee, structure, asset/operational-object, work-order,
-  approval, inventory, measured-outcome, attachment, finance-integration, and
-  audit foundations before it can be marked implemented.
+  end-to-end proof contract. Work Order authority and the material trace now
+  reuse the existing employee, structure, work-order, inventory, and audit
+  foundations. Attachment authority, resource history, deterministic measures,
+  and the shortage-to-procurement branch remain incomplete, so the full slice
+  is still partial.
 
 ## Work Order explicit-authority cutover
 
@@ -92,12 +93,38 @@ validated at enterprise scale.
   is not the authorization boundary. Account creation and legacy-role changes
   synchronize the equivalent domain role without granting tenant ownership.
 - The Asset Maintenance vertical slice is therefore **partial**: its Work Order
-  authorization milestone is implemented, while material request/issue,
-  consumption trace, attachment authority unification, resource history, and
-  deterministic end-to-end measures remain planned.
-- All 241 repository tests pass. The local Docker stack applied schema `0064`;
+  authorization milestone is implemented, while attachment authority
+  unification, full resource history, and deterministic end-to-end measures
+  remain planned.
+- All 249 repository tests pass. The local Docker stack applied schema `0065`;
   API and tenant web are healthy, and the served UI uses server authority
   fields. This is local verification only and is not a production deployment.
+
+## Work Order material trace
+
+- Migration `0065` adds separate tenant permissions for material request,
+  approval, warehouse issue, and consumption confirmation, plus the bounded
+  `work-order-material-custodian` role. Fresh bootstrap tenants now use the
+  canonical tenant-provisioning service so their first administrator receives
+  the same roles and permissions as every other newly provisioned tenant.
+- A Work Order can request an existing inventory item, approve or reject the
+  request, issue an approved quantity from a selected warehouse, and confirm
+  consumption. Request and approval do not change inventory. Only an atomic
+  issue locks and decrements the balance, creates the linked stock movement,
+  and appends material and audit evidence.
+- Issue retries use a tenant-scoped idempotency key. Insufficient stock returns
+  a conflict without changing the approved request or balance. Approval is not
+  treated as issue, issue is not treated as consumption, and no purchase
+  request or successful issue is fabricated when stock is unavailable.
+- Work Order history exposes the material flow using server-derived
+  capabilities. Inventory exposes an approved issue queue only to an actor with
+  live issue permission. Both routes retain tenant and relevant-work scope on
+  the server; UI visibility is not the security boundary.
+- Unit/contract tests and a disposable PostgreSQL integration run verify clean
+  migration/bootstrap, request replay, approval, insufficient-stock fail-safe,
+  one-time issue, consumption, balance, stock-movement linkage, and append-only
+  evidence. The disposable database was removed after verification. This is
+  local verification only and is not a production deployment.
 
 ## Next chat start
 

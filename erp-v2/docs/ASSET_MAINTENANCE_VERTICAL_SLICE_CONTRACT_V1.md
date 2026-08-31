@@ -82,11 +82,12 @@ Every consequential action records or can resolve:
 
 ## Authority model
 
-Implementation status: **partial**. Migration `0064` implements explicit
+Implementation status: **partial**. Migrations `0064` and `0065` implement explicit
 permissions for Work Order read-all, create, assignment, progress, measurable
-scope updates, safety review, management approval, and exception decisions.
-Material request/issue, sensitive attachment, and cost-evidence authority remain
-to be completed in later stages of this contract.
+scope updates, safety review, management approval, exception decisions, material
+request, material approval, warehouse issue, and consumption confirmation.
+Sensitive attachment and cost-evidence authority remain to be completed in
+later stages of this contract.
 
 Exact permission codes are finalized during implementation after inventorying
 existing catalog entries. The policy must distinguish at least:
@@ -170,7 +171,9 @@ their source measures and remain proposals until authorized human review.
    behavior.
 3. Add only the minimum schema/service changes needed for the end-to-end trace.
 4. Implement transactional material request/issue linkage and measured outcome
-   evidence.
+   evidence. **Implemented for request, approval/rejection, issue, and
+   consumption trace; the explicit stock-shortage procurement branch remains
+   planned.**
 5. Update tenant UI around the same work identity without duplicating master
    records.
 6. Run unit, integration, cross-tenant, authorization, idempotency, append-only,

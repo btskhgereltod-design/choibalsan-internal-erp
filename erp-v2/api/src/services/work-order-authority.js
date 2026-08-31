@@ -11,6 +11,10 @@ const WORK_ORDER_PERMISSIONS = Object.freeze({
   WORKFLOW_SAFETY: "work-orders.workflow.safety",
   WORKFLOW_APPROVE: "work-orders.workflow.approve",
   EXCEPTION_DECIDE: "work-orders.exception.decide",
+  MATERIAL_REQUEST: "work-orders.material.request",
+  MATERIAL_APPROVE: "work-orders.material.approve",
+  MATERIAL_ISSUE: "work-orders.material.issue",
+  MATERIAL_CONSUME: "work-orders.material.consume",
 });
 
 function hasPermission(user, permission) {

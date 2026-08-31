@@ -10,7 +10,7 @@
   <title>OVERVA ERP</title>
   <link rel="stylesheet" href="/style.css?v=45">
   <link rel="stylesheet" href="/workflow.css?v=1">
-  <link rel="stylesheet" href="/work-history.css">
+  <link rel="stylesheet" href="/work-history.css?v=2">
   <link rel="stylesheet" href="/notifications.css">
   <link rel="stylesheet" href="/asset-detail.css">
   <link rel="stylesheet" href="/reports.css">
@@ -150,6 +150,17 @@
   <dialog id="workHistoryDialog" class="wide-dialog"><div class="dialog-form">
     <div class="dialog-head"><div><span class="eyebrow">АЖЛЫН ГҮЙЦЭТГЭЛ</span><h2 id="workHistoryTitle">Ажлын түүх</h2></div><button type="button" class="icon-button" data-close="workHistoryDialog">×</button></div>
     <div class="work-history" id="workHistory"></div>
+    <section class="work-material-box">
+      <div class="work-material-head"><div><small>НӨӨЦИЙН МӨР</small><h3>Шаардлагатай материал</h3></div></div>
+      <div id="workMaterials"></div>
+      <form id="workMaterialForm" class="work-material-form hidden">
+        <input name="workOrderId" type="hidden">
+        <label>Материал<select name="inventoryItemId" id="workMaterialItem" required></select></label>
+        <label>Тоо хэмжээ<input name="quantity" type="number" min="0.001" step="0.001" required></label>
+        <label>Хэрэглэх шалтгаан<input name="reason" maxlength="2000" required></label>
+        <p class="form-error" data-form-error></p><button type="submit" class="secondary">Материал хүсэх</button>
+      </form>
+    </section>
     <form id="workNoteForm" class="note-form"><input name="workOrderId" type="hidden"><label>Гүйцэтгэлийн тэмдэглэл<textarea name="note" rows="3" maxlength="2000" placeholder="Хийсэн ажил, гарсан үр дүнг бичнэ үү..." required></textarea></label><p class="form-error" data-form-error></p><div class="dialog-actions"><button type="submit" class="primary">Тэмдэглэл нэмэх</button></div></form>
     <section class="attachment-box"><h3>Хавсралтууд</h3><div class="attachment-upload"><input id="workAttachmentFile" type="file" accept="image/jpeg,image/png,image/webp,application/pdf,text/plain,.docx,.xlsx"><button type="button" class="secondary" id="workAttachmentUpload">Файл нэмэх</button></div><div class="attachment-list" id="workAttachments"></div><small class="attachment-help">Зураг, PDF, TXT, DOCX, XLSX · дээд хэмжээ 10 MB</small></section>
   </div></dialog>
@@ -205,9 +216,9 @@
     <p class="form-error" data-form-error></p><div class="dialog-actions"><button type="button" class="secondary" data-close="passwordDialog">Болих</button><button type="submit" class="primary">Нууц үг солих</button></div>
   </form></dialog>
   <div class="toast" id="toast" role="status"></div>
-  <script src="/app.js?v=32" defer></script>
+  <script src="/app.js?v=33" defer></script>
   <script src="/employee-access.js?v=29" defer></script>
-  <script src="/business-modules.js?v=32" defer></script>
+  <script src="/business-modules.js?v=33" defer></script>
   <script src="/organization-blueprint.js?v=5" defer></script>
   <script src="/structure-smart-import.js?v=1" defer></script>
   <script src="/organization-structure-hub.js?v=1" defer></script>

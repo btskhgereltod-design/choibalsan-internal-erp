@@ -54,7 +54,8 @@ async function provisionTenant(client, input) {
             ($1,'industry-manager','Салбарын тохиргоо хариуцагч',true),
             ($1,'work-order-manager','Ажлын урсгалын удирдагч',true),
             ($1,'work-order-safety-reviewer','Ажлын ХАБЭА баталгаажуулагч',true),
-            ($1,'work-order-coordinator','Ажлын зохицуулагч',true)
+            ($1,'work-order-coordinator','Ажлын зохицуулагч',true),
+            ($1,'work-order-material-custodian','Ажлын материалын нярав',true)
      ON CONFLICT DO NOTHING`,
     [organization.id]
   );
@@ -77,9 +78,10 @@ async function provisionTenant(client, input) {
         OR (r.code='archivist' AND p.code='archive.manage')
         OR (r.code='safety-officer' AND p.code IN('safety.manage','safety.investigate'))
         OR (r.code='industry-manager' AND p.code IN('industry.manage','builder.manage'))
-        OR (r.code='work-order-manager' AND p.code IN('work-orders.read-all','work-orders.create','work-orders.assign','work-orders.progress','work-orders.scope.manage','work-orders.workflow.approve','work-orders.exception.decide'))
+        OR (r.code='work-order-manager' AND p.code IN('work-orders.read-all','work-orders.create','work-orders.assign','work-orders.progress','work-orders.scope.manage','work-orders.workflow.approve','work-orders.exception.decide','work-orders.material.request','work-orders.material.approve','work-orders.material.consume'))
         OR (r.code='work-order-safety-reviewer' AND p.code IN('work-orders.read-all','work-orders.create','work-orders.progress','work-orders.scope.manage','work-orders.workflow.safety'))
-        OR (r.code='work-order-coordinator' AND p.code IN('work-orders.create','work-orders.assign','work-orders.progress','work-orders.scope.manage'))
+        OR (r.code='work-order-coordinator' AND p.code IN('work-orders.create','work-orders.assign','work-orders.progress','work-orders.scope.manage','work-orders.material.request','work-orders.material.consume'))
+        OR (r.code='work-order-material-custodian' AND p.code='work-orders.material.issue')
       )
      ON CONFLICT DO NOTHING`,
     [organization.id]

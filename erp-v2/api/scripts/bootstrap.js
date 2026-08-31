@@ -4,6 +4,7 @@ require("dotenv").config();
 const bcrypt = require("bcryptjs");
 const { z } = require("zod");
 const { getPool, closePool } = require("../src/db");
+const { provisionTenant } = require("../src/services/tenant-provisioning");
 
 const schema = z.object({
   BOOTSTRAP_ORG_NAME: z.string().min(2),
@@ -29,22 +30,21 @@ async function bootstrap() {
       await client.query("BEGIN");
       const existing = await client.query("SELECT id FROM organizations WHERE slug = $1", [values.BOOTSTRAP_ORG_SLUG]);
       if (!existing.rowCount) {
-        const organization = await client.query(
-          "INSERT INTO organizations(slug, name) VALUES ($1, $2) RETURNING id",
-          [values.BOOTSTRAP_ORG_SLUG, values.BOOTSTRAP_ORG_NAME]
-        );
-        const organizationId = organization.rows[0].id;
-        const passwordHash = await bcrypt.hash(values.BOOTSTRAP_ADMIN_PASSWORD, 12);
-        const user = await client.query(
-          `INSERT INTO users(organization_id, email, username, password_hash, full_name, role)
-           VALUES ($1, lower($2), 'admin', $3, $4, 'director') RETURNING id`,
-          [organizationId, values.BOOTSTRAP_ADMIN_EMAIL, passwordHash, values.BOOTSTRAP_ADMIN_NAME]
-        );
-        await client.query("INSERT INTO subscriptions(organization_id,plan_code,status) VALUES ($1,'pilot','trial')", [organizationId]);
+        const provisioned = await provisionTenant(client, {
+          name: values.BOOTSTRAP_ORG_NAME,
+          slug: values.BOOTSTRAP_ORG_SLUG,
+          adminName: values.BOOTSTRAP_ADMIN_NAME,
+          adminEmail: values.BOOTSTRAP_ADMIN_EMAIL,
+          adminUsername: "admin",
+          adminPassword: values.BOOTSTRAP_ADMIN_PASSWORD,
+          planCode: "pilot",
+          trialDays: 30,
+          enabledModules: [],
+        });
         await client.query(
           `INSERT INTO audit_logs(organization_id,user_id,action,entity_type,entity_id,detail)
            VALUES ($1::uuid,$2::uuid,'organization.bootstrap','organization',$1::uuid::text,'{"source":"bootstrap"}'::jsonb)`,
-          [organizationId, user.rows[0].id]
+          [provisioned.organization.id, provisioned.owner.id]
         );
         console.log(`[bootstrap] created organization ${values.BOOTSTRAP_ORG_SLUG} and admin user`);
       }

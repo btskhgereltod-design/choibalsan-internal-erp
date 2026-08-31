@@ -14,6 +14,7 @@
     "test:finance": "node -e \"process.env.RUN_FINANCE_INTEGRATION='1'; require('./scripts/finance-integration-test')\"",
     "simulate:device": "node scripts/device-simulator.js",
     "test:operations": "node -e \"process.env.RUN_OPERATIONS_INTEGRATION='1'; require('./scripts/operations-integration-test')\"",
+    "test:work-material": "node -e \"process.env.RUN_WORK_ORDER_MATERIAL_INTEGRATION='1'; require('./scripts/work-order-material-integration-test')\"",
     "test:developer": "node -e \"process.env.RUN_DEVELOPER_INTEGRATION='1'; require('./scripts/developer-integration-test')\"",
     "test:attendance": "node -e \"process.env.RUN_ATTENDANCE_INTEGRATION='1'; require('./scripts/attendance-integration-test')\"",
     "worker:webhooks": "node scripts/webhook-worker.js",

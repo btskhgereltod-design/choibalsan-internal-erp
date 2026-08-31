@@ -204,6 +204,15 @@ identity, data, authorization, and audit owner.
 - Files and documents have metadata, lifecycle, retention, and access concerns;
   they are not treated as anonymous uploads.
 
+Work Order material handling is one connected transaction trace over existing
+inventory master data, not a second inventory system. Request, approval,
+warehouse issue, and consumption confirmation are distinct tenant-scoped states
+with attributable append-only evidence. Only warehouse issue may mutate an
+inventory balance; it locks the approved request and warehouse balance in one
+transaction, records a linked stock movement, and uses a tenant-scoped
+idempotency key so a retry cannot decrement stock twice. Insufficient stock
+leaves both request and balance unchanged and does not fabricate procurement.
+
 ## AI and Configuration Flow
 
 ```text

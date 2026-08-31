@@ -29,6 +29,7 @@ function managedRoleCodes(role) {
   if (role === "safety") codes.push("safety-officer", "work-order-safety-reviewer");
   if (["director", "chief_engineer"].includes(role)) codes.push("work-order-manager");
   if (["engineer", "electric", "camera_engineer"].includes(role)) codes.push("work-order-coordinator");
+  if (["storekeeper", "accountant"].includes(role)) codes.push("work-order-material-custodian");
   return codes;
 }
 
@@ -37,7 +38,7 @@ async function syncManagedRoles(client, organizationId, userId, role) {
     `DELETE FROM user_roles ur USING organization_roles r
       WHERE ur.organization_id=$1 AND ur.user_id=$2
         AND r.organization_id=ur.organization_id AND r.id=ur.role_id
-        AND r.code IN('administrator','manager','member','hr-officer','safety-officer','work-order-manager','work-order-safety-reviewer','work-order-coordinator')`,
+        AND r.code IN('administrator','manager','member','hr-officer','safety-officer','work-order-manager','work-order-safety-reviewer','work-order-coordinator','work-order-material-custodian')`,
     [organizationId,userId]
   );
   await client.query(
