@@ -6,6 +6,44 @@ This document answers one question: **what exists in the repository now?** It
 does not claim that every implemented foundation is complete or production-
 validated at enterprise scale.
 
+## Role-personalized home and decision trends
+
+- Non-management users now receive a server-scoped **Миний өдөр** home instead
+  of the organization-wide management dashboard. It combines only the signed-in
+  employee's current attendance, assigned Work Orders, monthly completions,
+  pending review/request counts, and a name-free aggregate of that employee's
+  department. Field-enabled roles can continue directly to their mobile work
+  surface.
+- Compensation remains private and truthful. The personal home may show the
+  signed-in employee's approved effective base salary, falling back to the
+  imported profile reference when no approved compensation version exists. It
+  explicitly returns no net-pay value and does not present a payroll estimate
+  as an amount that will be paid; governed payroll and payslips remain
+  unimplemented.
+- Non-management Work Order warnings are now calculated only from work assigned
+  to that user. Organization-wide HR, inventory-quality, emergency, overdue,
+  and historical-backlog signals are not returned as personal alerts.
+- **Чиг хандлага** now compares 14, 30, or 90 days with the immediately preceding
+  equal period. It reports evidence-backed work inflow/completion, attendance,
+  camera and lighting incidents, safety risks, inventory thresholds, and cash
+  movement without the earlier artificial health score or empty Fleet/IoT
+  placeholders. Historic imported Work Orders remain explicitly separated from
+  recent overdue work.
+- Trend sections are role-scoped: directors/owners receive the broad decision
+  view, chief engineers receive operations, and accountants receive finance and
+  inventory. The API enforces the same boundary as the workspace policy. One
+  refresh control and a period selector replace the duplicate refresh actions.
+- The implementation passes all 287 repository tests. Local authenticated reads
+  returned HTTP 200 for all three supported periods, with 14/30/90 daily points.
+  Production authenticated reads returned HTTP 200 for director, chief engineer,
+  accountant, and worker homes. Trend scope was verified as full authorized
+  organization sections for the director, operations only for the chief
+  engineer, and inventory/finance only for the accountant; worker and accountant
+  homes returned personal scope without organization data-quality detail. Public
+  app assets and API health returned HTTP 200, and all production services were
+  healthy. Verified pre- and post-deployment backups are
+  `overva-20260831T074735Z` and `overva-20260831T075242Z`.
+
 ## Tenant-branded organization home
 
 - The organization home now uses tenant-owned name, short name, logo, primary

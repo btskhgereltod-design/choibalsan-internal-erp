@@ -26,7 +26,7 @@ router.get("/overview", asyncHandler(async (req, res) => {
   const enabled = new Set(req.user.enabled_modules || []);
   const systemRoles = new Set(req.user.system_roles || []);
   const permissions = new Set(req.user.permissions || []);
-  const management = systemRoles.has("owner") || systemRoles.has("administrator") || ["director", "chief_engineer", "accountant"].includes(req.user.role);
+  const management = systemRoles.has("owner") || systemRoles.has("administrator") || ["director", "chief_engineer"].includes(req.user.role);
   const hrAccess = management || req.user.role === "hr" || permissions.has("hr.manage");
   const engineeringAccess = management || ["engineer", "electric", "camera_engineer", "safety", "worker"].includes(req.user.role);
 
@@ -55,6 +55,11 @@ router.get("/overview", asyncHandler(async (req, res) => {
       count(*) FILTER(WHERE status IN('new','assigned','in_progress','pending_review'))::int AS open,
       count(*) FILTER(WHERE assigned_to=$2 AND status IN('new','assigned','in_progress','pending_review'))::int AS mine,
       count(*) FILTER(WHERE assigned_to=$2 AND created_at>=now()-interval '30 days' AND status IN('new','assigned','in_progress','pending_review'))::int AS mine_recent,
+      count(*) FILTER(WHERE assigned_to=$2 AND priority='emergency' AND created_at>=now()-interval '30 days' AND status NOT IN('completed','cancelled'))::int AS mine_emergency_recent,
+      count(*) FILTER(WHERE assigned_to=$2 AND due_at<now() AND created_at>=now()-interval '30 days' AND status NOT IN('completed','cancelled'))::int AS mine_overdue_recent,
+      count(*) FILTER(WHERE assigned_to=$2 AND due_at::date=CURRENT_DATE AND status NOT IN('completed','cancelled'))::int AS mine_due_today,
+      count(*) FILTER(WHERE assigned_to=$2 AND status='pending_review')::int AS mine_pending_review,
+      count(*) FILTER(WHERE assigned_to=$2 AND status='completed' AND updated_at>=date_trunc('month',CURRENT_DATE))::int AS mine_completed_month,
       count(*) FILTER(WHERE priority='emergency' AND created_at>=now()-interval '30 days' AND status NOT IN('completed','cancelled'))::int AS emergency_recent,
       count(*) FILTER(WHERE due_at<now() AND created_at>=now()-interval '30 days' AND status NOT IN('completed','cancelled'))::int AS overdue_recent,
       count(*) FILTER(WHERE assigned_to IS NULL AND created_at>=now()-interval '30 days' AND status IN('new','assigned','in_progress','pending_review'))::int AS unassigned_recent,
@@ -106,6 +111,63 @@ router.get("/overview", asyncHandler(async (req, res) => {
     procurement: procurement.rows[0], finance: finance.rows[0], obligations: obligations.rows[0],
     camera: camera.rows[0], lighting: lighting.rows[0], safety: safety.rows[0]
   };
+  let personal;
+  if (req.user.employee_id) {
+    const [identity, personalAttendance, personalRequests, departmentWork] = await Promise.all([
+      pool.query(`SELECT e.id,e.full_name,e.department_id,d.name AS department_name,p.title AS position_title,
+        ep.salary AS profile_salary,comp.base_salary AS approved_salary,comp.currency AS approved_currency
+        FROM employees e
+        LEFT JOIN departments d ON d.organization_id=e.organization_id AND d.id=e.department_id
+        LEFT JOIN positions p ON p.organization_id=e.organization_id AND p.id=e.position_id
+        LEFT JOIN employee_profiles ep ON ep.organization_id=e.organization_id AND ep.employee_id=e.id
+        LEFT JOIN LATERAL (
+          SELECT base_salary,currency FROM employee_compensation_history c
+          WHERE c.organization_id=e.organization_id AND c.employee_id=e.id AND c.approved_by IS NOT NULL
+            AND c.effective_from<=CURRENT_DATE AND (c.effective_to IS NULL OR c.effective_to>=CURRENT_DATE)
+          ORDER BY c.effective_from DESC,c.created_at DESC LIMIT 1
+        ) comp ON true
+        WHERE e.organization_id=$1 AND e.id=$2`, [org, req.user.employee_id]),
+      pool.query(`SELECT
+        max(status) FILTER(WHERE attendance_date=CURRENT_DATE) AS today_status,
+        max(check_in) FILTER(WHERE attendance_date=CURRENT_DATE) AS check_in,
+        max(check_out) FILTER(WHERE attendance_date=CURRENT_DATE) AS check_out,
+        count(*) FILTER(WHERE attendance_date>=date_trunc('month',CURRENT_DATE))::int AS recorded_days,
+        count(*) FILTER(WHERE attendance_date>=date_trunc('month',CURRENT_DATE) AND status IN('worked','late','remote'))::int AS worked_days,
+        count(*) FILTER(WHERE attendance_date>=date_trunc('month',CURRENT_DATE) AND status='late')::int AS late_days,
+        COALESCE(sum(work_hours) FILTER(WHERE attendance_date>=date_trunc('month',CURRENT_DATE)),0)::numeric AS work_hours,
+        COALESCE(sum(overtime_hours) FILTER(WHERE attendance_date>=date_trunc('month',CURRENT_DATE)),0)::numeric AS overtime_hours
+        FROM attendance_records WHERE organization_id=$1 AND employee_id=$2`, [org, req.user.employee_id]),
+      pool.query(`SELECT
+        (SELECT count(*) FROM hr_leave_requests WHERE organization_id=$1 AND employee_id=$2 AND status='pending')::int AS pending_leave,
+        (SELECT count(*) FROM attendance_correction_requests WHERE organization_id=$1 AND employee_id=$2 AND status='pending')::int AS pending_corrections`, [org, req.user.employee_id]),
+      pool.query(`SELECT
+        count(*) FILTER(WHERE w.status IN('new','assigned','in_progress','pending_review'))::int AS open,
+        count(*) FILTER(WHERE w.status='completed' AND w.updated_at>=date_trunc('month',CURRENT_DATE))::int AS completed_month,
+        count(*) FILTER(WHERE w.due_at<now() AND w.created_at>=now()-interval '30 days' AND w.status NOT IN('completed','cancelled'))::int AS overdue_recent
+        FROM work_orders w JOIN employees e ON e.organization_id=w.organization_id AND e.id=$2
+        WHERE w.organization_id=$1 AND w.department_id=e.department_id`, [org, req.user.employee_id])
+    ]);
+    const employee = identity.rows[0] || {};
+    const approvedSalary = employee.approved_salary;
+    const referenceSalary = approvedSalary ?? employee.profile_salary;
+    personal = {
+      identity: { fullName: employee.full_name || req.user.full_name, department: employee.department_name, position: employee.position_title },
+      attendance: personalAttendance.rows[0],
+      work: {
+        open: data.work.mine, recentOpen: data.work.mine_recent, dueToday: data.work.mine_due_today,
+        overdueRecent: data.work.mine_overdue_recent, pendingReview: data.work.mine_pending_review,
+        completedMonth: data.work.mine_completed_month
+      },
+      requests: personalRequests.rows[0],
+      department: departmentWork.rows[0],
+      compensation: {
+        available: referenceSalary !== null && referenceSalary !== undefined,
+        referenceSalary, currency: employee.approved_currency || "MNT",
+        status: approvedSalary !== null && approvedSalary !== undefined ? "approved_base" : "profile_reference",
+        netPay: null
+      }
+    };
+  }
   const setupData = setup.rows[0];
   const setupSteps = [
     { code: "organization", label: "Байгууллагын мэдээлэл", complete: true, tab: "organization" },
@@ -116,7 +178,7 @@ router.get("/overview", asyncHandler(async (req, res) => {
 
   const operations = [];
   if (enabled.has("attendance") && hrAccess) operations.push({ code: "attendance", label: "Өнөөдрийн ирц", value: `${data.attendance.worked} / ${data.people.active}`, note: `${data.attendance.away} чөлөөтэй · ${data.attendance.late} хоцорсон · ${data.attendance.absent} тасалсан`, tone: Number(data.attendance.absent) || Number(data.attendance.late) ? "amber" : "green", view: "attendance" });
-  if (enabled.has("work-orders")) operations.push({ code: "work", label: management ? "Сүүлийн 30 хоногийн нээлттэй ажил" : "Миний сүүлийн 30 хоногийн ажил", value: management ? data.work.recent_open : data.work.mine_recent, note: management ? `${data.work.historical_open} өмнөх ажлын төлөвийг тусад нь шалгана` : `${data.work.mine} нийт нээлттэй`, tone: Number(data.work.emergency_recent) || Number(data.work.overdue_recent) ? "red" : "blue", view: "work-orders" });
+  if (enabled.has("work-orders")) operations.push({ code: "work", label: management ? "Сүүлийн 30 хоногийн нээлттэй ажил" : "Миний сүүлийн 30 хоногийн ажил", value: management ? data.work.recent_open : data.work.mine_recent, note: management ? `${data.work.historical_open} өмнөх ажлын төлөвийг тусад нь шалгана` : `${data.work.mine} нийт нээлттэй`, tone: Number(management ? data.work.emergency_recent : data.work.mine_emergency_recent) || Number(management ? data.work.overdue_recent : data.work.mine_overdue_recent) ? "red" : "blue", view: "work-orders" });
   if (enabled.has("camera-operations") && engineeringAccess) operations.push({ code: "camera", label: "Камерын ажиллагаа", value: `${Math.max(0, Number(data.camera.devices)-Number(data.camera.broken))} / ${data.camera.devices}`, note: `${data.camera.broken} ажиллагаагүй · ${data.camera.locations} объект`, tone: Number(data.camera.broken) ? "red" : "green", view: "camera" });
   if (enabled.has("lighting-operations") && engineeringAccess) operations.push({ code: "lighting", label: "Гэрэлтүүлгийн орчин", value: data.lighting.objects, note: `${data.lighting.open_incidents} нээлттэй гэмтэл · ${data.lighting.affected} нөлөөлсөн`, tone: Number(data.lighting.open_incidents) ? "amber" : "green", view: "lighting" });
   if (enabled.has("safety") && (management || req.user.role === "safety")) operations.push({ code: "safety", label: "ХАБЭА-н нээлттэй эрсдэл", value: data.safety.open_risks, note: `${data.safety.critical_risks} өндөр эрсдэл`, tone: Number(data.safety.critical_risks) ? "red" : Number(data.safety.open_risks) ? "amber" : "green", view: "safety" });
@@ -131,12 +193,12 @@ router.get("/overview", asyncHandler(async (req, res) => {
   }
 
   const alerts = [];
-  addAlert(alerts, enabled.has("work-orders") && Number(data.work.emergency_recent)>0, "critical", "Ажлын самбар", `${data.work.emergency_recent} яаралтай ажил сүүлийн 30 хоногт нээлттэй байна`, "work-orders");
-  addAlert(alerts, enabled.has("work-orders") && Number(data.work.overdue_recent)>0, "warning", "Ажлын самбар", `${data.work.overdue_recent} шинэ ажил хугацаа хэтэрсэн`, "work-orders");
+  addAlert(alerts, enabled.has("work-orders") && Number(management ? data.work.emergency_recent : data.work.mine_emergency_recent)>0, "critical", "Ажлын самбар", management ? `${data.work.emergency_recent} яаралтай ажил сүүлийн 30 хоногт нээлттэй байна` : `${data.work.mine_emergency_recent} яаралтай ажил танд оноогдсон`, "work-orders");
+  addAlert(alerts, enabled.has("work-orders") && Number(management ? data.work.overdue_recent : data.work.mine_overdue_recent)>0, "warning", "Ажлын самбар", management ? `${data.work.overdue_recent} шинэ ажил хугацаа хэтэрсэн` : `${data.work.mine_overdue_recent} ажил тань хугацаа хэтэрсэн`, "work-orders");
   addAlert(alerts, management && enabled.has("work-orders") && Number(data.work.unassigned_recent)>0, "warning", "Ажлын самбар", `${data.work.unassigned_recent} шинэ ажил хариуцагчгүй байна`, "work-orders");
   addAlert(alerts, management && enabled.has("work-orders") && Number(data.work.historical_open)>0, "info", "Өгөгдлийн тулгалт", `${data.work.historical_open} өмнөх ажлын төлөвийг нэг удаа хянаж баталгаажуулна`, "work-orders");
-  addAlert(alerts, enabled.has("camera-operations") && engineeringAccess && Number(data.camera.broken)>0, "warning", "Камер", `${data.camera.broken} камер ажиллагаагүй гэж бүртгэгдсэн`, "camera");
-  addAlert(alerts, enabled.has("lighting-operations") && engineeringAccess && Number(data.lighting.open_incidents)>0, "warning", "Гэрэлтүүлэг", `${data.lighting.open_incidents} гэрэлтүүлгийн гэмтэл шийдэгдээгүй байна`, "lighting");
+  addAlert(alerts, enabled.has("camera-operations") && (management || req.user.role === "camera_engineer") && Number(data.camera.broken)>0, "warning", "Камер", `${data.camera.broken} камер ажиллагаагүй гэж бүртгэгдсэн`, "camera");
+  addAlert(alerts, enabled.has("lighting-operations") && (management || req.user.role === "electric") && Number(data.lighting.open_incidents)>0, "warning", "Гэрэлтүүлэг", `${data.lighting.open_incidents} гэрэлтүүлгийн гэмтэл шийдэгдээгүй байна`, "lighting");
   addAlert(alerts, enabled.has("safety") && (management || req.user.role === "safety") && Number(data.safety.critical_risks)>0, "critical", "ХАБЭА", `${data.safety.critical_risks} өндөр эрсдэлд арга хэмжээ шаардлагатай`, "safety");
   addAlert(alerts, hrAccess && Number(data.hr.pending_leave)>0, "info", "Хүний нөөц", `${data.hr.pending_leave} чөлөөний хүсэлт шийдвэр хүлээж байна`, "hr");
   addAlert(alerts, hrAccess && Number(data.hr.pending_corrections)>0, "warning", "Хүний нөөц", `${data.hr.pending_corrections} ирцийн залруулга шийдвэр хүлээж байна`, "hr");
@@ -150,8 +212,8 @@ router.get("/overview", asyncHandler(async (req, res) => {
   alerts.sort((a, b) => priority[a.level]-priority[b.level]);
   res.json({
     generatedAt: new Date().toISOString(), scope: management ? "organization" : "personal",
-    scale: organizationScale(data.people.active), operations, metrics: operations, resources, alerts,
-    dataQuality: { incompleteEmployeeProfiles: data.people.incomplete_profiles, inventoryMinimumConfigured: data.inventory.minimum_configured, inventoryZeroStock: data.inventory.zero_stock },
+    scale: organizationScale(data.people.active), operations, metrics: operations, resources, alerts, personal,
+    dataQuality: management ? { incompleteEmployeeProfiles: data.people.incomplete_profiles, inventoryMinimumConfigured: data.inventory.minimum_configured, inventoryZeroStock: data.inventory.zero_stock } : undefined,
     setup: { complete: setupSteps.every(item => item.complete), completed: setupSteps.filter(item => item.complete).length, total: setupSteps.length, steps: setupSteps },
     enabledModules: [...enabled], hr: hrAccess ? data.hr : undefined
   });

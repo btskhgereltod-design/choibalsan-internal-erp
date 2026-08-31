@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE="overva-erp-shell-57";
+const CACHE="overva-erp-shell-59";
 const SHELL=[
   "/",
   "/index.html",
@@ -29,8 +29,8 @@ const SHELL=[
   "/iot.js",
   "/finance.css",
   "/finance.js",
-  "/executive.css?v=2",
-  "/executive.js?v=3",
+  "/executive.css?v=3",
+  "/executive.js?v=4",
   "/integration-lab.css",
   "/integration-lab.js",
   "/connectors.css?v=2",
@@ -55,13 +55,13 @@ const SHELL=[
   "/builder.css",
   "/builder-ai.css",
   "/builder.js",
-  "/workspace-policy.js?v=31",
+  "/workspace-policy.js?v=33",
   "/lighting.js?v=5",
   "/camera.js?v=2",
   "/engineering.js?v=2",
   "/employee-access.js?v=30",
-  "/standard-workspace.js?v=32",
-  "/standard-workspace.css?v=25",
+  "/standard-workspace.js?v=34",
+  "/standard-workspace.css?v=27",
   "/vendor/leaflet/leaflet.css",
   "/vendor/leaflet/leaflet.js",
   "/manifest.webmanifest",

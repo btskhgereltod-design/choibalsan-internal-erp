@@ -18,11 +18,15 @@ test("organization scale only controls response density",()=>{
   assert.equal(organizationScale(10).label,undefined);
 });
 
-test("unified dashboard is tenant scoped, truthful, and excludes private HR detail",()=>{
+test("unified dashboard is tenant scoped, truthful, and limits private HR detail to the signed-in employee",()=>{
   const route=read("api/src/routes/dashboard.js");
   assert.match(route,/organization_id=\$1/);
   assert.match(route,/enabled_modules/);
-  assert.doesNotMatch(route,/base_salary|id_card_no|personal_email/);
+  assert.doesNotMatch(route,/id_card_no|personal_email/);
+  assert.match(route,/c\.employee_id=e\.id AND c\.approved_by IS NOT NULL/);
+  assert.match(route,/WHERE e\.organization_id=\$1 AND e\.id=\$2/);
+  assert.match(route,/netPay: null/);
+  assert.match(route,/dataQuality: management \?/);
   assert.doesNotMatch(route,/health:\s*\{ score:/);
   assert.match(route,/minimum_stock>0 AND total_quantity<minimum_stock/);
   assert.match(route,/historical_open/);
@@ -52,9 +56,14 @@ test("organization home is tenant brandable and keeps onboarding under settings"
   assert.equal(fs.existsSync(path.join(root,"web","organization-assets","choibalsan-hugjil-logo.jpg")),true);
 });
 
-test("executive analysis hides inactive product areas",()=>{
-  const executive=read("web/executive.js");
-  assert.match(executive,/enabled\.has\("fleet"\)/);
-  assert.match(executive,/enabled\.has\("iot"\)/);
-  assert.match(executive,/enabled\.has\("inventory"\)/);
+test("executive analysis compares periods and returns only role-scoped live sections",()=>{
+  const executive=read("web/executive.js"),route=read("api/src/routes/executive.js");
+  assert.match(executive,/\[14,30,90\]/);
+  assert.match(executive,/previous/);
+  assert.doesNotMatch(executive,/enabled\.has\("fleet"\)|enabled\.has\("iot"\)/);
+  assert.match(route,/operationsAccess/);
+  assert.match(route,/peopleAccess/);
+  assert.match(route,/financeAccess/);
+  assert.match(route,/minimum_stock>0 AND total_quantity<minimum_stock/);
+  assert.doesNotMatch(route,/healthScore/);
 });

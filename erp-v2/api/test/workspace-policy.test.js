@@ -10,7 +10,7 @@ const viewModules={assets:"assets","work-orders":"work-orders",engineering:"work
 
 test("primary admin keeps setup access and also receives the job-role workspace",()=>{
   const views=policy.allowedViews({role:"director",systemRoles:["owner"],permissions:["audit.read"],enabledModules:["structure","assets","work-orders","map","fleet"],viewModules});
-  assert.deepEqual(new Set(views),new Set(["dashboard","assets","work-orders","engineering","executive","reports","employees","users","settings","billing","audit"]));
+  assert.deepEqual(new Set(views),new Set(["dashboard","attendance","assets","work-orders","engineering","executive","reports","employees","users","settings","billing","audit"]));
 });
 
 test("primary admin sees all enabled standard organization workspaces",()=>{
@@ -125,6 +125,21 @@ test("safety officer receives the work-order approval workspace",()=>{
 test("director can oversee organization work flows",()=>{
   const views=policy.allowedViews({role:"director",enabledModules:["work-orders"],viewModules});
   assert.equal(views.includes("work-orders"),true);
+});
+
+test("chief engineer and accountant receive role-scoped trend analysis",()=>{
+  const modules={executive:"executive"};
+  const chief=policy.allowedViews({role:"chief_engineer",enabledModules:["executive"],viewModules:modules});
+  const accountant=policy.allowedViews({role:"accountant",enabledModules:["executive"],viewModules:modules});
+  assert.equal(chief.includes("executive"),true);
+  assert.equal(accountant.includes("executive"),true);
+});
+
+test("every employee role can reach its own attendance when the module is enabled",()=>{
+  for(const role of ["director","chief_engineer","accountant","hr","storekeeper","engineer","electric","camera_engineer","safety","worker"]){
+    const views=policy.allowedViews({role,enabledModules:["attendance"],viewModules:{attendance:"attendance"}});
+    assert.equal(views.includes("attendance"),true,`${role} should see attendance`);
+  }
 });
 
 test("lighting specialization appears only when enabled for the tenant",()=>{

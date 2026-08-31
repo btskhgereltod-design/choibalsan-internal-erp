@@ -44,7 +44,27 @@ function organizationHomeBar(active="today",generatedAt=new Date().toISOString()
   const welcome=settings.home_welcome_text||"Өнөөдрийн ажлаа байгууллагынхаа бодит мэдээлэлтэй нэг дороос харна.";
   const today=new Intl.DateTimeFormat("mn-MN",{year:"numeric",month:"long",day:"numeric",weekday:"long"}).format(new Date(generatedAt));
   const analysisAvailable=(state.allowedViews||[]).includes("executive");
-  return`<section class="organization-home" style="--org-primary:${primary};--org-accent:${accent}">${banner}<div class="organization-home-shade"></div><div class="organization-identity"><div class="organization-logo">${logo}</div><div><span>МАНАЙ БАЙГУУЛЛАГЫН ОРЧИН</span><h1>${esc(name)}</h1><p class="organization-welcome">${esc(welcome)}</p><small>${esc(today)}</small></div></div><div class="organization-live"><span><i></i> Систем онлайн</span><small>${dateTime(generatedAt)} шинэчлэгдсэн</small><button class="hero-refresh" id="unifiedDashboardRefresh" aria-label="Мэдээллийг шинэчлэх">↻ Шинэчлэх</button></div></section><nav class="home-view-switch" aria-label="Байгууллагын нүүрийн харагдац"><button class="${active==="today"?"active":""}" data-go="dashboard"><b>Өнөөдөр</b><small>Яг одоо юу болж байна?</small></button>${analysisAvailable?`<button class="${active==="analysis"?"active":""}" data-go="executive"><b>Чиг хандлага</b><small>Юу өөрчлөгдөж, юуг шийдэх вэ?</small></button>`:""}</nav>`;
+  const refreshId=active==="analysis"?"executiveRefresh":"unifiedDashboardRefresh";
+  return`<section class="organization-home" style="--org-primary:${primary};--org-accent:${accent}">${banner}<div class="organization-home-shade"></div><div class="organization-identity"><div class="organization-logo">${logo}</div><div><span>МАНАЙ БАЙГУУЛЛАГЫН ОРЧИН</span><h1>${esc(name)}</h1><p class="organization-welcome">${esc(welcome)}</p><small>${esc(today)}</small></div></div><div class="organization-live"><span><i></i> Систем онлайн</span><small>${dateTime(generatedAt)} шинэчлэгдсэн</small><button class="hero-refresh" id="${refreshId}" aria-label="Мэдээллийг шинэчлэх">↻ Шинэчлэх</button></div></section><nav class="home-view-switch" aria-label="Байгууллагын нүүрийн харагдац"><button class="${active==="today"?"active":""}" data-go="dashboard"><b>Өнөөдөр</b><small>Яг одоо юу болж байна?</small></button>${analysisAvailable?`<button class="${active==="analysis"?"active":""}" data-go="executive"><b>Чиг хандлага</b><small>Юу өөрчлөгдөж, юуг шийдэх вэ?</small></button>`:""}</nav>`;
+}
+function attendanceStatusLabel(status){return({worked:"Ажилласан",late:"Хоцорсон",absent:"Тасалсан",leave:"Чөлөөтэй",sick:"Өвчтэй",vacation:"Амралттай",remote:"Зайнаас",holiday:"Амралтын өдөр"})[status]||"Өнөөдрийн ирц бүртгэгдээгүй"}
+function personalDashboardView(d){
+  const p=d.personal||{},identity=p.identity||{},attendance=p.attendance||{},work=p.work||{},requests=p.requests||{},department=p.department||{},compensation=p.compensation||{};
+  const firstName=givenName(identity.fullName||state.user?.full_name),fieldView=(state.allowedViews||[]).includes("mobile")?"mobile":"work-orders";
+  const salary=compensation.available?money(compensation.referenceSalary):"Мэдээлэлгүй";
+  return`${organizationHomeBar("today",d.generatedAt)}
+    <section class="personal-welcome"><div><span>МИНИЙ ӨДӨР</span><h2>Өдрийн мэнд, ${esc(firstName)}</h2><p>${esc(identity.position||labels[state.user?.role]||"Ажилтан")}${identity.department?` · ${esc(identity.department)}`:""}</p></div>${(state.allowedViews||[]).includes(fieldView)?`<button class="primary" data-go="${fieldView}">Миний ажлыг нээх →</button>`:""}</section>
+    <div class="personal-grid">
+      <button class="personal-card attendance" data-go="attendance"><span>Өнөөдрийн ирц</span><strong>${esc(attendanceStatusLabel(attendance.today_status))}</strong><small>${attendance.check_in?`Ирсэн ${esc(String(attendance.check_in).slice(0,5))}`:"Ирсэн цаг бүртгэгдээгүй"}${attendance.check_out?` · Гарсан ${esc(String(attendance.check_out).slice(0,5))}`:""}</small></button>
+      <button class="personal-card work" data-go="${fieldView}"><span>Миний нээлттэй ажил</span><strong>${esc(work.open||0)}</strong><small>${esc(work.dueToday||0)} өнөөдөр · ${esc(work.overdueRecent||0)} хугацаа хэтэрсэн</small></button>
+      <button class="personal-card done" data-go="${fieldView}"><span>Энэ сарын гүйцэтгэл</span><strong>${esc(work.completedMonth||0)}</strong><small>${esc(work.pendingReview||0)} ажил баталгаажуулалт хүлээж байна</small></button>
+      <article class="personal-card salary"><span>Миний цалингийн лавлагаа 🔒</span><strong>${salary}</strong><small>${compensation.available?"Суурь цалин · эцсийн олгох цалин биш":"Баталгаажсан цалингийн мэдээлэл хараахан алга"}</small></article>
+    </div>
+    <div class="personal-lower">
+      <section class="panel personal-month"><div class="panel-head"><div><span class="panel-kicker">ЭНЭ САР</span><h2>Миний төлөв</h2></div></div><div class="personal-facts"><span><b>${esc(attendance.worked_days||0)}</b> ажилласан өдөр</span><span><b>${esc(attendance.late_days||0)}</b> хоцролт</span><span><b>${esc(attendance.overtime_hours||0)}</b> илүү цаг</span><span><b>${Number(requests.pending_leave||0)+Number(requests.pending_corrections||0)}</b> шийдвэр хүлээсэн хүсэлт</span></div></section>
+      <section class="panel department-snapshot"><div class="panel-head"><div><span class="panel-kicker">МИНИЙ НЭГЖ</span><h2>${esc(identity.department||"Хэлтсийн мэдээлэл")}</h2></div></div><p>Нэр, хувийн мэдээлэлгүй зөвхөн хамтын ажлын төлөв.</p><div class="personal-facts"><span><b>${esc(department.open||0)}</b> нээлттэй</span><span><b>${esc(department.completed_month||0)}</b> энэ сард дууссан</span><span><b>${esc(department.overdue_recent||0)}</b> хугацаа хэтэрсэн</span></div></section>
+    </div>
+    ${d.alerts.length?`<section class="panel unified-alerts"><div class="panel-head"><div><span class="panel-kicker">НАДАД ХАМААТАЙ</span><h2>Анхаарах зүйл</h2></div><span>${d.alerts.length} дохио</span></div>${d.alerts.slice(0,5).map(item=>`<button class="unified-alert ${esc(item.level)}" data-go="${esc(item.view||fieldView)}"><i></i><span><strong>${esc(item.message)}</strong><small>${esc(item.module)}</small></span><b>→</b></button>`).join("")}</section>`:""}`;
 }
 function setupProgress(data){
   if(data.setup.complete||!workspacePolicy.isPrimaryAdmin(state.systemRoles))return"";
@@ -58,6 +78,7 @@ function unifiedDashboardView(){
     if(!state.unifiedDashboardLoading)queueMicrotask(loadUnifiedDashboard);
     return`${header("БАЙГУУЛЛАГЫН НҮҮР","Таны байгууллагын өнөөдрийн орчин","Шаардлагатай мэдээллийг нэгтгэж байна...")}<div class="unified-loading"><i></i><span>Өнөөдрийн байдлыг ачаалж байна</span></div>`;
   }
+  if(d.scope==="personal"&&d.personal)return personalDashboardView(d);
   const operations=(d.operations||d.metrics||[]).slice(0,8),resources=(d.resources||[]).slice(0,4),alerts=d.alerts.slice(0,8);
   return`${organizationHomeBar("today",d.generatedAt)}
     ${setupProgress(d)}

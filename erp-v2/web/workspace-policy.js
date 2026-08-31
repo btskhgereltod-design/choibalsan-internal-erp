@@ -15,15 +15,15 @@
   const ownerOversightViews=new Set(["work-orders","engineering","lighting","camera","executive","reports"]);
   const primaryAdminOnlyViews=new Set(["settings","users","audit"]);
   const roleViews={
-    director:["dashboard","work-orders","lighting","camera","executive","reports"],
-    chief_engineer:["dashboard","assets","work-orders","engineering","lighting","camera","maintenance","safety","reports"],
-    accountant:["dashboard","finance","inventory","procurement","reports"],
+    director:["dashboard","attendance","work-orders","lighting","camera","executive","reports"],
+    chief_engineer:["dashboard","attendance","assets","work-orders","engineering","lighting","camera","maintenance","safety","executive","reports"],
+    accountant:["dashboard","attendance","finance","inventory","procurement","executive","reports"],
     hr:["dashboard","hr","attendance"],
-    storekeeper:["dashboard","inventory","procurement","assets"],
-    engineer:["dashboard","assets","work-orders","maintenance","mobile"],
-    electric:["dashboard","assets","work-orders","lighting","maintenance","mobile"],
-    camera_engineer:["dashboard","assets","work-orders","camera","maintenance","mobile"],
-    safety:["dashboard","safety","work-orders","lighting","camera"],
+    storekeeper:["dashboard","attendance","inventory","procurement","assets"],
+    engineer:["dashboard","attendance","assets","work-orders","maintenance","mobile"],
+    electric:["dashboard","attendance","assets","work-orders","lighting","maintenance","mobile"],
+    camera_engineer:["dashboard","attendance","assets","work-orders","camera","maintenance","mobile"],
+    safety:["dashboard","attendance","safety","work-orders","lighting","camera"],
     worker:["dashboard","work-orders","attendance","mobile"]
   };
   const permissionViews={
