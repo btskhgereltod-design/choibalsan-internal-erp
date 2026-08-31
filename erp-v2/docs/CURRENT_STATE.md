@@ -30,6 +30,24 @@ validated at enterprise scale.
   `0071`; API and tenant web are healthy, and an authenticated finance overview
   smoke check passes. This is local verification, not production deployment.
 
+## Storekeeper workspace
+
+- The role-facing navigation and page are now named **Няравын ажлын талбар**,
+  while the underlying reusable domain remains warehouse and inventory. The
+  familiar legacy sequence is preserved as Самбар, Орлого, Зарлага/олголт,
+  Үлдэгдэл, Захиалга, and Тайлан tabs without copying the legacy screen or its
+  separate data model.
+- Approved Work Order material is the primary issue path and remains linked to
+  engineering work and accounting reconciliation. Ad-hoc stock movement is an
+  explicit exception requiring a document reference and note. Low stock links
+  to the governed procurement workflow rather than creating another private
+  storekeeper-order truth.
+- Migration `0072` adds live `inventory.read` authorization, a bounded
+  `inventory-custodian` role for storekeepers, and read-only
+  `inventory-observer` access for chief engineers and accountants. Inventory
+  read and mutation routes now use server-derived permissions instead of the
+  legacy job-role string. All 272 repository tests pass.
+
 ## Unreleased local work — Market guest catalog interaction
 
 - The public Market sample catalog now has a separate responsive interaction

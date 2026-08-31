@@ -3,13 +3,14 @@ state.modules = {};
 state.moduleLoading = {};
 Object.assign(labels, {
   structure: "Байгууллагын бүтэц",
-  inventory: "Агуулах",
+  inventory: "Няравын ажлын талбар",
   maintenance: "Төлөвлөгөөт засвар",
   procurement: "Худалдан авалт",
   settings: "Тохиргоо",
   billing: "Багц ба төлбөр",
 });
 const moduleViews = new Set(["structure", "inventory", "maintenance", "procurement", "settings", "billing"]);
+state.inventoryTab = state.inventoryTab || "dashboard";
 const originalRender = render;
 function money(value, currency = "MNT") {
   return new Intl.NumberFormat("mn-MN", {
@@ -233,6 +234,15 @@ function billingView() {
   const s = d.subscription || {};
   return `${moduleHeader("OVERVA ҮЙЛЧИЛГЭЭ", "Багц ба төлбөр", "Танай байгууллагын ашиглаж буй багц, хэрэглээний хязгаар, төлбөр болон нэхэмжлэхүүд.")}<div class="module-grid"><article class="module-card"><span>Одоогийн багц</span><strong class="metric-number">${esc(s.plan_name || s.plan_code || "—")}</strong><small>${s.user_limit || "—"} хэрэглэгч · ${s.storage_gb || "—"} GB</small></article><article class="module-card"><span>Төлөв</span><strong class="metric-number">${esc(s.status || "—")}</strong><small>Дуусах: ${date(s.ends_at)}</small></article><article class="module-card"><span>Сарын үнэ</span><strong class="metric-number">${money(s.monthly_price)}</strong></article></div><div class="module-table-wrap"><table class="module-table"><thead><tr><th>Нэхэмжлэх</th><th>Хугацаа</th><th>Төлөх огноо</th><th>Дүн</th><th>Төлсөн</th><th>Төлөв</th></tr></thead><tbody>${d.invoices.length ? d.invoices.map((i) => `<tr><td><strong>${esc(i.invoice_no)}</strong></td><td>${date(i.period_start)} – ${date(i.period_end)}</td><td>${date(i.due_date)}</td><td>${money(i.amount, i.currency)}</td><td>${money(i.paid_amount, i.currency)}</td><td><span class="status-pill ${i.status}">${esc(i.status)}</span></td></tr>`).join("") : `<tr><td colspan="6">Нэхэмжлэх үүсээгүй байна.</td></tr>`}</tbody></table></div>`;
 }
+
+const inventoryMovementNames={receipt:"Орлого",issue:"Зарлага",transfer:"Шилжүүлэг",adjustment_in:"Тооллогын нэмэгдэл",adjustment_out:"Тооллогын хорогдол"};
+function inventoryWorkspaceTabs(){return `<div class="inventory-tabs">${[["dashboard","Самбар"],["receipt","Орлого"],["issue","Зарлага, олголт"],["stock","Үлдэгдэл"],["replenishment","Захиалга"],["report","Тайлан"]].map(([key,name])=>`<button type="button" class="${state.inventoryTab===key?"active":""}" data-inventory-tab="${key}">${name}</button>`).join("")}</div>`}
+function inventoryMovementRows(items,limit=100){const rows=(items||[]).slice(0,limit);return rows.length?rows.map(x=>`<tr><td>${dateTime(x.created_at)}</td><td><span class="status-pill">${inventoryMovementNames[x.movement_type]||esc(x.movement_type)}</span></td><td><strong>${esc(x.sku)} · ${esc(x.item_name)}</strong></td><td>${x.quantity}</td><td>${esc(x.from_name||"—")} → ${esc(x.to_name||"—")}</td><td>${esc(x.reference||"—")}<small>${esc(x.note||"")}</small></td><td>${esc(x.created_by_name||"—")}</td></tr>`).join(""):`<tr><td colspan="7">Хөдөлгөөн бүртгэгдээгүй байна.</td></tr>`}
+function inventoryIssueQueue(d){const requests=d.workMaterialRequests||[];return `<div class="module-table-wrap inventory-section"><h2>Ажлын захиалгаар батлагдсан олголт</h2><p class="inventory-explain">Ерөнхий инженерийн урсгалаар батлагдсан материалыг эндээс олгоно. Олголт хийхэд үлдэгдэл нэг удаа хасагдаж, ажлын захиалга болон нягтлангийн тулгалттай автоматаар холбогдоно.</p><table class="module-table"><thead><tr><th>Ажил</th><th>Материал</th><th>Баталсан</th><th>Агуулахын үлдэгдэл</th><th>Үйлдэл</th></tr></thead><tbody>${requests.length?requests.map(request=>`<tr><td><strong>${esc(request.work_order_title)}</strong><small>${esc(request.reason)}</small></td><td>${esc(request.sku)} · ${esc(request.item_name)}</td><td>${request.approved_quantity} ${esc(request.unit)}</td><td>${(request.balances||[]).map(balance=>`${esc(balance.warehouseName)}: ${balance.quantity}`).join(" · ")||"Үлдэгдэлгүй"}</td><td>${d.canIssueWorkMaterial?`<button class="primary" data-issue-work-material="${request.id}" data-material-work="${request.work_order_id}">Олгох</button>`:"Харах эрхтэй"}</td></tr>`).join(""):`<tr><td colspan="5">Батлагдсан, олголт хүлээж буй материал алга.</td></tr>`}</tbody></table></div>`}
+function inventoryMovementForm(d,mode){const receipt=mode==="receipt",types=receipt?[["receipt","Худалдан авалтын орлого"],["adjustment_in","Тооллогын нэмэгдэл"]]:[["issue","Тусгай зарлага"],["transfer","Агуулах хооронд шилжүүлэх"],["adjustment_out","Тооллогын хорогдол"]];return `<form class="module-form" id="stockMovementForm"><h2>${receipt?"Орлого бүртгэх":"Бусад зарлага, шилжүүлэг"}</h2>${receipt?"":`<p class="inventory-warning">Ажлын материалын зарлагыг дээрх батлагдсан олголтоор хийнэ. Энэ маягтыг зөвхөн ажлын захиалгад хамаарахгүй тусгай хөдөлгөөнд баримтын дугаар, тайлбартай ашиглана.</p>`}<div class="module-form-grid"><label><span>Бараа материал</span><select name="itemId" required>${selectOptions(d.items,"id","name","Бараа сонгоно уу")}</select></label><label><span>Хөдөлгөөний төрөл</span><select name="type">${types.map(([v,l])=>`<option value="${v}">${l}</option>`).join("")}</select></label><label><span>Гарах агуулах</span><select name="fromWarehouseId">${selectOptions(d.warehouses,"id","name")}</select></label><label><span>Орох агуулах</span><select name="toWarehouseId">${selectOptions(d.warehouses,"id","name")}</select></label><label><span>Тоо хэмжээ</span><input name="quantity" type="number" min="0.001" step="0.001" required></label><label><span>Баримтын дугаар</span><input name="reference" required></label></div><label><span>Тэмдэглэл</span><input name="note" required></label><button class="primary">Хөдөлгөөн бүртгэх</button></form>`}
+function inventoryStockTable(d){return `<div class="module-table-wrap inventory-section"><h2>Бодит үлдэгдэл</h2><table class="module-table"><thead><tr><th>SKU / Материал</th><th>Ангилал</th><th>Нийт үлдэгдэл</th><th>Доод түвшин</th><th>Агуулахаар</th></tr></thead><tbody>${d.items.length?d.items.map(i=>`<tr><td><strong>${esc(i.sku)} · ${esc(i.name)}</strong></td><td>${esc(i.category)}</td><td class="${Number(i.total_quantity)<=Number(i.minimum_stock)?"low-stock":""}">${i.total_quantity} ${esc(i.unit)}</td><td>${i.minimum_stock} ${esc(i.unit)}</td><td>${(i.balances||[]).map(b=>`${esc(b.warehouseName)}: ${b.quantity}`).join(" · ")||"—"}</td></tr>`).join(""):`<tr><td colspan="5">Бараа материал бүртгэгдээгүй байна.</td></tr>`}</tbody></table></div>`}
+function inventoryMasterForms(d){return `<details class="inventory-master"><summary>Агуулах, барааны мастер бүртгэл тохируулах</summary><div class="module-grid"><form class="module-form" id="warehouseForm"><h2>Агуулах нэмэх</h2><label><span>Код</span><input name="code" required placeholder="MAIN"></label><label><span>Нэр</span><input name="name" required placeholder="Төв агуулах"></label><label><span>Байршил</span><input name="location"></label><button class="primary">Нэмэх</button></form><form class="module-form" id="inventoryItemForm"><h2>Бараа материал нэмэх</h2><div class="module-form-grid"><label><span>SKU</span><input name="sku" required></label><label><span>Нэр</span><input name="name" required></label><label><span>Ангилал</span><input name="category" value="Сэлбэг" required></label><label><span>Нэгж</span><input name="unit" value="ш" required></label><label><span>Доод үлдэгдэл</span><input name="minimumStock" type="number" min="0" step="0.001" value="0"></label></div><button class="primary">Нэмэх</button></form></div></details>`}
+function storekeeperWorkspaceView(){const d=state.modules.inventory;if(!d)return moduleHeader("АГУУЛАХ БА НӨӨЦ","Няравын ажлын талбар","Мэдээллийг ачаалж байна...");const canManage=(state.user.permissions||[]).includes("inventory.manage"),total=d.items.reduce((s,x)=>s+Number(x.total_quantity),0),low=d.items.filter(x=>Number(x.total_quantity)<=Number(x.minimum_stock)),head=`${moduleHeader("АГУУЛАХ БА НӨӨЦ","Няравын ажлын талбар","Орлого, олголт, үлдэгдэл, нөхөн таталт ба тайланг нэг хөдөлгөөний журналаас хөтөлнө.")}${inventoryWorkspaceTabs()}`;if(state.inventoryTab==="receipt")return head+(canManage?inventoryMovementForm(d,"receipt"):inventoryStockTable(d));if(state.inventoryTab==="issue")return head+inventoryIssueQueue(d)+(canManage?inventoryMovementForm(d,"issue"):"");if(state.inventoryTab==="stock")return head+inventoryStockTable(d)+(canManage?inventoryMasterForms(d):"");if(state.inventoryTab==="replenishment")return head+`<div class="module-table-wrap inventory-section"><h2>Нөхөн татах шаардлага</h2><p class="inventory-explain">Доод түвшинд хүрсэн материал нь шинэ тусдаа “няравын захиалга” болохгүй. Худалдан авалтын хүсэлт үүсгэж, батлах–захиалах–хүлээн авах урсгалаар явна.</p><table class="module-table"><thead><tr><th>Материал</th><th>Үлдэгдэл</th><th>Доод түвшин</th><th>Зөрүү</th></tr></thead><tbody>${low.length?low.map(i=>`<tr><td><strong>${esc(i.sku)} · ${esc(i.name)}</strong></td><td>${i.total_quantity} ${esc(i.unit)}</td><td>${i.minimum_stock} ${esc(i.unit)}</td><td class="low-stock">${Math.max(0,Number(i.minimum_stock)-Number(i.total_quantity))} ${esc(i.unit)}</td></tr>`).join(""):`<tr><td colspan="4">Нөхөн татах материал алга.</td></tr>`}</tbody></table>${canManage?`<div class="inventory-action"><button class="primary" data-open-procurement>Худалдан авалтын хүсэлт рүү очих</button></div>`:""}</div>`;if(state.inventoryTab==="report")return head+`<div class="module-table-wrap inventory-section"><h2>Няравын хөдөлгөөний тайлан</h2><table class="module-table"><thead><tr><th>Огноо</th><th>Төрөл</th><th>Материал</th><th>Тоо</th><th>Чиглэл</th><th>Баримт</th><th>Бүртгэсэн</th></tr></thead><tbody>${inventoryMovementRows(d.movements)}</tbody></table></div>`;return `${head}<div class="module-grid"><article class="module-card"><span>Агуулах</span><strong class="metric-number">${d.warehouses.length}</strong></article><article class="module-card"><span>Материалын нэр төрөл</span><strong class="metric-number">${d.items.length}</strong></article><article class="module-card"><span>Нийт үлдэгдэл</span><strong class="metric-number">${total}</strong></article><article class="module-card"><span>Нөхөн татах</span><strong class="metric-number low-stock">${low.length}</strong></article><article class="module-card"><span>Олголт хүлээж буй</span><strong class="metric-number">${(d.workMaterialRequests||[]).length}</strong></article></div><div class="inventory-dashboard-grid"><div class="module-table-wrap"><h2>Сүүлийн хөдөлгөөн</h2><table class="module-table"><thead><tr><th>Огноо</th><th>Төрөл</th><th>Материал</th><th>Тоо</th><th>Чиглэл</th><th>Баримт</th><th>Бүртгэсэн</th></tr></thead><tbody>${inventoryMovementRows(d.movements,8)}</tbody></table></div><div class="module-table-wrap"><h2>Анхаарах үлдэгдэл</h2><table class="module-table"><thead><tr><th>Материал</th><th>Үлдэгдэл</th><th>Доод түвшин</th></tr></thead><tbody>${low.length?low.slice(0,10).map(i=>`<tr><td>${esc(i.sku)} · ${esc(i.name)}</td><td class="low-stock">${i.total_quantity} ${esc(i.unit)}</td><td>${i.minimum_stock}</td></tr>`).join(""):`<tr><td colspan="3">Доод түвшинд хүрсэн материал алга.</td></tr>`}</tbody></table></div></div>`}
 const baseInventoryView = inventoryView;
 inventoryView = function () {
   const base = baseInventoryView(),
@@ -244,7 +254,7 @@ inventoryView = function () {
 };
 const moduleRenderers = {
   structure: structureView,
-  inventory: inventoryView,
+  inventory: storekeeperWorkspaceView,
   maintenance: maintenanceView,
   procurement: procurementView,
   settings: settingsView,
@@ -402,7 +412,9 @@ async function refreshDataGovernance() {
   await loadDataGovernance();
 }
 document.addEventListener("click", async (event) => {
-  const assign = event.target.closest("[data-assign-structure]"),
+  const inventoryTab = event.target.closest("[data-inventory-tab]"),
+    openProcurement = event.target.closest("[data-open-procurement]"),
+    assign = event.target.closest("[data-assign-structure]"),
     complete = event.target.closest("[data-complete-maintenance]"),
     decision = event.target.closest("[data-procurement-action]"),
     releaseHold = event.target.closest("[data-release-hold]"),
@@ -410,6 +422,15 @@ document.addEventListener("click", async (event) => {
     findingDecision = event.target.closest("[data-finding-decision]"),
     materialIssue = event.target.closest("[data-issue-work-material]");
   try {
+    if (inventoryTab) {
+      state.inventoryTab = inventoryTab.dataset.inventoryTab;
+      render();
+      return;
+    }
+    if (openProcurement) {
+      $("#procurementNav")?.click();
+      return;
+    }
     if (materialIssue) await issueWorkMaterial(materialIssue);
     if (assign) {
       const d = state.modules.structure,

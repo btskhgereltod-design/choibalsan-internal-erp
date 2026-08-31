@@ -3,7 +3,7 @@
 const express = require("express");
 const { z } = require("zod");
 const { getPool } = require("../db");
-const { authenticate, authenticatePlatform, requireRoles, requireModule, requireSystemRoles, requirePlatformPermissions } = require("../middleware/auth");
+const { authenticate, authenticatePlatform, requireRoles, requireModule, requirePermissions, requireSystemRoles, requirePlatformPermissions } = require("../middleware/auth");
 const { writeAudit } = require("../services/audit");
 const { syncPrimaryAssignment } = require("../services/employee-assignment");
 const { asyncHandler } = require("../utils/async-handler");
@@ -14,7 +14,7 @@ const uuid = z.string().uuid();
 const optionalUuid = uuid.nullable().optional();
 const management = requireRoles("director", "chief_engineer");
 const primaryAdmin = requireSystemRoles("owner");
-const inventoryEditors = requireRoles("director", "chief_engineer", "storekeeper");
+const inventoryEditors = requirePermissions("inventory.manage");
 const procurementApprovers = requireRoles("director", "chief_engineer", "accountant");
 const text = (max = 250) => z.string().trim().min(1).max(max);
 const emptyText = (max = 2000) => z.string().trim().max(max).default("");
@@ -28,7 +28,7 @@ const hierarchyOrderSql = `CASE WHEN e.active=false THEN 1000 ELSE COALESCE(p.ra
 
 tenantRouter.use(authenticate);
 tenantRouter.use("/structure", requireModule("structure"));
-tenantRouter.use("/inventory", requireModule("inventory"));
+tenantRouter.use("/inventory", requireModule("inventory"), requirePermissions("inventory.read"));
 tenantRouter.use("/maintenance", requireModule("maintenance"));
 tenantRouter.use("/procurement", requireModule("procurement"));
 
@@ -129,7 +129,7 @@ tenantRouter.post("/inventory/items", inventoryEditors, asyncHandler(async(req,r
 }));
 
 tenantRouter.post("/inventory/movements", inventoryEditors, asyncHandler(async(req,res)=>{
-  const parsed=z.object({itemId:uuid,type:z.enum(["receipt","issue","transfer","adjustment_in","adjustment_out"]),fromWarehouseId:optionalUuid,toWarehouseId:optionalUuid,quantity:z.coerce.number().positive().max(1000000000),reference:emptyText(120),note:emptyText(1000)}).safeParse(req.body);
+  const parsed=z.object({itemId:uuid,type:z.enum(["receipt","issue","transfer","adjustment_in","adjustment_out"]),fromWarehouseId:optionalUuid,toWarehouseId:optionalUuid,quantity:z.coerce.number().positive().max(1000000000),reference:text(120),note:text(1000)}).safeParse(req.body);
   if(!parsed.success)return res.status(400).json({error:"Орлого, зарлагын мэдээлэл буруу байна"}); const v=parsed.data;
   const needsFrom=["issue","transfer","adjustment_out"].includes(v.type),needsTo=["receipt","transfer","adjustment_in"].includes(v.type);
   if((needsFrom&&!v.fromWarehouseId)||(needsTo&&!v.toWarehouseId)||(v.type==="transfer"&&v.fromWarehouseId===v.toWarehouseId))return res.status(400).json({error:"Эхлэх болон хүлээн авах агуулахыг зөв сонгоно уу"});

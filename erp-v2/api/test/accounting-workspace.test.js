@@ -22,7 +22,7 @@ test("accounting records are tenant scoped and evidence events are append only",
 });
 
 test("accountant and storekeeper responsibilities are separated",()=>{
-  assert.match(users,/role === "storekeeper"\) codes\.push\("work-order-material-custodian"\)/);
+  assert.match(users,/role === "storekeeper"\) codes\.push\("work-order-material-custodian", "inventory-custodian"\)/);
   assert.match(users,/role === "accountant"\) codes\.push\("finance-accountant"\)/);
   assert.doesNotMatch(inventory,/"storekeeper", "accountant"/);
   assert.match(migration,/u\.role='accountant' AND r\.code='work-order-material-custodian'/);
