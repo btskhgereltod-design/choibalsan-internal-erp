@@ -176,6 +176,19 @@ These protections apply regardless of implementation choice:
 
 ## Project Memory
 
+- `docs/CONNECTED_ORGANIZATION_DOMAIN_MODEL_V1.md` — accepted five-layer
+  conceptual model and terminology boundaries; it is not a universal schema.
+
+- `docs/SURFACE_AUTHORITY_MATRIX_V1.md` — canonical routing from UI/business
+  surfaces to identity, data, authorization, and audit ownership.
+
+- `docs/LEGACY_AUTHORIZATION_USAGE_AUDIT_V1.md` — baseline of implemented RBAC
+  separation and remaining fixed job-role compatibility debt.
+
+- `docs/ASSET_MAINTENANCE_VERTICAL_SLICE_CONTRACT_V1.md` — accepted first
+  connected operational proof and its authority, evidence, measurement, and
+  production gates.
+
 - `docs/ADMIN_OPERATING_MODEL_V1.md` — accepted four-context administration
   model, approval boundaries, handoffs, and virtual-role simulation contract.
 

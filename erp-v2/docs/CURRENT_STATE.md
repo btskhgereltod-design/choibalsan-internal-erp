@@ -1,6 +1,6 @@
 # OVERVA Current State
 
-Last updated: 2026-08-30
+Last updated: 2026-08-31
 
 This document answers one question: **what exists in the repository now?** It
 does not claim that every implemented foundation is complete or production-
@@ -52,6 +52,28 @@ validated at enterprise scale.
 - `guest-market-journey.bpmn` is the BPMN 2.0 source. A real `.vsdx` has not
   been fabricated because Microsoft Visio is not installed on this computer;
   it must be created later through Visio import and Save As.
+
+## Accepted Connected Organization model
+
+- D-032 accepts Master Data -> Organization -> Responsibility and Authority ->
+  Process and Transactions -> Measurement and Optimization as OVERVA's
+  conceptual domain reasoning order. It is not a universal schema, shared
+  identity, workflow rewrite, or permission bridge.
+- `CONNECTED_ORGANIZATION_DOMAIN_MODEL_V1.md` defines the model and current
+  implementation mapping. `SURFACE_AUTHORITY_MATRIX_V1.md` maps public Market,
+  Market participants/operators, tenant application/administration, Platform
+  administration, OVERVA Apps, Group oversight, and infrastructure operation
+  to their separate identity, data, authorization, and audit owners.
+- `LEGACY_AUTHORIZATION_USAGE_AUDIT_V1.md` records that tenant RBAC,
+  permissions, optional employee login, and job-workspace access are implemented
+  while fixed `users.role` / `employees.job_role` checks remain compatibility
+  debt in several operational routes. No runtime authorization was changed by
+  accepting the audit.
+- `ASSET_MAINTENANCE_VERTICAL_SLICE_CONTRACT_V1.md` is the approved first
+  end-to-end proof contract. Runtime completion remains planned: implementation
+  must reuse existing employee, structure, asset/operational-object, work-order,
+  approval, inventory, measured-outcome, attachment, finance-integration, and
+  audit foundations before it can be marked implemented.
 
 ## Next chat start
 

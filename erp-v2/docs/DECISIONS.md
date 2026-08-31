@@ -515,6 +515,48 @@ founder authority, or tenant organization access. Migration `0063` and Public
 V34 therefore stop at Provider assurance; listing, proposal, payment, dispute,
 forum, ranking, Seller/Publisher, and KYC-document backends remain out of scope.
 
+### D-032 — Model connected organizational work in five layers without creating a universal schema
+
+Accepted: 2026-08-31
+
+OVERVA reasons about tenant operation in this order: Master Data ->
+Organization -> Responsibility and Authority -> Process and Transactions ->
+Measurement and Optimization. Product modules and workspaces may present these
+capabilities, but they do not own duplicate copies of the same organizational
+truth. Processes reference authoritative domain records and important actions
+remain explainable by actor, action, resource, place, time, authority,
+approval/rule, and evidence.
+
+This is a conceptual domain model, not one universal table, identity, workflow,
+event payload, or shared database. Domain schemas remain small and versioned;
+tenant Platform, Market, Platform administration, OVERVA Apps, Group oversight,
+and infrastructure operation retain their accepted data, identity,
+authorization, and audit separations. A future shared sign-in or integration
+contract may map identity or exchange approved records but never copies
+authority implicitly.
+
+Employee, login identity, job definition, position, employee assignment,
+responsibility, system role, permission, workspace access, and process approval
+authority are distinct concepts. Existing tenant RBAC and job-workspace access
+already implement part of this separation. Fixed `users.role` and
+`employees.job_role` checks remain compatibility debt and must be migrated one
+domain at a time through explicit policy, fail-closed comparison, tests, and
+rollback; they are not removed by this decision. IoT migration must preserve
+Emergency > Manual > Weather > Schedule > Default at every control layer.
+
+Optimization begins only after reliable attributable process evidence exists.
+AI may measure, explain, and propose but cannot silently change master data,
+permissions, workflow, financial truth, production state, or device control.
+The first approved vertical proof is Asset Maintenance, reusing existing
+employee, organization, asset/operational-object, work-order, approval,
+inventory, measured-outcome, attachment, finance-integration, and audit
+foundations. Implementation and production deployment remain separate gates.
+
+`CONNECTED_ORGANIZATION_DOMAIN_MODEL_V1.md`,
+`SURFACE_AUTHORITY_MATRIX_V1.md`, `LEGACY_AUTHORIZATION_USAGE_AUDIT_V1.md`, and
+`ASSET_MAINTENANCE_VERTICAL_SLICE_CONTRACT_V1.md` define the accepted model,
+routing, baseline debt, and first proof contract.
+
 ## Active Hypotheses
 
 ### H-001 — Customer journey

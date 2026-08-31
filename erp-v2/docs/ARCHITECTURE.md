@@ -167,6 +167,32 @@ future Seller/Publisher capability remains separate from Provider membership.
 - Roles and permissions describe system access, not employment position.
 - Choibalsan-specific departments, positions, and workflows are tenant data.
 
+## Connected Organization Domain Model
+
+OVERVA uses five conceptual layers when extending tenant operation:
+
+```text
+Master Data
+-> Organization
+-> Responsibility and Authority
+-> Process and Transactions
+-> Measurement and Optimization
+```
+
+This ordering prevents module-local duplication and clarifies who acted on
+which authoritative resource under which authority and evidence. It does not
+create one universal table, person identity, workflow engine, event payload, or
+cross-boundary database. Small versioned domain schemas and the accepted
+Platform/Market/Apps/administration separations remain in force.
+
+Employee, login identity, job definition, position, assignment, responsibility,
+system role, permission, workspace access, and process authority are separate.
+Current RBAC and job-workspace policy implement part of this model; legacy fixed
+job-role checks remain compatibility debt to migrate incrementally without
+expanding authority. `CONNECTED_ORGANIZATION_DOMAIN_MODEL_V1.md` defines the
+model, and `SURFACE_AUTHORITY_MATRIX_V1.md` routes each product surface to its
+identity, data, authorization, and audit owner.
+
 ## Data and Audit Model
 
 - PostgreSQL is the current transactional system of record.
