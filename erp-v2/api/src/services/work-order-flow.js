@@ -11,11 +11,11 @@ const TRANSITIONS = Object.freeze({
 
 const WORKFLOW_ACTIONS = Object.freeze({
   safety_authorize_start: {
-    from: "awaiting_safety_start", to: "awaiting_management_start", roleKey: "startSafetyRole",
+    from: "awaiting_safety_start", to: "awaiting_management_start", roleKey: "startSafetyRole", permissionKey: "startSafetyPermission",
     decision: "approved", status: null,
   },
   management_approve_start: {
-    from: "awaiting_management_start", to: "execution", roleKey: "startApprovalRole",
+    from: "awaiting_management_start", to: "execution", roleKey: "startApprovalRole", permissionKey: "startApprovalPermission",
     decision: "approved", status: "in_progress",
   },
   submit_completion: {
@@ -23,19 +23,19 @@ const WORKFLOW_ACTIONS = Object.freeze({
     decision: "approved", status: "pending_review",
   },
   safety_accept_completion: {
-    from: "awaiting_safety_completion", to: "awaiting_management_completion", roleKey: "completionSafetyRole",
+    from: "awaiting_safety_completion", to: "awaiting_management_completion", roleKey: "completionSafetyRole", permissionKey: "completionSafetyPermission",
     decision: "approved", status: null,
   },
   safety_return_to_execution: {
-    from: "awaiting_safety_completion", to: "execution", roleKey: "completionSafetyRole",
+    from: "awaiting_safety_completion", to: "execution", roleKey: "completionSafetyRole", permissionKey: "completionSafetyPermission",
     decision: "returned", status: "in_progress",
   },
   management_close: {
-    from: "awaiting_management_completion", to: "completed", roleKey: "completionApprovalRole",
+    from: "awaiting_management_completion", to: "completed", roleKey: "completionApprovalRole", permissionKey: "completionApprovalPermission",
     decision: "approved", status: "completed",
   },
   management_return_to_execution: {
-    from: "awaiting_management_completion", to: "execution", roleKey: "completionApprovalRole",
+    from: "awaiting_management_completion", to: "execution", roleKey: "completionApprovalRole", permissionKey: "completionApprovalPermission",
     decision: "returned", status: "in_progress",
   },
 });
@@ -44,11 +44,14 @@ function canTransition(from, to) {
   return Boolean(TRANSITIONS[from]?.has(to));
 }
 
-function canPerformWorkflowAction({ action, stage, role, userId, assignedTo, config = {} }) {
+function canPerformWorkflowAction({ action, stage, permissions = [], userId, assignedTo, config = {} }) {
   const rule = WORKFLOW_ACTIONS[action];
   if (!rule || rule.from !== stage) return false;
-  if (rule.assignee) return Boolean(userId && userId === assignedTo);
-  return Boolean(rule.roleKey && config[rule.roleKey] === role);
+  if (rule.assignee) return Boolean(userId && userId === assignedTo && permissions.includes("work-orders.progress"));
+  if (rule.permissionKey && config[rule.permissionKey]) {
+    return permissions.includes(config[rule.permissionKey]);
+  }
+  return false;
 }
 
 function availableWorkflowActions(context) {

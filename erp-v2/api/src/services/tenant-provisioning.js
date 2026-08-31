@@ -51,7 +51,10 @@ async function provisionTenant(client, input) {
             ($1,'records-officer','Бичиг хэргийн ажилтан',true),
             ($1,'archivist','Архивын ажилтан',true),
             ($1,'safety-officer','ХАБЭА хариуцагч',true),
-            ($1,'industry-manager','Салбарын тохиргоо хариуцагч',true)
+            ($1,'industry-manager','Салбарын тохиргоо хариуцагч',true),
+            ($1,'work-order-manager','Ажлын урсгалын удирдагч',true),
+            ($1,'work-order-safety-reviewer','Ажлын ХАБЭА баталгаажуулагч',true),
+            ($1,'work-order-coordinator','Ажлын зохицуулагч',true)
      ON CONFLICT DO NOTHING`,
     [organization.id]
   );
@@ -74,13 +77,16 @@ async function provisionTenant(client, input) {
         OR (r.code='archivist' AND p.code='archive.manage')
         OR (r.code='safety-officer' AND p.code IN('safety.manage','safety.investigate'))
         OR (r.code='industry-manager' AND p.code IN('industry.manage','builder.manage'))
+        OR (r.code='work-order-manager' AND p.code IN('work-orders.read-all','work-orders.create','work-orders.assign','work-orders.progress','work-orders.scope.manage','work-orders.workflow.approve','work-orders.exception.decide'))
+        OR (r.code='work-order-safety-reviewer' AND p.code IN('work-orders.read-all','work-orders.create','work-orders.progress','work-orders.scope.manage','work-orders.workflow.safety'))
+        OR (r.code='work-order-coordinator' AND p.code IN('work-orders.create','work-orders.assign','work-orders.progress','work-orders.scope.manage'))
       )
      ON CONFLICT DO NOTHING`,
     [organization.id]
   );
   await client.query(
     `INSERT INTO user_roles(organization_id,user_id,role_id)
-     SELECT $1,$2,id FROM organization_roles WHERE organization_id=$1 AND code='owner'
+     SELECT $1,$2,id FROM organization_roles WHERE organization_id=$1 AND code IN('owner','work-order-manager')
      ON CONFLICT DO NOTHING`,
     [organization.id, owner.rows[0].id]
   );

@@ -23,6 +23,31 @@ const updateSchema = z.object({
 }).refine(value => Object.keys(value).length > 0, "No changes supplied");
 const resetSchema = z.object({ password: z.string().min(12).max(200) });
 
+function managedRoleCodes(role) {
+  const codes = [["director", "chief_engineer", "accountant", "hr"].includes(role) ? "manager" : "member"];
+  if (role === "hr") codes.push("hr-officer");
+  if (role === "safety") codes.push("safety-officer", "work-order-safety-reviewer");
+  if (["director", "chief_engineer"].includes(role)) codes.push("work-order-manager");
+  if (["engineer", "electric", "camera_engineer"].includes(role)) codes.push("work-order-coordinator");
+  return codes;
+}
+
+async function syncManagedRoles(client, organizationId, userId, role) {
+  await client.query(
+    `DELETE FROM user_roles ur USING organization_roles r
+      WHERE ur.organization_id=$1 AND ur.user_id=$2
+        AND r.organization_id=ur.organization_id AND r.id=ur.role_id
+        AND r.code IN('administrator','manager','member','hr-officer','safety-officer','work-order-manager','work-order-safety-reviewer','work-order-coordinator')`,
+    [organizationId,userId]
+  );
+  await client.query(
+    `INSERT INTO user_roles(organization_id,user_id,role_id)
+     SELECT $1,$2,id FROM organization_roles WHERE organization_id=$1 AND code=ANY($3::text[])
+     ON CONFLICT DO NOTHING`,
+    [organizationId,userId,managedRoleCodes(role)]
+  );
+}
+
 router.use(authenticate);
 
 router.get("/assignable", asyncHandler(async (req, res) => {
@@ -71,6 +96,7 @@ router.post("/", asyncHandler(async (req, res) => {
        RETURNING id,email,username,full_name,role,active,created_at,employee_id`,
       [req.user.organization_id,value.email,value.username,passwordHash,value.fullName,value.role]
     );
+    await syncManagedRoles(client,req.user.organization_id,result.rows[0].id,value.role);
     await client.query(
       `INSERT INTO audit_logs(organization_id,user_id,action,entity_type,entity_id,detail,ip_address)
        VALUES ($1,$2,'user.create','user',$3,$4::jsonb,$5)`,
@@ -134,23 +160,7 @@ router.patch("/:id", asyncHandler(async (req, res) => {
     if (parsed.data.role) {
       // Job title and application authority are different domains. Assigning a
       // director job role must never grant the tenant-owner system role.
-      const baselineRole = ["director", "chief_engineer", "accountant", "hr"].includes(next.role) ? "manager" : "member";
-      await client.query(
-        `DELETE FROM user_roles ur USING organization_roles r
-          WHERE ur.organization_id=$1 AND ur.user_id=$2
-            AND r.organization_id=ur.organization_id AND r.id=ur.role_id
-            AND r.code IN('administrator','manager','member','hr-officer','safety-officer')`,
-        [req.user.organization_id, id.data]
-      );
-      const roleCodes = [baselineRole];
-      if (next.role === "hr") roleCodes.push("hr-officer");
-      if (next.role === "safety") roleCodes.push("safety-officer");
-      await client.query(
-        `INSERT INTO user_roles(organization_id,user_id,role_id)
-         SELECT $1,$2,id FROM organization_roles WHERE organization_id=$1 AND code=ANY($3::text[])
-         ON CONFLICT DO NOTHING`,
-        [req.user.organization_id, id.data, roleCodes]
-      );
+      await syncManagedRoles(client,req.user.organization_id,id.data,next.role);
     }
     await client.query(
       `INSERT INTO audit_logs(organization_id,user_id,action,entity_type,entity_id,detail,ip_address)

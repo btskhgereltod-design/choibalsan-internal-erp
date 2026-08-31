@@ -1,6 +1,6 @@
 # Legacy Authorization Usage Audit V1
 
-Status: accepted baseline audit; no runtime authorization changed by this file
+Status: accepted baseline audit; Work Orders cut over at migration `0064`
 
 Audited: 2026-08-31 at commit `16aae69`
 
@@ -58,8 +58,11 @@ remain explicit debt until each consumer is migrated and verified.
   edit behavior.
 - `api/src/routes/dashboard.js` combines system roles/permissions with fixed
   director, chief engineer, accountant, and HR codes.
-- `api/src/routes/work-orders.js` uses fixed manager/broad-reader role sets,
-  department/assignee checks, and role-based workflow policy.
+- `api/src/routes/work-orders.js` no longer authorizes through fixed legacy
+  role sets. Migration `0064` and `work-order-authority.js` enforce explicit
+  permissions plus department/assignee/creator context. Workflow role keys
+  remain stored only as inert compatibility metadata and are not consulted for
+  authorization or notification routing.
 - `api/src/routes/business-modules.js` includes fixed role checks in maintenance
   behavior.
 - `api/src/routes/attachments.js` mixes explicit sensitive permissions with
@@ -123,6 +126,18 @@ business outcome without requiring a universal workflow rewrite.
 IoT is deliberately not the first migration. Its command precedence remains
 Emergency > Manual > Weather > Schedule > Default throughout all stages.
 
+### Work Order cutover result — 2026-08-31
+
+- Stages A–C are implemented for Work Order routes and workflow actions.
+- Existing active legacy users were mapped once to explicit domain roles;
+  changing a compatible account role now synchronizes those assignments.
+- The API and tenant UI consult live permissions. Legacy labels remain in
+  responses for display and in policy JSON for rollback compatibility, but a
+  configured permission key takes precedence and a matching legacy role alone
+  is denied.
+- Attachment authorization and other routes listed above remain migration debt.
+  IoT authorization was not changed.
+
 ## Exit criteria for each migrated domain
 
 - No server authorization decision in the domain depends on a job-title-style
@@ -134,4 +149,3 @@ Emergency > Manual > Weather > Schedule > Default throughout all stages.
 - Consequential state transitions produce attributable append-only evidence.
 - Compatibility, migration, rollback, and production verification paths are
   documented and tested.
-

@@ -1,7 +1,7 @@
 # Asset Maintenance Vertical Slice Contract V1
 
-Status: accepted implementation and pilot contract; runtime completion is
-planned
+Status: accepted implementation and pilot contract; Work Order authority is
+implemented, remaining runtime completion is planned
 
 Accepted: 2026-08-31
 
@@ -81,6 +81,12 @@ Every consequential action records or can resolve:
 - time and append-only evidence.
 
 ## Authority model
+
+Implementation status: **partial**. Migration `0064` implements explicit
+permissions for Work Order read-all, create, assignment, progress, measurable
+scope updates, safety review, management approval, and exception decisions.
+Material request/issue, sensitive attachment, and cost-evidence authority remain
+to be completed in later stages of this contract.
 
 Exact permission codes are finalized during implementation after inventorying
 existing catalog entries. The policy must distinguish at least:
@@ -178,4 +184,3 @@ Implementation does not authorize production deployment. Production requires
 an explicit request, verified backup, migration rehearsal, compatible rollback,
 service health, authorization matrix, tenant-isolation checks, and evidence
 that existing work orders and inventory balances remain intact.
-

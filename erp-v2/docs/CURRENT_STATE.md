@@ -67,13 +67,37 @@ validated at enterprise scale.
 - `LEGACY_AUTHORIZATION_USAGE_AUDIT_V1.md` records that tenant RBAC,
   permissions, optional employee login, and job-workspace access are implemented
   while fixed `users.role` / `employees.job_role` checks remain compatibility
-  debt in several operational routes. No runtime authorization was changed by
-  accepting the audit.
+  debt in several operational routes.
 - `ASSET_MAINTENANCE_VERTICAL_SLICE_CONTRACT_V1.md` is the approved first
   end-to-end proof contract. Runtime completion remains planned: implementation
   must reuse existing employee, structure, asset/operational-object, work-order,
   approval, inventory, measured-outcome, attachment, finance-integration, and
   audit foundations before it can be marked implemented.
+
+## Work Order explicit-authority cutover
+
+- Migration `0064` adds eight tenant-scoped Work Order permissions and three
+  domain roles: `work-order-manager`, `work-order-safety-reviewer`, and
+  `work-order-coordinator`. Existing active users are seeded from legacy roles
+  once for compatibility; subsequent Work Order authorization reads live RBAC
+  permissions, not the legacy job-role label.
+- Work-order create, assignment, ordinary progress, scoped-outcome updates,
+  safety/management workflow approval, exception decisions, history, and notes
+  now enforce explicit permission plus the existing department, creator, or
+  assignee context. Workflow policies carry permission keys while retaining
+  their old role keys only as inert compatibility metadata; authorization and
+  workflow notification routing fail closed without a permission key.
+- The tenant UI now renders assignment and status controls from server-derived
+  `can_assign`, `available_statuses`, and `available_actions`; hiding a control
+  is not the authorization boundary. Account creation and legacy-role changes
+  synchronize the equivalent domain role without granting tenant ownership.
+- The Asset Maintenance vertical slice is therefore **partial**: its Work Order
+  authorization milestone is implemented, while material request/issue,
+  consumption trace, attachment authority unification, resource history, and
+  deterministic end-to-end measures remain planned.
+- All 241 repository tests pass. The local Docker stack applied schema `0064`;
+  API and tenant web are healthy, and the served UI uses server authority
+  fields. This is local verification only and is not a production deployment.
 
 ## Next chat start
 
