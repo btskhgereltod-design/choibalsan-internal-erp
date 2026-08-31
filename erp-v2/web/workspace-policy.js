@@ -11,11 +11,11 @@
   ]);
   const setupViews=new Set(["dashboard","employees","users","settings","billing","audit","connectors"]);
   const nestedSetupViews=new Set(["structure"]);
-  const ownerOversightViews=new Set(["work-orders","lighting","camera","executive","reports"]);
+  const ownerOversightViews=new Set(["work-orders","engineering","lighting","camera","executive","reports"]);
   const primaryAdminOnlyViews=new Set(["settings","users","audit"]);
   const roleViews={
     director:["dashboard","work-orders","lighting","camera","executive","reports"],
-    chief_engineer:["dashboard","assets","work-orders","lighting","camera","maintenance","safety","reports","mobile"],
+    chief_engineer:["dashboard","assets","work-orders","engineering","lighting","camera","maintenance","safety","reports","mobile"],
     accountant:["dashboard","finance","inventory","procurement","reports"],
     hr:["dashboard","hr","attendance"],
     storekeeper:["dashboard","inventory","procurement","assets"],

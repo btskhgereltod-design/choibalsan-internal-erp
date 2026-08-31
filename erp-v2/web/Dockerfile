@@ -56,6 +56,8 @@ COPY builder-ai.css /usr/share/nginx/html/builder-ai.css
 COPY builder.js /usr/share/nginx/html/builder.js
 COPY lighting.js /usr/share/nginx/html/lighting.js
 COPY camera.js /usr/share/nginx/html/camera.js
+COPY engineering.css /usr/share/nginx/html/engineering.css
+COPY engineering.js /usr/share/nginx/html/engineering.js
 COPY workspace-policy.js /usr/share/nginx/html/workspace-policy.js
 COPY employee-access.js /usr/share/nginx/html/employee-access.js
 COPY employee-access.css /usr/share/nginx/html/employee-access.css

@@ -194,11 +194,29 @@ validated at enterprise scale.
   warnings rather than being assigned to a fabricated person. Precise employee
   GPS, legacy signature codes, upload paths, credentials, and private HR fields
   were not copied.
-- All 261 repository tests pass. Re-running the connected-operations importer
+- Migration `0069` and the tenant UI add an implemented Chief Engineer
+  Operations Center over the existing Work Order truth. It does not create a
+  second lighting/camera work registry. An authorized work-order manager can
+  see lighting and camera together, then separate them by domain; identify
+  unassigned, overdue, material-waiting, safety-waiting, and management-waiting
+  work; inspect scope/evidence/resource signals; open the attributable history;
+  and execute only the workflow actions returned by the server. Current pilot
+  classification resolves the 106 imported Work Orders as 77 lighting and 29
+  camera records (the 29 include the complete current camera-classified set,
+  not a claim that every one originated in the last camera import).
+- The same center stores only the chief engineer's monthly summary, blockers,
+  resource needs, next-period direction, and conclusion in a tenant-scoped
+  review record. Numeric operations data remains derived from Work Orders.
+  Saving commentary requires explicit workflow-approval permission and appends
+  an audit record. The two reviewed legacy monthly-report rows contained blank
+  commentary, so no empty legacy notes were copied or presented as evidence.
+- All 264 repository tests pass. Re-running the connected-operations importer
   creates no duplicate objects, incidents, snapshots, risks, documents,
   acknowledgements, approvals, or visible approval events. The local API, web,
-  and database containers are healthy; this is a local pilot deployment, not a
-  production release.
+  and database containers are healthy. Migration `0069`, the authenticated
+  engineering overview (106 items), and served engineering JavaScript were
+  smoke-tested locally; this is a local pilot deployment, not a production
+  release.
 
 ## Next chat start
 

@@ -6,11 +6,11 @@ const policy=require("../../web/workspace-policy.js");
 const fs=require("node:fs"),path=require("node:path");
 const webFile=name=>fs.readFileSync(path.join(__dirname,"../../web",name),"utf8");
 
-const viewModules={assets:"assets","work-orders":"work-orders",lighting:"lighting-operations",camera:"camera-operations",map:"map",fleet:"fleet",structure:"structure"};
+const viewModules={assets:"assets","work-orders":"work-orders",engineering:"work-orders",lighting:"lighting-operations",camera:"camera-operations",map:"map",fleet:"fleet",structure:"structure"};
 
 test("primary admin keeps setup access and also receives the job-role workspace",()=>{
   const views=policy.allowedViews({role:"director",systemRoles:["owner"],permissions:["audit.read"],enabledModules:["structure","assets","work-orders","map","fleet"],viewModules});
-  assert.deepEqual(new Set(views),new Set(["dashboard","assets","work-orders","executive","reports","employees","users","settings","billing","audit","connectors"]));
+  assert.deepEqual(new Set(views),new Set(["dashboard","assets","work-orders","engineering","executive","reports","employees","users","settings","billing","audit","connectors"]));
 });
 
 test("primary admin sees all enabled standard organization workspaces",()=>{
@@ -65,6 +65,7 @@ test("advanced product surfaces stay out of standard role workspaces",()=>{
   assert.equal(views.includes("builder"),false);
   assert.equal(views.includes("assets"),true);
   assert.equal(views.includes("work-orders"),true);
+  assert.equal(views.includes("engineering"),true);
 });
 
 test("disabled modules do not appear even when the job role normally uses them",()=>{

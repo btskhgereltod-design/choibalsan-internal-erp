@@ -40,6 +40,7 @@ function createApp() {
   app.use("/api/audit", require("./routes/audit"));
   app.use("/api/assets", require("./routes/assets"));
   app.use("/api/work-orders", require("./routes/work-orders"));
+  app.use("/api/engineering", require("./routes/engineering"));
   app.use("/api/lighting", require("./routes/lighting"));
   app.use("/api/camera", require("./routes/camera"));
   app.use("/api/map", require("./routes/map"));
