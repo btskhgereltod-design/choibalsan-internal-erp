@@ -78,6 +78,10 @@ validated at enterprise scale.
   camera engineer, and worker). Tenant ownership or chief-engineer oversight
   does not add it automatically, and its client view shows only work assigned
   to the signed-in person. Approval remains in the governed work board.
+- Saved-token startup waits for every deferred workspace policy to install
+  before loading the session. A returning user therefore lands directly on the
+  authorized organization home instead of briefly rendering Builder until the
+  first navigation click.
 
 ## Unreleased local work — Market guest catalog interaction
 

@@ -165,6 +165,12 @@ test("connectors are nested under settings instead of the primary sidebar",()=>{
   assert.match(connectors,/returnPath:"\/\?view=settings&settings_tab=integrations"/);
 });
 
+test("saved-token startup waits until all deferred workspace policies are installed",()=>{
+  const app=webFile("app.js");
+  assert.match(app,/if\(state\.token\)window\.addEventListener\("DOMContentLoaded",\(\)=>loadSession\(\),\{once:true\}\)/);
+  assert.doesNotMatch(app,/if\(state\.token\)loadSession\(\)/);
+});
+
 test("organization setup visibly summarizes the approved structure",()=>{
   const blueprint=webFile("organization-blueprint.js");
   assert.match(blueprint,/function blueprintCurrentStructure\(\)/);
