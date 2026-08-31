@@ -133,7 +133,7 @@ test("camera workspace follows tenant enablement and camera role access",()=>{
 test("tenant subscription workspace uses the unambiguous package and billing label",()=>{
   const shell=webFile("index.html"),modules=webFile("business-modules.js");
   assert.match(shell,/id="billingNav"[^>]*><span>[^<]*<\/span>Багц ба төлбөр<\/button>/);
-  assert.match(modules,/billing:"Багц ба төлбөр"/);
+  assert.match(modules,/billing\s*:\s*"Багц ба төлбөр"/);
   assert.doesNotMatch(shell,/id="billingNav"[^>]*><span>[^<]*<\/span>Үйлчилгээний эрх<\/button>/);
 });
 

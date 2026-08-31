@@ -14,7 +14,7 @@ const uuid = z.string().uuid();
 const optionalUuid = uuid.nullable().optional();
 const management = requireRoles("director", "chief_engineer");
 const primaryAdmin = requireSystemRoles("owner");
-const inventoryEditors = requireRoles("director", "chief_engineer", "storekeeper", "accountant");
+const inventoryEditors = requireRoles("director", "chief_engineer", "storekeeper");
 const procurementApprovers = requireRoles("director", "chief_engineer", "accountant");
 const text = (max = 250) => z.string().trim().min(1).max(max);
 const emptyText = (max = 2000) => z.string().trim().max(max).default("");

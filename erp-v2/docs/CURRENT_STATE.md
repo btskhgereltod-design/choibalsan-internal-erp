@@ -6,6 +6,30 @@ This document answers one question: **what exists in the repository now?** It
 does not claim that every implemented foundation is complete or production-
 validated at enterprise scale.
 
+## Choibalsan accounting workspace
+
+- The local Choibalsan pilot now has a permission-backed **Санхүү, бүртгэл**
+  workspace with overview, cash journal, payables, receivables, Work Order
+  material reconciliation, budget/performance, fixed-asset reference, and
+  reporting tabs. These reuse current OVERVA finance, asset, inventory, and
+  Work Order truth instead of duplicating the legacy ERP screens.
+- Migration `0070` adds tenant-scoped obligations, settlement history, and
+  material accounting reviews. Their decision evidence is append-only and all
+  writes also create audit records. Migration `0071` enables this module only
+  for the reviewed `choibalsan-hugjil` pilot tenant.
+- Storekeeper and accountant authority are separate: the storekeeper owns
+  stock creation and movement plus approved Work Order issue; the accountant
+  receives `finance.read`, `finance.manage`, and `finance.reconcile`, but no
+  stock-movement authority. Issued Work Order material appears in the
+  accounting queue without changing warehouse quantity.
+- The separate legacy SQLite source was inspected read-only. Its cash journal,
+  payables, receivables, materials, budget, fixed-asset ledger, and report
+  concepts informed the workspace, but no historical financial amounts or
+  hard-coded budgets were copied. Historical values require reviewed import.
+- All 269 repository tests pass. Local Docker applied migrations `0070` and
+  `0071`; API and tenant web are healthy, and an authenticated finance overview
+  smoke check passes. This is local verification, not production deployment.
+
 ## Unreleased local work — Market guest catalog interaction
 
 - The public Market sample catalog now has a separate responsive interaction
