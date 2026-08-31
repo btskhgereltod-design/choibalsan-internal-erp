@@ -63,6 +63,7 @@ COPY employee-access.js /usr/share/nginx/html/employee-access.js
 COPY employee-access.css /usr/share/nginx/html/employee-access.css
 COPY standard-workspace.js /usr/share/nginx/html/standard-workspace.js
 COPY standard-workspace.css /usr/share/nginx/html/standard-workspace.css
+COPY organization-assets /usr/share/nginx/html/organization-assets
 COPY organization-blueprint.js /usr/share/nginx/html/organization-blueprint.js
 COPY organization-blueprint.css /usr/share/nginx/html/organization-blueprint.css
 COPY structure-smart-import.js /usr/share/nginx/html/structure-smart-import.js

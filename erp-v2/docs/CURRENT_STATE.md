@@ -6,6 +6,38 @@ This document answers one question: **what exists in the repository now?** It
 does not claim that every implemented foundation is complete or production-
 validated at enterprise scale.
 
+## Tenant-branded organization home
+
+- The organization home now uses tenant-owned name, short name, logo, primary
+  and accent colors, welcome text, and optional banner image. A tenant without
+  custom media receives a neutral gradient and initials; Choibalsan Hugjil is
+  configured with its reviewed legacy logo and city panorama only in that
+  tenant's settings. The pilot imagery is not a universal OVERVA theme.
+- The earlier artificial daily score, organization-size badge, long product
+  guidance, and duplicate quick-action panel have been removed. The main view
+  is organized as role/module-filtered operations, management resource and
+  finance balances, and decision signals backed by live tenant records.
+- Current operational cards distinguish recent Work Orders from the imported
+  historical backlog, show effective attendance, camera availability,
+  lighting objects/incidents, safety risks, and the asset master. Management
+  cards add inventory value, outstanding payables/receivables, and current
+  month cash activity. A month with no transaction is stated explicitly rather
+  than presented as an unexplained zero.
+- Inventory alerts now require a configured positive minimum and an actual
+  balance below that minimum. Imported items whose minimum remains zero are no
+  longer falsely classified as low-stock alerts; missing threshold setup stays
+  data-quality context rather than an operational emergency.
+- Migration `0077` adds the two bounded presentation settings and configures
+  the Choibalsan pilot assets. Settings changes remain owner-only and audited;
+  organization data, authorization, and assets remain tenant-scoped.
+- Production deployment was verified with a live authenticated dashboard read:
+  18/21 attendance, 19 recent and 87 historical open Work Orders, 236/302
+  available cameras, 451 lighting objects with 206 open incidents, 24 open
+  safety risks, and 466 master assets. Public app, API health, banner, and
+  logo endpoints returned HTTP 200. All 285 repository tests pass. The verified
+  pre-deployment and post-deployment backups are `overva-20260831T071122Z` and
+  `overva-20260831T071354Z`.
+
 ## Choibalsan legacy ERP production reconciliation
 
 - The reviewed legacy SQLite source has now been reconciled into the production

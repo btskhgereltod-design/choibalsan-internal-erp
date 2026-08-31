@@ -7,7 +7,7 @@ const { getPool } = require("../db");
 const { asyncHandler } = require("../utils/async-handler");
 const router = express.Router();
 router.get("/current", authenticate, asyncHandler(async (req, res) => {
-  const result=await getPool().query(`SELECT short_name,logo_url,primary_color,accent_color FROM organization_settings WHERE organization_id=$1`,[req.user.organization_id]);
+  const result=await getPool().query(`SELECT short_name,logo_url,home_banner_url,home_welcome_text,primary_color,accent_color FROM organization_settings WHERE organization_id=$1`,[req.user.organization_id]);
   const builder=await getPool().query(`SELECT EXISTS(SELECT 1 FROM builder_builds WHERE organization_id=$1 AND status='applied') AS configured`,[req.user.organization_id]);
   res.json({
     organization: {

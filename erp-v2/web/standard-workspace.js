@@ -36,31 +36,15 @@ setView=function(view){
 };
 
 function dashboardValue(metric){return metric.format==="money"?money(metric.value):esc(metric.value)}
-function dashboardStatus(data){
-  if(data.health.score>=90)return{title:"Үйл ажиллагаа хэвийн байна",note:"Ноцтой шийдээгүй асуудал илрээгүй.",tone:"good"};
-  if(data.health.score>=70)return{title:"Анхаарах зүйл байна",note:"Эрэмбэлсэн асуудлуудаас эхэлж шийдвэрлэнэ үү.",tone:"watch"};
-  return{title:"Шуурхай арга хэмжээ шаардлагатай",note:"Ноцтой болон хугацаа хэтэрсэн асуудлыг эхэлж шийднэ үү.",tone:"danger"};
-}
-function dashboardScaleNote(scale){
-  if(scale.code==="micro")return"OVERVA одоогоор зөвхөн зайлшгүй мэдээллийг харуулна. Танай үйл ажиллагаа өсөхөд дэлгэрэнгүй хяналт автоматаар нэмэгдэнэ.";
-  if(scale.code==="small")return"Өдөр тутмын шийдвэрт хэрэгтэй үндсэн үзүүлэлт, хүлээгдэж буй ажлуудыг төвлөрүүлэв.";
-  if(scale.code==="medium")return"Хэлтэс, ажлын урсгал болон байгууллагын хэмжээнд анхаарах үзүүлэлтүүдийг нэгтгэв.";
-  return"Олон нэгжийн мэдээллийг нэгтгэн, удирдлагын шийдвэрт нөлөөлөх асуудлыг эрэмбэлэв.";
-}
 function organizationHomeBar(active="today",generatedAt=new Date().toISOString()){
   const organization=state.organization||{},settings=organization.settings||{},name=organization.name||"Байгууллага",shortName=settings.short_name||name;
   const logo=settings.logo_url?`<img src="${esc(settings.logo_url)}" alt="" onerror="this.remove()">`:`<b>${esc(initials(shortName))}</b>`;
+  const banner=settings.home_banner_url?`<img class="organization-banner" src="${esc(settings.home_banner_url)}" alt="" onerror="this.remove()">`:"";
+  const primary=/^#[0-9a-f]{6}$/i.test(settings.primary_color||"")?settings.primary_color:"#123e6f",accent=/^#[0-9a-f]{6}$/i.test(settings.accent_color||"")?settings.accent_color:"#176d78";
+  const welcome=settings.home_welcome_text||"Өнөөдрийн ажлаа байгууллагынхаа бодит мэдээлэлтэй нэг дороос харна.";
   const today=new Intl.DateTimeFormat("mn-MN",{year:"numeric",month:"long",day:"numeric",weekday:"long"}).format(new Date(generatedAt));
   const analysisAvailable=(state.allowedViews||[]).includes("executive");
-  return`<section class="organization-home"><div class="organization-identity"><div class="organization-logo">${logo}</div><div><span>ТАНЫ БАЙГУУЛЛАГЫН ОРЧИН</span><h1>${esc(name)}</h1><p>${esc(today)}</p></div></div><div class="organization-live"><span><i></i> Систем онлайн</span><small>${dateTime(generatedAt)} шинэчлэгдсэн</small></div></section><nav class="home-view-switch" aria-label="Байгууллагын нүүрийн харагдац"><button class="${active==="today"?"active":""}" data-go="dashboard"><b>Өнөөдөр</b><small>Яг одоо юу болж байна?</small></button>${analysisAvailable?`<button class="${active==="analysis"?"active":""}" data-go="executive"><b>Чиг хандлага</b><small>Юу өөрчлөгдөж, юуг шийдэх вэ?</small></button>`:""}</nav>`;
-}
-function dashboardQuickActions(){
-  const allowed=new Set(state.allowedViews||[]),actions=[];
-  if(allowed.has("work-orders"))actions.push(`<button class="home-action" data-open="workOrderDialog"><b>＋</b><span><strong>Шинэ ажил бүртгэх</strong><small>Хийх ажлыг хариуцагчтай үүсгэнэ</small></span></button>`);
-  if(allowed.has("assets"))actions.push(`<button class="home-action" data-open="assetDialog"><b>◇</b><span><strong>Хөрөнгө бүртгэх</strong><small>Тоног төхөөрөмж, эд хөрөнгө нэмнэ</small></span></button>`);
-  if(allowed.has(state.peopleMasterView||"employees"))actions.push(`<button class="home-action" data-go="${esc(state.peopleMasterView||"employees")}"><b>♙</b><span><strong>Ажилтны мэдээлэл</strong><small>Хүний нөөцийн нэгдсэн бүртгэл рүү орно</small></span></button>`);
-  if(allowed.has("settings"))actions.push(`<button class="home-action" data-go="settings"><b>⚙</b><span><strong>Байгууллагаа тохируулах</strong><small>Бүтэц, эрх болон ажлын орчноо удирдана</small></span></button>`);
-  return actions.slice(0,4).join("");
+  return`<section class="organization-home" style="--org-primary:${primary};--org-accent:${accent}">${banner}<div class="organization-home-shade"></div><div class="organization-identity"><div class="organization-logo">${logo}</div><div><span>МАНАЙ БАЙГУУЛЛАГЫН ОРЧИН</span><h1>${esc(name)}</h1><p class="organization-welcome">${esc(welcome)}</p><small>${esc(today)}</small></div></div><div class="organization-live"><span><i></i> Систем онлайн</span><small>${dateTime(generatedAt)} шинэчлэгдсэн</small><button class="hero-refresh" id="unifiedDashboardRefresh" aria-label="Мэдээллийг шинэчлэх">↻ Шинэчлэх</button></div></section><nav class="home-view-switch" aria-label="Байгууллагын нүүрийн харагдац"><button class="${active==="today"?"active":""}" data-go="dashboard"><b>Өнөөдөр</b><small>Яг одоо юу болж байна?</small></button>${analysisAvailable?`<button class="${active==="analysis"?"active":""}" data-go="executive"><b>Чиг хандлага</b><small>Юу өөрчлөгдөж, юуг шийдэх вэ?</small></button>`:""}</nav>`;
 }
 function setupProgress(data){
   if(data.setup.complete||!workspacePolicy.isPrimaryAdmin(state.systemRoles))return"";
@@ -74,14 +58,13 @@ function unifiedDashboardView(){
     if(!state.unifiedDashboardLoading)queueMicrotask(loadUnifiedDashboard);
     return`${header("БАЙГУУЛЛАГЫН НҮҮР","Таны байгууллагын өнөөдрийн орчин","Шаардлагатай мэдээллийг нэгтгэж байна...")}<div class="unified-loading"><i></i><span>Өнөөдрийн байдлыг ачаалж байна</span></div>`;
   }
-  const status=dashboardStatus(d),metricLimit=d.scale.code==="micro"?4:d.scale.code==="small"?6:8,metrics=d.metrics.slice(0,metricLimit),alerts=d.alerts.slice(0,d.scale.code==="micro"?4:d.scale.code==="small"?6:10);
+  const operations=(d.operations||d.metrics||[]).slice(0,8),resources=(d.resources||[]).slice(0,4),alerts=d.alerts.slice(0,8);
   return`${organizationHomeBar("today",d.generatedAt)}
     ${setupProgress(d)}
-    <section class="unified-hero ${status.tone}"><div class="unified-score"><strong>${d.health.score}</strong><small>ӨНӨӨДӨР</small></div><div class="unified-hero-copy"><span class="scale-badge">${esc(d.scale.label)}</span><h2>${status.title}</h2><p>${status.note}</p><small>${esc(d.health.basis)}</small></div><button class="hero-refresh" id="unifiedDashboardRefresh" aria-label="Өнөөдрийн мэдээллийг шинэчлэх">↻ Шинэчлэх</button></section>
-    <p class="compact-guidance">${dashboardScaleNote(d.scale)}</p>
-    <div class="home-section-title"><div><span>ӨНӨӨДРИЙН БАЙДАЛ</span><h2>Нэг хараад ойлгох гол үзүүлэлтүүд</h2></div><small>Дэлгэрэнгүйг харахын тулд үзүүлэлт дээр дарна уу.</small></div>
-    <div class="unified-metrics">${metrics.map(item=>`<button class="unified-metric ${esc(item.tone||"blue")}" data-go="${esc(item.view||"dashboard")}"><span>${esc(item.label)}</span><strong>${dashboardValue(item)}</strong><small>${esc(item.note||"")}</small></button>`).join("")}</div>
-    <div class="unified-layout"><section class="panel unified-alerts"><div class="panel-head"><div><span class="panel-kicker">ШИЙДЭХ АЖИЛ</span><h2>Одоо анхаарах зүйл</h2></div><span>${d.alerts.length} дохио</span></div>${alerts.length?alerts.map(item=>`<button class="unified-alert ${esc(item.level)}" data-go="${esc(item.view||"dashboard")}"><i></i><span><strong>${esc(item.message)}</strong><small>${esc(item.module)}</small></span><b>→</b></button>`).join(""):empty("Өнөөдөр анхааруулга алга","Одоогийн мэдээллээр шуурхай шийдвэрлэх асуудал илрээгүй.")}</section><section class="panel home-actions"><div class="panel-head"><div><span class="panel-kicker">ШУУРХАЙ ҮЙЛДЭЛ</span><h2>Ажлаа эндээс эхлүүлнэ</h2></div></div><div class="home-action-list">${dashboardQuickActions()}</div></section></div>`;
+    <div class="home-section-title"><div><span>ӨНӨӨДРИЙН НЭГДСЭН БАЙДАЛ</span><h2>Үйл ажиллагаа</h2></div><small>Дэлгэрэнгүйг харахын тулд үзүүлэлт дээр дарна уу.</small></div>
+    <div class="unified-metrics">${operations.map(item=>`<button class="unified-metric ${esc(item.tone||"blue")}" data-go="${esc(item.view||"dashboard")}"><span>${esc(item.label)}</span><strong>${dashboardValue(item)}</strong><small>${esc(item.note||"")}</small></button>`).join("")}</div>
+    ${resources.length?`<div class="home-section-title resource-title"><div><span>НӨӨЦ БА САНХҮҮ</span><h2>Удирдлагын бодит үлдэгдэл</h2></div></div><div class="unified-metrics unified-resources">${resources.map(item=>`<button class="unified-metric ${esc(item.tone||"blue")}" data-go="${esc(item.view||"dashboard")}"><span>${esc(item.label)}</span><strong>${dashboardValue(item)}</strong><small>${esc(item.note||"")}</small></button>`).join("")}</div>`:""}
+    <section class="panel unified-alerts"><div class="panel-head"><div><span class="panel-kicker">ШИЙДВЭР ШААРДАХ</span><h2>Одоо анхаарах зүйл</h2></div><span>${d.alerts.length} дохио</span></div>${alerts.length?alerts.map(item=>`<button class="unified-alert ${esc(item.level)}" data-go="${esc(item.view||"dashboard")}"><i></i><span><strong>${esc(item.message)}</strong><small>${esc(item.module)}</small></span><b>→</b></button>`).join(""):empty("Одоогоор шуурхай дохио алга","Бүртгэгдсэн бодит мэдээллээр яаралтай шийдвэрлэх зүйл илрээгүй.")}</section>`;
 }
 async function loadUnifiedDashboard(force=false){
   if(state.unifiedDashboardLoading||state.unifiedDashboard&&!force)return;

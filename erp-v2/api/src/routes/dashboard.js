@@ -10,10 +10,10 @@ router.use(authenticate);
 
 function organizationScale(employeeCount) {
   const count = Number(employeeCount || 0);
-  if (count <= 9) return { code: "micro", label: "Цомхон баг", mode: "essential" };
-  if (count <= 49) return { code: "small", label: "Өсөж буй байгууллага", mode: "focused" };
-  if (count <= 249) return { code: "medium", label: "Дунд байгууллага", mode: "departmental" };
-  return { code: "large", label: "Том байгууллага", mode: "enterprise" };
+  if (count <= 9) return { code: "micro", mode: "essential" };
+  if (count <= 49) return { code: "small", mode: "focused" };
+  if (count <= 249) return { code: "medium", mode: "departmental" };
+  return { code: "large", mode: "enterprise" };
 }
 
 function addAlert(alerts, condition, level, module, message, view) {
@@ -28,8 +28,9 @@ router.get("/overview", asyncHandler(async (req, res) => {
   const permissions = new Set(req.user.permissions || []);
   const management = systemRoles.has("owner") || systemRoles.has("administrator") || ["director", "chief_engineer", "accountant"].includes(req.user.role);
   const hrAccess = management || req.user.role === "hr" || permissions.has("hr.manage");
+  const engineeringAccess = management || ["engineer", "electric", "camera_engineer", "safety", "worker"].includes(req.user.role);
 
-  const [people, attendance, hrSignals, work, assets, inventory, maintenance, procurement, finance, setup] = await Promise.all([
+  const [people, attendance, hrSignals, work, assets, inventory, maintenance, procurement, finance, obligations, camera, lighting, safety, setup] = await Promise.all([
     pool.query(`SELECT count(*)::int AS total,
       count(*) FILTER(WHERE e.active)::int AS active,
       count(*) FILTER(WHERE NOT e.active)::int AS inactive,
@@ -53,20 +54,45 @@ router.get("/overview", asyncHandler(async (req, res) => {
     pool.query(`SELECT
       count(*) FILTER(WHERE status IN('new','assigned','in_progress','pending_review'))::int AS open,
       count(*) FILTER(WHERE assigned_to=$2 AND status IN('new','assigned','in_progress','pending_review'))::int AS mine,
-      count(*) FILTER(WHERE priority='emergency' AND status NOT IN('completed','cancelled'))::int AS emergency,
-      count(*) FILTER(WHERE due_at<now() AND status NOT IN('completed','cancelled'))::int AS overdue,
-      count(*) FILTER(WHERE assigned_to IS NULL AND status IN('new','assigned','in_progress','pending_review'))::int AS unassigned
+      count(*) FILTER(WHERE assigned_to=$2 AND created_at>=now()-interval '30 days' AND status IN('new','assigned','in_progress','pending_review'))::int AS mine_recent,
+      count(*) FILTER(WHERE priority='emergency' AND created_at>=now()-interval '30 days' AND status NOT IN('completed','cancelled'))::int AS emergency_recent,
+      count(*) FILTER(WHERE due_at<now() AND created_at>=now()-interval '30 days' AND status NOT IN('completed','cancelled'))::int AS overdue_recent,
+      count(*) FILTER(WHERE assigned_to IS NULL AND created_at>=now()-interval '30 days' AND status IN('new','assigned','in_progress','pending_review'))::int AS unassigned_recent,
+      count(*) FILTER(WHERE created_at>=now()-interval '30 days' AND status IN('new','assigned','in_progress','pending_review'))::int AS recent_open,
+      count(*) FILTER(WHERE created_at<now()-interval '30 days' AND status IN('new','assigned','in_progress','pending_review'))::int AS historical_open
       FROM work_orders WHERE organization_id=$1`, [org, req.user.id]),
-    pool.query(`SELECT count(*)::int AS total,count(*) FILTER(WHERE status='repair')::int AS repair FROM assets WHERE organization_id=$1 AND COALESCE(metadata->>'excludedFromAssetMaster','false')<>'true'`, [org]),
-    pool.query(`SELECT count(*) FILTER(WHERE total_quantity<=minimum_stock)::int AS low_stock,count(*)::int AS item_count
-      FROM (SELECT i.id,i.minimum_stock,COALESCE(sum(b.quantity),0) total_quantity FROM inventory_items i
-      LEFT JOIN inventory_balances b ON b.organization_id=i.organization_id AND b.item_id=i.id WHERE i.organization_id=$1 GROUP BY i.id) q`, [org]),
+    pool.query(`SELECT count(*)::int AS total,count(*) FILTER(WHERE status='repair')::int AS repair
+      FROM assets WHERE organization_id=$1 AND COALESCE(metadata->>'excludedFromAssetMaster','false')<>'true'`, [org]),
+    pool.query(`SELECT count(*) FILTER(WHERE minimum_stock>0 AND total_quantity<minimum_stock)::int AS low_stock,
+      count(*) FILTER(WHERE total_quantity>0)::int AS positive_stock,
+      count(*) FILTER(WHERE total_quantity=0)::int AS zero_stock,
+      count(*) FILTER(WHERE minimum_stock>0)::int AS minimum_configured,
+      count(*)::int AS item_count,COALESCE(sum(total_quantity*unit_cost),0)::numeric AS inventory_value
+      FROM (SELECT i.id,i.minimum_stock,i.unit_cost,COALESCE(sum(b.quantity),0) total_quantity FROM inventory_items i
+      LEFT JOIN inventory_balances b ON b.organization_id=i.organization_id AND b.item_id=i.id
+      WHERE i.organization_id=$1 GROUP BY i.id) q`, [org]),
     pool.query(`SELECT count(*) FILTER(WHERE active)::int AS active,count(*) FILTER(WHERE active AND next_due_date<CURRENT_DATE)::int AS overdue FROM maintenance_plans WHERE organization_id=$1`, [org]),
     pool.query(`SELECT count(*) FILTER(WHERE status='submitted')::int AS awaiting FROM purchase_requests WHERE organization_id=$1`, [org]),
     pool.query(`SELECT COALESCE(sum(amount) FILTER(WHERE transaction_type='income'),0)::numeric AS income,
       COALESCE(sum(amount) FILTER(WHERE transaction_type='expense'),0)::numeric AS expense,
-      COALESCE(sum(amount) FILTER(WHERE transaction_type='receivable'),0)::numeric AS receivable
+      count(*)::int AS transaction_count
       FROM finance_transactions WHERE organization_id=$1 AND transaction_date>=date_trunc('month',CURRENT_DATE)`, [org]),
+    pool.query(`SELECT
+      COALESCE(sum(total_amount-settled_amount) FILTER(WHERE direction='payable' AND status IN('open','partial')),0)::numeric AS payable_open,
+      COALESCE(sum(total_amount-settled_amount) FILTER(WHERE direction='receivable' AND status IN('open','partial')),0)::numeric AS receivable_open
+      FROM finance_obligations WHERE organization_id=$1`, [org]),
+    pool.query(`SELECT count(*)::int AS locations,
+      COALESCE(sum(CASE WHEN metadata->>'cameraCount' ~ '^[0-9]+$' THEN (metadata->>'cameraCount')::int ELSE 0 END),0)::int AS devices,
+      COALESCE(sum(CASE WHEN metadata->>'brokenCount' ~ '^[0-9]+$' THEN (metadata->>'brokenCount')::int ELSE 0 END),0)::int AS broken
+      FROM operational_objects WHERE organization_id=$1 AND domain='camera' AND status<>'retired'`, [org]),
+    pool.query(`SELECT
+      (SELECT count(*) FROM operational_objects WHERE organization_id=$1 AND domain='lighting' AND status<>'retired')::int AS objects,
+      count(*) FILTER(WHERE status IN('open','in_progress'))::int AS open_incidents,
+      COALESCE(sum(affected_quantity-resolved_quantity) FILTER(WHERE status IN('open','in_progress')),0)::int AS affected
+      FROM operational_incidents WHERE organization_id=$1 AND domain='lighting'`, [org]),
+    pool.query(`SELECT count(*) FILTER(WHERE status<>'closed')::int AS open_risks,
+      count(*) FILTER(WHERE status<>'closed' AND risk_score>=17)::int AS critical_risks
+      FROM safety_risks WHERE organization_id=$1`, [org]),
     pool.query(`SELECT
       (SELECT count(*) FROM departments WHERE organization_id=$1)::int AS departments,
       (SELECT count(*) FROM positions WHERE organization_id=$1)::int AS positions,
@@ -75,11 +101,11 @@ router.get("/overview", asyncHandler(async (req, res) => {
   ]);
 
   const data = {
-    people: people.rows[0], attendance: attendance.rows[0], hr: hrSignals.rows[0],
-    work: work.rows[0], assets: assets.rows[0], inventory: inventory.rows[0],
-    maintenance: maintenance.rows[0], procurement: procurement.rows[0], finance: finance.rows[0]
+    people: people.rows[0], attendance: attendance.rows[0], hr: hrSignals.rows[0], work: work.rows[0],
+    assets: assets.rows[0], inventory: inventory.rows[0], maintenance: maintenance.rows[0],
+    procurement: procurement.rows[0], finance: finance.rows[0], obligations: obligations.rows[0],
+    camera: camera.rows[0], lighting: lighting.rows[0], safety: safety.rows[0]
   };
-  const scale = organizationScale(data.people.active);
   const setupData = setup.rows[0];
   const setupSteps = [
     { code: "organization", label: "Байгууллагын мэдээлэл", complete: true, tab: "organization" },
@@ -88,32 +114,44 @@ router.get("/overview", asyncHandler(async (req, res) => {
     { code: "access", label: "Нэвтрэх эрх", complete: setupData.login_accounts > 0, tab: "access" }
   ];
 
-  const metrics = [];
-  if (management || hrAccess) metrics.push({ code: "people", label: "Идэвхтэй ажилтан", value: data.people.active, note: `${data.people.staffed_departments} нэгжид ажиллаж байна`, tone: "blue", view: hrAccess && enabled.has("hr") ? "hr" : "employees" });
-  if (enabled.has("attendance") && hrAccess) metrics.push({ code: "attendance", label: "Өнөөдрийн ирц", value: data.attendance.recorded, note: `${data.attendance.late} хоцорсон · ${data.attendance.absent} тасалсан · ${data.attendance.away} чөлөөтэй`, tone: Number(data.attendance.absent) || Number(data.attendance.late) ? "amber" : "green", view: "attendance" });
-  if (enabled.has("work-orders")) metrics.push({ code: "work", label: management ? "Нээлттэй ажил" : "Миний нээлттэй ажил", value: management ? data.work.open : data.work.mine, note: `${data.work.emergency} яаралтай · ${data.work.overdue} хэтэрсэн`, tone: Number(data.work.emergency) || Number(data.work.overdue) ? "red" : "green", view: "work-orders" });
-  if (enabled.has("assets") && (management || ["chief_engineer","engineer","electric","camera_engineer","storekeeper"].includes(req.user.role))) metrics.push({ code: "assets", label: "Хөрөнгө", value: data.assets.total, note: `${data.assets.repair} засварт`, tone: Number(data.assets.repair) ? "amber" : "blue", view: "assets" });
-  if (enabled.has("inventory") && management) metrics.push({ code: "inventory", label: "Агуулахын эрсдэл", value: data.inventory.low_stock, note: `${data.inventory.item_count} нэр төрлөөс`, tone: Number(data.inventory.low_stock) ? "red" : "green", view: "inventory" });
-  if (enabled.has("finance") && management) metrics.push({ code: "finance", label: "Сарын цэвэр урсгал", value: Number(data.finance.income)-Number(data.finance.expense), format: "money", note: `Авлага MNT ${Number(data.finance.receivable).toLocaleString()}`, tone: Number(data.finance.income)-Number(data.finance.expense) < 0 ? "red" : "green", view: "finance" });
+  const operations = [];
+  if (enabled.has("attendance") && hrAccess) operations.push({ code: "attendance", label: "Өнөөдрийн ирц", value: `${data.attendance.worked} / ${data.people.active}`, note: `${data.attendance.away} чөлөөтэй · ${data.attendance.late} хоцорсон · ${data.attendance.absent} тасалсан`, tone: Number(data.attendance.absent) || Number(data.attendance.late) ? "amber" : "green", view: "attendance" });
+  if (enabled.has("work-orders")) operations.push({ code: "work", label: management ? "Сүүлийн 30 хоногийн нээлттэй ажил" : "Миний сүүлийн 30 хоногийн ажил", value: management ? data.work.recent_open : data.work.mine_recent, note: management ? `${data.work.historical_open} өмнөх ажлын төлөвийг тусад нь шалгана` : `${data.work.mine} нийт нээлттэй`, tone: Number(data.work.emergency_recent) || Number(data.work.overdue_recent) ? "red" : "blue", view: "work-orders" });
+  if (enabled.has("camera-operations") && engineeringAccess) operations.push({ code: "camera", label: "Камерын ажиллагаа", value: `${Math.max(0, Number(data.camera.devices)-Number(data.camera.broken))} / ${data.camera.devices}`, note: `${data.camera.broken} ажиллагаагүй · ${data.camera.locations} объект`, tone: Number(data.camera.broken) ? "red" : "green", view: "camera" });
+  if (enabled.has("lighting-operations") && engineeringAccess) operations.push({ code: "lighting", label: "Гэрэлтүүлгийн орчин", value: data.lighting.objects, note: `${data.lighting.open_incidents} нээлттэй гэмтэл · ${data.lighting.affected} нөлөөлсөн`, tone: Number(data.lighting.open_incidents) ? "amber" : "green", view: "lighting" });
+  if (enabled.has("safety") && (management || req.user.role === "safety")) operations.push({ code: "safety", label: "ХАБЭА-н нээлттэй эрсдэл", value: data.safety.open_risks, note: `${data.safety.critical_risks} өндөр эрсдэл`, tone: Number(data.safety.critical_risks) ? "red" : Number(data.safety.open_risks) ? "amber" : "green", view: "safety" });
+  if (enabled.has("assets") && (management || engineeringAccess || req.user.role === "storekeeper")) operations.push({ code: "assets", label: "Үндсэн хөрөнгө", value: data.assets.total, note: `${data.assets.repair} засварт`, tone: Number(data.assets.repair) ? "amber" : "blue", view: "assets" });
+
+  const resources = [];
+  if (management && enabled.has("inventory")) resources.push({ code: "inventory-value", label: "Бараа материалын үлдэгдэл", value: data.inventory.inventory_value, format: "money", note: `${data.inventory.item_count} нэр төрөл · ${data.inventory.positive_stock} үлдэгдэлтэй`, tone: "blue", view: "inventory" });
+  if (management && enabled.has("finance")) {
+    resources.push({ code: "payable", label: "Нээлттэй өглөг", value: data.obligations.payable_open, format: "money", note: "Төлөгдөөгүй үлдэгдэл", tone: "amber", view: "finance" });
+    resources.push({ code: "receivable", label: "Нээлттэй авлага", value: data.obligations.receivable_open, format: "money", note: "Хүлээн авах үлдэгдэл", tone: "green", view: "finance" });
+    resources.push({ code: "cash-flow", label: "Энэ сарын мөнгөн урсгал", value: Number(data.finance.income)-Number(data.finance.expense), format: "money", note: Number(data.finance.transaction_count) ? `${data.finance.transaction_count} гүйлгээнд үндэслэв` : "Энэ сард гүйлгээ бүртгэгдээгүй", tone: Number(data.finance.transaction_count) ? (Number(data.finance.income)-Number(data.finance.expense)<0 ? "red" : "green") : "blue", view: "finance" });
+  }
 
   const alerts = [];
-  addAlert(alerts, enabled.has("work-orders") && Number(data.work.emergency)>0, "critical", "Ажил", `${data.work.emergency} яаралтай ажил нээлттэй байна`, "work-orders");
-  addAlert(alerts, enabled.has("work-orders") && Number(data.work.overdue)>0, "warning", "Ажил", `${data.work.overdue} ажил хугацаа хэтэрсэн`, "work-orders");
-  addAlert(alerts, management && enabled.has("work-orders") && Number(data.work.unassigned)>0, "warning", "Ажил", `${data.work.unassigned} нээлттэй ажил хариуцагчгүй байна`, "work-orders");
+  addAlert(alerts, enabled.has("work-orders") && Number(data.work.emergency_recent)>0, "critical", "Ажлын самбар", `${data.work.emergency_recent} яаралтай ажил сүүлийн 30 хоногт нээлттэй байна`, "work-orders");
+  addAlert(alerts, enabled.has("work-orders") && Number(data.work.overdue_recent)>0, "warning", "Ажлын самбар", `${data.work.overdue_recent} шинэ ажил хугацаа хэтэрсэн`, "work-orders");
+  addAlert(alerts, management && enabled.has("work-orders") && Number(data.work.unassigned_recent)>0, "warning", "Ажлын самбар", `${data.work.unassigned_recent} шинэ ажил хариуцагчгүй байна`, "work-orders");
+  addAlert(alerts, management && enabled.has("work-orders") && Number(data.work.historical_open)>0, "info", "Өгөгдлийн тулгалт", `${data.work.historical_open} өмнөх ажлын төлөвийг нэг удаа хянаж баталгаажуулна`, "work-orders");
+  addAlert(alerts, enabled.has("camera-operations") && engineeringAccess && Number(data.camera.broken)>0, "warning", "Камер", `${data.camera.broken} камер ажиллагаагүй гэж бүртгэгдсэн`, "camera");
+  addAlert(alerts, enabled.has("lighting-operations") && engineeringAccess && Number(data.lighting.open_incidents)>0, "warning", "Гэрэлтүүлэг", `${data.lighting.open_incidents} гэрэлтүүлгийн гэмтэл шийдэгдээгүй байна`, "lighting");
+  addAlert(alerts, enabled.has("safety") && (management || req.user.role === "safety") && Number(data.safety.critical_risks)>0, "critical", "ХАБЭА", `${data.safety.critical_risks} өндөр эрсдэлд арга хэмжээ шаардлагатай`, "safety");
   addAlert(alerts, hrAccess && Number(data.hr.pending_leave)>0, "info", "Хүний нөөц", `${data.hr.pending_leave} чөлөөний хүсэлт шийдвэр хүлээж байна`, "hr");
   addAlert(alerts, hrAccess && Number(data.hr.pending_corrections)>0, "warning", "Хүний нөөц", `${data.hr.pending_corrections} ирцийн залруулга шийдвэр хүлээж байна`, "hr");
   addAlert(alerts, hrAccess && Number(data.hr.contracts_expiring)>0, "warning", "Хүний нөөц", `${data.hr.contracts_expiring} гэрээ 30 хоногт дуусна`, "hr");
   addAlert(alerts, hrAccess && Number(data.hr.certificates_expiring)>0, "warning", "Хүний нөөц", `${data.hr.certificates_expiring} ур чадварын гэрчилгээ 30 хоногт дуусна`, "hr");
-  addAlert(alerts, hrAccess && Number(data.hr.open_transitions)>0, "info", "Хүний нөөц", `${data.hr.open_transitions} ажилд авах/гарах checklist нээлттэй байна`, "hr");
-  addAlert(alerts, hrAccess && Number(data.people.incomplete_profiles)>0, "info", "Хүний нөөц", `${data.people.incomplete_profiles} ажилтны профайл дутуу байна`, "hr");
-  addAlert(alerts, management && enabled.has("inventory") && Number(data.inventory.low_stock)>0, "warning", "Агуулах", `${data.inventory.low_stock} бараа доод үлдэгдэлд хүрсэн`, "inventory");
-  addAlert(alerts, management && enabled.has("maintenance") && Number(data.maintenance.overdue)>0, "warning", "Засвар", `${data.maintenance.overdue} засварын төлөвлөгөө хэтэрсэн`, "maintenance");
+  addAlert(alerts, management && enabled.has("inventory") && Number(data.inventory.low_stock)>0, "warning", "Нярав", `${data.inventory.low_stock} материал тохируулсан доод үлдэгдлээс багассан`, "inventory");
+  addAlert(alerts, management && enabled.has("maintenance") && Number(data.maintenance.overdue)>0, "warning", "Төлөвлөгөөт засвар", `${data.maintenance.overdue} засварын төлөвлөгөө хэтэрсэн`, "maintenance");
   addAlert(alerts, management && enabled.has("procurement") && Number(data.procurement.awaiting)>0, "info", "Худалдан авалт", `${data.procurement.awaiting} хүсэлт шийдвэр хүлээж байна`, "procurement");
 
-  const penalty = alerts.reduce((sum, item) => sum + ({ critical: 12, warning: 5, info: 1 }[item.level] || 0), 0);
+  const priority = { critical: 0, warning: 1, info: 2 };
+  alerts.sort((a, b) => priority[a.level]-priority[b.level]);
   res.json({
     generatedAt: new Date().toISOString(), scope: management ? "organization" : "personal",
-    scale, metrics, alerts, health: { score: Math.max(0, 100-penalty), basis: "Бодит, шийдээгүй анхааруулгын түвшнээр тооцсон" },
+    scale: organizationScale(data.people.active), operations, metrics: operations, resources, alerts,
+    dataQuality: { incompleteEmployeeProfiles: data.people.incomplete_profiles, inventoryMinimumConfigured: data.inventory.minimum_configured, inventoryZeroStock: data.inventory.zero_stock },
     setup: { complete: setupSteps.every(item => item.complete), completed: setupSteps.filter(item => item.complete).length, total: setupSteps.length, steps: setupSteps },
     enabledModules: [...enabled], hr: hrAccess ? data.hr : undefined
   });
