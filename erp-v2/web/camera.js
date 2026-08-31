@@ -23,7 +23,7 @@ function cameraTabs() {
     ["overview", "Нүүр"],
     ["assets", "Камер, төхөөрөмж"],
     ["incidents", "Гэмтэл"],
-    ["work", "Ажлын урсгал"],
+    ["work", "Камерын ажлууд"],
     ["reports", "Тайлан"],
   ];
   return `<div class="lighting-tabs">${tabs.map(([key, name]) =>
@@ -46,7 +46,7 @@ function cameraIncidents(data) {
 }
 
 function cameraWork(data) {
-  return cameraTable(["Ажил", "Объект", "Хариуцагч", "Төлөв", "Үе шат", "Хугацаа"],
+  return `<div class="work-source-note"><span>Эдгээр нь тусдаа урсгал биш. Нэгдсэн Ажлын самбараас зөвхөн камертай холбоотой ажлыг харуулж байна.</span><button class="secondary" data-go="work-orders">Ажлын самбар нээх →</button></div>` + cameraTable(["Ажил", "Объект", "Хариуцагч", "Төлөв", "Үе шат", "Хугацаа"],
     data.workOrders.map((item) => `<tr><td><b>${esc(item.title)}</b></td><td>${esc(item.asset_name || item.asset_code || "—")}</td><td>${esc(item.assigned_name || item.department_name || "Оноогоогүй")}</td><td>${esc(item.status || "—")}</td><td>${esc(item.workflow_stage || "—")}</td><td>${item.due_at ? date(item.due_at) : "—"}</td></tr>`), 6);
 }
 
@@ -62,7 +62,7 @@ async function openCameraDossier(id){
 function cameraOverview(data) {
   const recentIncidents = data.incidents.slice(0, 6).map((item) => `<div class="lighting-list"><div><b>${esc(item.asset_name || item.title || "Камерын гэмтэл")}</b><small>${esc(item.description || item.status || "—")}</small></div><span>${esc(item.status || "—")}</span></div>`).join("");
   const recentWork = data.workOrders.slice(0, 6).map((item) => `<div class="lighting-list"><div><b>${esc(item.title)}</b><small>${esc(item.assigned_name || item.department_name || "Оноогоогүй")}</small></div><span>${esc(item.workflow_stage || item.status || "—")}</span></div>`).join("");
-  return `<div class="grid two"><section class="panel"><h3>Шийдэх гэмтэл</h3>${recentIncidents || empty("Нээлттэй гэмтэл алга.")}</section><section class="panel"><h3>Сүүлийн ажлын урсгал</h3>${recentWork || empty("Камерын ажил алга.")}</section></div>`;
+  return `<div class="grid two"><section class="panel"><h3>Шийдэх гэмтэл</h3>${recentIncidents || empty("Нээлттэй гэмтэл алга.")}</section><section class="panel"><h3>Сүүлийн камерын ажлууд</h3>${recentWork || empty("Камерын ажил алга.")}</section></div>`;
 }
 
 function cameraView() {

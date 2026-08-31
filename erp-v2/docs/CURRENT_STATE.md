@@ -67,6 +67,10 @@ validated at enterprise scale.
 - Kanban is a view over existing governed state, not a second workflow model.
   Approval stages cannot be bypassed by dragging cards; only server-authorized
   action controls perform transitions and retain the existing audit evidence.
+- Lighting, camera, chief-engineer, and safety workspaces do not own parallel
+  workflows. They now identify themselves as domain records or role-specific
+  oversight over the same canonical Work Orders and link back to **Ажлын
+  самбар** for the complete flow.
 - `Холболтууд` no longer occupies the primary sidebar. Authorized owners reach
   the same read-only connector capability through **Тохиргоо → Холболт,
   интеграц**; OAuth return routing also lands there.

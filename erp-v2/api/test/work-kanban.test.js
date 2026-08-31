@@ -9,6 +9,10 @@ const web = path.join(__dirname, "..", "..", "web");
 const app = fs.readFileSync(path.join(web, "app.js"), "utf8");
 const workflow = fs.readFileSync(path.join(web, "workflow.css"), "utf8");
 const mobile = fs.readFileSync(path.join(web, "mobile.js"), "utf8");
+const lighting = fs.readFileSync(path.join(web, "lighting.js"), "utf8");
+const camera = fs.readFileSync(path.join(web, "camera.js"), "utf8");
+const engineering = fs.readFileSync(path.join(web, "engineering.js"), "utf8");
+const safety = fs.readFileSync(path.join(web, "safety.js"), "utf8");
 
 test("work orders render as bounded Kanban lanes instead of a long table or Gantt", () => {
   for (const title of ["Шинэ ба хуваарилах", "Эхлэх зөвшөөрөл", "Гүйцэтгэж буй", "Хяналт ба хаалт", "Хаагдсан"]) {
@@ -30,4 +34,14 @@ test("Kanban preserves governed actions instead of drag bypass", () => {
 test("field app returns only work assigned to the signed-in person", () => {
   assert.match(mobile, /filter\(x=>x\.assigned_to===state\.user\.id\)/);
   assert.doesNotMatch(mobile, /director.*chief_engineer/);
+});
+
+test("specialist workspaces are scoped views of the one canonical work board", () => {
+  assert.match(lighting, /Гэрэлтүүлгийн ажлууд/);
+  assert.match(camera, /Камерын ажлууд/);
+  assert.match(engineering, /Ерөнхий инженерийн удирдлагын хяналт/);
+  assert.match(safety, /Ажил эхлүүлэх болон хаах зөвшөөрлийг нэгдсэн Ажлын самбараас шийднэ/);
+  for (const source of [lighting, camera, engineering, safety]) {
+    assert.match(source, /data-go="work-orders"/);
+  }
 });

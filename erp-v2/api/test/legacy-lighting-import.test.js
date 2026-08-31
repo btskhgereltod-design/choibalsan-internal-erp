@@ -77,7 +77,7 @@ test("accounting fixed assets stay separate from operational objects",()=>{
 
 test("lighting UI explains the standard end-to-end flow",()=>{
   const ui=read("..","web","lighting.js");
-  for(const label of ["Нүүр","Объект","Гэмтэл","Ажлын урсгал","Тайлан"])assert.match(ui,new RegExp(label));
+  for(const label of ["Нүүр","Объект","Гэмтэл","Гэрэлтүүлгийн ажлууд","Тайлан"])assert.match(ui,new RegExp(label));
   assert.match(ui,/Объект → гэмтэл → ажил → нотолгоо → ХАБЭА → баталгаажуулалт/);
   assert.doesNotMatch(ui,/organizationHomeBar/);
 });

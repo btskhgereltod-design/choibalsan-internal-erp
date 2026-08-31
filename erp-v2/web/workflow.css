@@ -31,6 +31,7 @@
 }
 
 .work-board-help{margin:-10px 0 16px;padding:11px 14px;border:1px solid #d7e4f7;border-radius:11px;background:#f5f9ff;color:#53657d;font-size:.75rem;line-height:1.5}
+.work-source-note{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:0 0 14px;padding:12px 14px;border:1px solid #d7e4f7;border-radius:12px;background:#f5f9ff;color:#53657d;font-size:.75rem;line-height:1.5}.work-source-note .secondary{flex:0 0 auto}
 .work-kanban{display:grid;grid-template-columns:repeat(4,minmax(245px,1fr));gap:14px;align-items:start;overflow-x:auto;padding:1px 1px 12px}
 .work-kanban:has(.work-lane.closed:only-child){grid-template-columns:minmax(300px,520px)}
 .work-lane{min-width:0;border:1px solid #dfe6ef;border-radius:15px;background:#eef3f8;overflow:hidden}
@@ -46,4 +47,4 @@
 .work-card-section{display:grid;gap:6px;margin-top:11px;padding-top:10px;border-top:1px solid #edf0f4}.work-card-section>span{color:#7b8797;font-size:.62rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em}.work-card .assignee-select,.work-card .status-select{width:100%;max-width:none}.work-card .workflow-control{min-width:0}.work-card .workflow-action{width:100%;text-align:center}
 .work-lane-empty{margin:0;padding:28px 10px;color:#8a97a8;text-align:center;font-size:.7rem}
 @media(max-width:1200px){.work-kanban{grid-template-columns:repeat(4,280px)}}
-@media(max-width:720px){.work-kanban{grid-template-columns:86vw}.work-lane-list{max-height:none}.work-board-help{margin-top:0}}
+@media(max-width:720px){.work-kanban{grid-template-columns:86vw}.work-lane-list{max-height:none}.work-board-help{margin-top:0}.work-source-note{align-items:stretch;flex-direction:column}}
