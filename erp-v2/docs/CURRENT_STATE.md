@@ -6,6 +6,46 @@ This document answers one question: **what exists in the repository now?** It
 does not claim that every implemented foundation is complete or production-
 validated at enterprise scale.
 
+## Integrated management report foundation
+
+- The tenant application now has an evidence-backed **Нэгдсэн тайлан** draft
+  for directors, chief engineers, accountants, and the tenant owner. It reports
+  opening Work Order backlog, work created during the selected period, actual
+  transitions to `completed`, closing backlog, and period-end overdue work.
+  Each value is compared with the immediately preceding equal-length period.
+- Calendar controls support the current month, previous month, current quarter,
+  current year, and a bounded custom range of at most 366 days. PostgreSQL
+  boundaries and daily/monthly trend buckets use the tenant's configured
+  timezone rather than the database session timezone.
+- Historic opening and closing states are reconstructed from append-only Work
+  Order events. Unknown boundary states, unassigned new work, and assignees not
+  linked to the canonical Employee master are exposed as data-quality warnings
+  instead of being silently treated as valid values. The people table is based
+  on canonical Employees; because assignment-change history is not currently
+  captured, period activity is explicitly attributed to the current assignee.
+- Asset counts are labelled and returned as a current snapshot, not a historic
+  flow. Printable A4 landscape/PDF styling and a UTF-8 CSV reconciliation export
+  are implemented. The CSV includes the opening, created, completed, cancelled,
+  closing, and period-end-overdue flags plus the reconstructed boundary states,
+  so exported rows reconcile with the headline Work Order measures.
+- All 295 repository tests pass. A pre-deployment read-only run of the new API
+  against production and an independent SQL reconciliation matched for August
+  2026: opening 87, created 19, completed 0, closing 106, and overdue 102. The
+  equal July comparison is 62, 25, 0, 87, and 81. Production currently has 466
+  reportable Asset master records (434 active, 16 repair, 10 retired, and 6
+  inactive), four August Work Orders created without an assignee, zero unknown
+  boundary states, and zero assignees missing their Employee-master link.
+- The foundation is production-deployed through the required Production,
+  Cloudflare, and AI Compose files. Authenticated post-deployment reads returned
+  HTTP 200 for director, chief engineer, accountant, and owner authority even
+  when the owner's legacy job role was not a management title; an ordinary
+  worker received the expected HTTP 403. The reconciliation CSV returned 106
+  detail rows with 22 columns and a UTF-8 BOM. External Home, App, API, Status,
+  `app.js?v=39`, and `reports.css?v=2` returned HTTP 200, and all seven services
+  were healthy. Verified initial pre-deployment, corrective pre-deployment, and
+  final post-deployment backups are `overva-20260831T083034Z`,
+  `overva-20260831T083251Z`, and `overva-20260831T083827Z`.
+
 ## Role-personalized home and decision trends
 
 - Non-management users now receive a server-scoped **Миний өдөр** home instead
