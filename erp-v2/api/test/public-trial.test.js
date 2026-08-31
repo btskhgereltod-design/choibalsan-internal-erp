@@ -267,7 +267,7 @@ test("public site starts with a portfolio Home and opens the governed workspace 
   assert.match(dockerfile, /COPY workspace-registry\.js/);
   assert.match(dockerfile, /COPY workspace-intake\.js/);
   assert.match(dockerfile, /COPY request-draft-registry\.js/);
-  assert.match(html, /market-catalog\.css\?v=2/);
+  assert.match(html, /market-catalog\.css\?v=3/);
   assert.match(html, /market-catalog\.js\?v=2/);
   assert.match(css, /\.portfolio-main\s*\{[^}]*min-height:0/);
   assert.match(css, /\.portfolio-scroll\s*\{[^}]*min-height:0[^}]*overflow-y:auto/);
@@ -279,6 +279,7 @@ test("public site starts with a portfolio Home and opens the governed workspace 
   assert.match(localMarketLauncher, /will not replace or delete it/);
   assert.doesNotMatch(localMarketLauncher, /docker (?:rm|volume)/);
   assert.match(marketCatalogCss, /catalog-compare-tray/);
+  assert.match(marketCatalogCss, /\.catalog-compare-tray\[hidden\]\s*\{[^}]*display:none!important/);
   assert.match(marketCatalogCss, /@media\(max-width:780px\)/);
   assert.match(marketCatalogJs, /selected\.size<3/);
   assert.match(marketCatalogJs, /ЖИШИГ \/ SAMPLE/);
