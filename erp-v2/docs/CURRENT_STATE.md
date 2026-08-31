@@ -96,7 +96,7 @@ validated at enterprise scale.
   authorization milestone is implemented, while attachment authority
   unification, full resource history, and deterministic end-to-end measures
   remain planned.
-- All 250 repository tests pass. The local Docker stack applied schema `0065`;
+- All 251 repository tests pass. The local Docker stack applied schema `0065`;
   API and tenant web are healthy, and the served UI uses server authority
   fields. This is local verification only and is not a production deployment.
 
@@ -133,8 +133,9 @@ validated at enterprise scale.
   legacy application and database were not mutated. A restorable PostgreSQL
   dump was taken before import.
 - The copy contains 21 active employee names with department, position, and
-  legacy role classification; 451 lighting operational objects; 212 incidents;
-  9 repair events; 106 historical Work Orders; and 159 execution notes. Imported
+  legacy role classification; 465 asset-master records; 451 lighting
+  operational objects; 212 incidents; 9 repair events; 106 historical Work
+  Orders; and 159 execution notes. Imported
   employee accounts use synthetic `demo.invalid` identifiers, unusable random
   password hashes, and `can_login=false`. Register numbers, phones, addresses,
   salary, legacy credentials, tokens, and files were not copied.
@@ -147,6 +148,11 @@ validated at enterprise scale.
   employees, profiles, and primary assignments instead of writing only the old
   user-linked structure. Dry-run and committed counts matched. This local data
   copy is not a production deployment or a live synchronization.
+- The separate asset importer is tenant-scoped, dry-run capable, idempotent,
+  and provenance preserving. It omits purchase price, current/book value, the
+  3,932-row fixed-asset ledger, legacy files, and credentials. Two unreadable
+  legacy codes received deterministic `LEGACY-ASSET-*` replacements with
+  warnings instead of losing their records.
 
 ## Next chat start
 

@@ -28,6 +28,7 @@
     "smoke:builder": "node scripts/builder-smoke.js",
     "smoke:ai-provider": "node scripts/ai-provider-smoke.js",
     "import:legacy-employees": "node scripts/import-legacy-employees.js",
+    "import:legacy-assets": "node scripts/import-legacy-assets.js",
     "import:legacy-lighting": "node scripts/import-legacy-lighting.js",
     "test": "node --test",
     "check": "node --check src/server.js && node --check src/app.js && node --check scripts/start.js"
