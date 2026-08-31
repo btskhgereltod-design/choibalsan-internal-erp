@@ -171,6 +171,34 @@ validated at enterprise scale.
   and reducing a master total below the allocated amount fail closed. No legacy object-to-Asset
   links were fabricated: the reviewed source has zero explicit `asset_id`
   references, so the local demo begins with zero component allocations.
+- Migration `0068` reconciles pilot modules, governed work types, workflow
+  policy routes, and imported-user RBAC assignments that earlier seed
+  migrations could not create before the pilot tenant existed. Camera,
+  safety, and field workspaces are enabled only for `choibalsan-hugjil`;
+  imported employee login remains disabled until explicitly provisioned.
+- The local pilot now has 110 camera-location Operational Objects representing
+  the source's 302 cameras (236 working and 66 unavailable), 110 exact
+  Asset-to-object component allocations, 30 current fault records, 76 daily
+  camera snapshots, and 28 correctly reclassified camera Work Orders. Camera
+  uses the same Object -> incident -> Work Order -> evidence -> HSE -> chief
+  engineer history model as lighting, and its object list opens a read-only
+  dossier over the shared operational records.
+- The 28 camera Work Orders retain 103 attributable legacy workflow approvals:
+  HSE start checks, employee completion submissions, HSE completion checks,
+  and chief-engineer closure evidence. Signature codes were deliberately not
+  copied. Approval evidence and source provenance are append-only.
+- The safety workspace now contains 92 source risks, 19 safe-route plans, one
+  instruction, one training record, and 42 employee acknowledgements. Two
+  source acknowledgement rows could not be linked because their legacy users
+  are not present in the reviewed employee import; they remain explicit import
+  warnings rather than being assigned to a fabricated person. Precise employee
+  GPS, legacy signature codes, upload paths, credentials, and private HR fields
+  were not copied.
+- All 261 repository tests pass. Re-running the connected-operations importer
+  creates no duplicate objects, incidents, snapshots, risks, documents,
+  acknowledgements, approvals, or visible approval events. The local API, web,
+  and database containers are healthy; this is a local pilot deployment, not a
+  production release.
 
 ## Next chat start
 

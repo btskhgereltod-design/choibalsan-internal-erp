@@ -50,7 +50,7 @@ router.use(authenticate,requireModule("safety"));
 
 router.get("/overview",asyncHandler(async(req,res)=>{
   const org=req.user.organization_id;
-  const [summary,risks,incidents,briefings]=await Promise.all([
+  const [summary,risks,incidents,briefings,documents,routes]=await Promise.all([
     getPool().query(`SELECT
       count(*) FILTER(WHERE status<>'closed')::int AS open_risks,
       count(*) FILTER(WHERE status<>'closed' AND risk_score>=17)::int AS critical_risks,
@@ -71,8 +71,14 @@ router.get("/overview",asyncHandler(async(req,res)=>{
       FROM safety_briefings b LEFT JOIN users facilitator ON facilitator.organization_id=b.organization_id AND facilitator.id=b.facilitator_user_id
       JOIN users creator ON creator.organization_id=b.organization_id AND creator.id=b.created_by
       WHERE b.organization_id=$1 ORDER BY b.conducted_at DESC LIMIT 100`,[org]),
+    getPool().query(`SELECT d.*,COALESCE(a.acknowledged_count,0)::int acknowledged_count
+      FROM safety_documents d LEFT JOIN LATERAL(
+        SELECT count(*) acknowledged_count FROM safety_acknowledgements a
+        WHERE a.organization_id=d.organization_id AND a.safety_document_id=d.id
+      ) a ON true WHERE d.organization_id=$1 ORDER BY d.effective_date DESC,d.created_at DESC LIMIT 100`,[org]),
+    getPool().query(`SELECT * FROM safety_route_plans WHERE organization_id=$1 ORDER BY route_date DESC,created_at DESC LIMIT 200`,[org]),
   ]);
-  res.json({summary:summary.rows[0],risks:risks.rows.map(row=>({...row,risk_band:riskBand(row.risk_score)})),incidents:incidents.rows,briefings:briefings.rows,canManage:(req.user.permissions||[]).includes("safety.manage")});
+  res.json({summary:summary.rows[0],risks:risks.rows.map(row=>({...row,risk_band:riskBand(row.risk_score)})),incidents:incidents.rows,briefings:briefings.rows,documents:documents.rows,routes:routes.rows,canManage:(req.user.permissions||[]).includes("safety.manage")});
 }));
 
 router.post("/risks",asyncHandler(async(req,res)=>{

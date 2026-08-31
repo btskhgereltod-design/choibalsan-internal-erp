@@ -24,6 +24,7 @@ function cameraTabs() {
     ["assets", "Камер, төхөөрөмж"],
     ["incidents", "Гэмтэл"],
     ["work", "Ажлын урсгал"],
+    ["reports", "Тайлан"],
   ];
   return `<div class="lighting-tabs">${tabs.map(([key, name]) =>
     `<button class="${state.cameraTab === key ? "active" : ""}" data-camera-tab="${key}">${name}</button>`
@@ -35,8 +36,8 @@ function cameraTable(headers, rows, colspan) {
 }
 
 function cameraAssets(data) {
-  return cameraTable(["Код", "Нэр", "Төрөл", "Төлөв", "Байршил", "Шинэчилсэн"],
-    data.assets.map((item) => `<tr><td>${esc(item.code || "—")}</td><td><b>${esc(item.name)}</b></td><td>${esc(item.object_type || "—")}</td><td>${esc(item.status || "—")}</td><td>${esc(item.location || "—")}</td><td>${date(item.updated_at)}</td></tr>`), 6);
+  return cameraTable(["Код / камерын объект", "Ангилал", "Камер", "Ажиллахгүй", "Байршил", "Төлөв"],
+    data.assets.map((item) => `<tr><td><button class="object-dossier-link" data-camera-dossier="${item.id}">${esc(item.name)}</button><small>${esc(item.code || "—")} · Объектын хувийн хэрэг</small></td><td>${esc(item.metadata?.subCategory || "—")}</td><td>${Number(item.metadata?.cameraCount || 0)}</td><td>${Number(item.metadata?.brokenCount || 0)}</td><td>${esc(item.location || "—")}</td><td>${esc(item.status || "—")}</td></tr>`), 6);
 }
 
 function cameraIncidents(data) {
@@ -47,6 +48,15 @@ function cameraIncidents(data) {
 function cameraWork(data) {
   return cameraTable(["Ажил", "Объект", "Хариуцагч", "Төлөв", "Үе шат", "Хугацаа"],
     data.workOrders.map((item) => `<tr><td><b>${esc(item.title)}</b></td><td>${esc(item.asset_name || item.asset_code || "—")}</td><td>${esc(item.assigned_name || item.department_name || "Оноогоогүй")}</td><td>${esc(item.status || "—")}</td><td>${esc(item.workflow_stage || "—")}</td><td>${item.due_at ? date(item.due_at) : "—"}</td></tr>`), 6);
+}
+
+function cameraReports(data) {
+  const rows=(data.snapshots||[]).map(item=>`<tr><td>${date(item.snapshot_date)}</td><td>${Number(item.metrics?.totalPoints||0)}</td><td>${Number(item.metrics?.totalCameras||0)}</td><td>${Number(item.metrics?.brokenCameras||0)}</td><td>${Number(item.metrics?.availabilityPct||0).toFixed(1)}%</td><td>${Number(item.metrics?.openWork||0)}</td></tr>`);
+  return `<section class="panel"><h3>Камерын өдрийн төлөвийн түүх</h3><p>Хуучин системийн өдөр бүр хадгалсан тоон агшныг эх сурвалжтай нь харуулна.</p>${cameraTable(["Огноо","Цэг","Нийт камер","Ажиллахгүй","Хэвийн ажиллагаа","Нээлттэй ажил"],rows,6)}</section>`;
+}
+
+async function openCameraDossier(id){
+  try{const data=await api(`/api/camera/objects/${id}/dossier`);data.capabilities={canManageComponents:false,canCreateNote:false};state.lightingDossier=data;$("#lightingDossierTitle").textContent=`${data.item.code} — ${data.item.name}`;$("#lightingDossierBody").innerHTML=lightingDossierHtml(data);$("#lightingDossierDialog").showModal()}catch(error){toast(error.message,true)}
 }
 
 function cameraOverview(data) {
@@ -63,12 +73,13 @@ function cameraView() {
   const s = data.summary;
   const content = state.cameraTab === "assets" ? cameraAssets(data)
     : state.cameraTab === "incidents" ? cameraIncidents(data)
-      : state.cameraTab === "work" ? cameraWork(data) : cameraOverview(data);
+      : state.cameraTab === "work" ? cameraWork(data)
+        : state.cameraTab === "reports" ? cameraReports(data) : cameraOverview(data);
   return `${header("КАМЕРЫН ҮЙЛ АЖИЛЛАГАА", "Камерын тасгийн ажлын талбар", "Камерын объект → гэмтэл → ажил → хяналт → баталгаажуулалтын нэг урсгал.", `<button class="secondary" data-camera-refresh>↻ Шинэчлэх</button>`)}
     ${cameraTabs()}
     ${!data.available ? `<div class="panel">Камерын ажлын төрөл эсвэл объект бүртгэгдээгүй байна. Тохиргоо болон Smart Import-оор бүртгэнэ үү.</div>` : ""}
     <div class="lighting-stat-grid">
-      ${stat("Нийт камер, объект", s.assets, `${s.activeAssets} идэвхтэй`, "◇", "blue")}
+      ${stat("Нийт камер", s.devices, `${s.locations} байршил · ${s.activeDevices} хэвийн`, "◇", "blue")}
       ${stat("Нээлттэй гэмтэл", s.openIncidents, `${s.affectedDevices} төхөөрөмжид нөлөөлсөн`, "!", "red")}
       ${stat("Нээлттэй ажил", s.openWork, "Хянагдаж буй ажлууд", "✓", "green")}
       ${stat("Дууссан ажил", s.completedWork, "Баталгаажсан гүйцэтгэл", "↗", "purple")}
@@ -82,6 +93,8 @@ document.addEventListener("click", (event) => {
     render();
   }
   if (event.target.closest("[data-camera-refresh]")) loadCamera(true);
+  const dossier=event.target.closest("[data-camera-dossier]");
+  if(dossier)openCameraDossier(dossier.dataset.cameraDossier);
 });
 
 window.cameraView = cameraView;
