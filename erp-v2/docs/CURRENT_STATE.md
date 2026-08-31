@@ -321,6 +321,30 @@ validated at enterprise scale.
   restore guidance, health monitoring, and restart policies exist.
 - Database and internal service ports are not intended to be public.
 
+### Production release V38 — Connected operations pilot
+
+- Application commit `6c5890d` is production-deployed. The tenant application
+  now includes explicit Work Order authority, material traceability,
+  operational-object dossiers, connected lighting/camera/safety operations,
+  the chief-engineer control center, accountant reconciliation, the
+  storekeeper workspace, and the role-focused **Ажлын самбар** Kanban.
+- Production migrations `0064–0076` applied successfully and runtime grants
+  were refreshed for the application role. These migrations add governed
+  structures and pilot enablement; the reviewed legacy rows imported into the
+  separate local pilot database were not copied into production by deployment.
+- Returning saved-token users now wait for all deferred workspace policies
+  before session loading, so the authorized organization home renders first
+  instead of briefly showing Builder until a navigation click.
+- Pre-deployment backup `overva-20260831T060019Z` and post-deployment scheduled
+  backup `overva-20260831T060119Z` both passed checksum, PostgreSQL archive, and
+  uploads-archive verification. All seven production Compose services are
+  healthy.
+- The production Cloudflare scheduled tunnel was found stopped during external
+  verification and was restarted. External Home, App, API, Admin, and Status
+  checks all return HTTP 200; App serves `app.js?v=37`, the saved-token startup
+  fix, Kanban assets, and specialist-view source notices. The full repository
+  suite passes 283 tests.
+
 ### Production release V37 — Provider onboarding assurance
 
 - Migration `0063` adds a recent-authentication timestamp to revocable Market
