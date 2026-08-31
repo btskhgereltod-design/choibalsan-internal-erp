@@ -185,9 +185,9 @@ $("#manageAccessForm").addEventListener("submit",updateEmployeeAccess);
 $("#accessPasswordResetForm").addEventListener("submit",resetEmployeePassword);
 document.addEventListener("click",event=>{
   const settingsTab=event.target.closest("[data-settings-tab]");
-  if(settingsTab){state.settingsTab=settingsTab.dataset.settingsTab;render();if(state.settingsTab==="audit"&&!state.audit)loadAudit();if(state.settingsTab==="structure"&&!state.modules.structure)loadModule("structure").then(render);if(state.settingsTab==="data"&&!state.modules.dataGovernance)loadDataGovernance();return;}
+  if(settingsTab){state.settingsTab=settingsTab.dataset.settingsTab;render();if(state.settingsTab==="audit"&&!state.audit)loadAudit();if(state.settingsTab==="structure"&&!state.modules.structure)loadModule("structure").then(render);if(state.settingsTab==="data"&&!state.modules.dataGovernance)loadDataGovernance();if(state.settingsTab==="integrations"&&!state.connectors&&typeof loadConnectors==="function")loadConnectors();return;}
   const settingsTarget=event.target.closest("[data-settings-tab-target]");
-  if(settingsTarget){state.settingsTab=settingsTarget.dataset.settingsTabTarget;queueMicrotask(render);if(state.settingsTab==="structure"&&!state.modules.structure)loadModule("structure").then(render);if(state.settingsTab==="audit"&&!state.audit)loadAudit();if(state.settingsTab==="data"&&!state.modules.dataGovernance)loadDataGovernance();}
+  if(settingsTarget){state.settingsTab=settingsTarget.dataset.settingsTabTarget;queueMicrotask(render);if(state.settingsTab==="structure"&&!state.modules.structure)loadModule("structure").then(render);if(state.settingsTab==="audit"&&!state.audit)loadAudit();if(state.settingsTab==="data"&&!state.modules.dataGovernance)loadDataGovernance();if(state.settingsTab==="integrations"&&!state.connectors&&typeof loadConnectors==="function")loadConnectors();}
   const grant=event.target.closest("[data-grant-access]");
   if(grant){openDialog("accessDialog");$("#accessEmployeeSelect").value=grant.dataset.grantAccess;syncAccessRole();return;}
   const configure=event.target.closest("[data-configure-access]");

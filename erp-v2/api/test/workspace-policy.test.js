@@ -10,7 +10,7 @@ const viewModules={assets:"assets","work-orders":"work-orders",engineering:"work
 
 test("primary admin keeps setup access and also receives the job-role workspace",()=>{
   const views=policy.allowedViews({role:"director",systemRoles:["owner"],permissions:["audit.read"],enabledModules:["structure","assets","work-orders","map","fleet"],viewModules});
-  assert.deepEqual(new Set(views),new Set(["dashboard","assets","work-orders","engineering","executive","reports","employees","users","settings","billing","audit","connectors"]));
+  assert.deepEqual(new Set(views),new Set(["dashboard","assets","work-orders","engineering","executive","reports","employees","users","settings","billing","audit"]));
 });
 
 test("primary admin sees all enabled standard organization workspaces",()=>{
@@ -66,6 +66,17 @@ test("advanced product surfaces stay out of standard role workspaces",()=>{
   assert.equal(views.includes("assets"),true);
   assert.equal(views.includes("work-orders"),true);
   assert.equal(views.includes("engineering"),true);
+  assert.equal(views.includes("mobile"),false,"chief engineer does not receive every field job");
+});
+
+test("field app is visible only to enabled field roles and never added by owner oversight",()=>{
+  const modules={mobile:"field"};
+  const worker=policy.allowedViews({role:"worker",enabledModules:["field"],viewModules:modules});
+  const electrician=policy.allowedViews({role:"electric",enabledModules:["field"],viewModules:modules});
+  const owner=policy.allowedViews({role:"director",systemRoles:["owner"],enabledModules:["field"],viewModules:modules});
+  assert.equal(worker.includes("mobile"),true);
+  assert.equal(electrician.includes("mobile"),true);
+  assert.equal(owner.includes("mobile"),false);
 });
 
 test("disabled modules do not appear even when the job role normally uses them",()=>{
@@ -144,6 +155,14 @@ test("organization structure is nested under primary-admin settings",()=>{
   assert.match(modules,/structureSettingsContent\(\)/);
   assert.match(workspace,/data-settings-tab-target/);
   assert.match(dashboard,/tab: "structure"/);
+});
+
+test("connectors are nested under settings instead of the primary sidebar",()=>{
+  const shell=webFile("index.html"),modules=webFile("business-modules.js"),connectors=webFile("connectors.js");
+  assert.match(shell,/id="connectorsNav"[^>]*display:none!important/);
+  assert.match(modules,/data-settings-tab="integrations"/);
+  assert.match(modules,/connectorsSettingsContent\(\)/);
+  assert.match(connectors,/returnPath:"\/\?view=settings&settings_tab=integrations"/);
 });
 
 test("organization setup visibly summarizes the approved structure",()=>{

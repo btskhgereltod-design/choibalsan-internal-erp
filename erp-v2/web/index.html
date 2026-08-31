@@ -8,8 +8,8 @@
   <link rel="icon" href="/cop-icon.svg" type="image/svg+xml">
   <meta name="color-scheme" content="light">
   <title>OVERVA ERP</title>
-  <link rel="stylesheet" href="/style.css?v=46">
-  <link rel="stylesheet" href="/workflow.css?v=1">
+  <link rel="stylesheet" href="/style.css?v=47">
+  <link rel="stylesheet" href="/workflow.css?v=2">
   <link rel="stylesheet" href="/work-history.css?v=2">
   <link rel="stylesheet" href="/notifications.css">
   <link rel="stylesheet" href="/asset-detail.css">
@@ -24,7 +24,7 @@
   <link rel="stylesheet" href="/finance.css">
   <link rel="stylesheet" href="/executive.css?v=2">
   <link rel="stylesheet" href="/integration-lab.css">
-  <link rel="stylesheet" href="/connectors.css?v=1">
+  <link rel="stylesheet" href="/connectors.css?v=2">
   <link rel="stylesheet" href="/automation.css">
   <link rel="stylesheet" href="/ai-director.css">
   <link rel="stylesheet" href="/mobile.css">
@@ -73,7 +73,7 @@
         <button class="nav-item active" data-view="dashboard"><span>⌂</span>Байгууллагын нүүр</button>
         <button class="nav-item hidden" id="executiveNav" data-view="executive" data-module="executive"><span>◉</span>Чиг хандлага</button>
         <button class="nav-item" data-view="assets" data-module="assets"><span>◇</span>Хөрөнгийн бүртгэл</button>
-        <button class="nav-item" data-view="work-orders" data-module="work-orders"><span>✓</span>Нэгдсэн ажлын урсгал</button>
+        <button class="nav-item" data-view="work-orders" data-module="work-orders"><span>✓</span>Ажлын самбар</button>
         <button class="nav-item hidden" id="engineeringNav" data-view="engineering" data-module="work-orders"><span>⌘</span>Ерөнхий инженер</button>
         <button class="nav-item hidden" id="lightingNav" data-view="lighting" data-module="lighting-operations"><span>☼</span>Гэрэлтүүлэг</button>
         <button class="nav-item hidden" id="cameraNav" data-view="camera" data-module="camera-operations"><span>▣</span>Камерын тасаг</button>
@@ -82,10 +82,10 @@
         <button class="nav-item" id="iotNav" data-view="iot" data-module="iot"><span>⌁</span>IoT Control</button>
         <button class="nav-item hidden" id="financeNav" data-view="finance" data-module="finance"><span>₮</span>Санхүү, бүртгэл</button>
         <button class="nav-item hidden" id="integrationLabNav" data-view="integration-lab" data-module="integration-lab"><span>↯</span>Integration Lab</button>
-        <button class="nav-item hidden" id="connectorsNav" data-view="connectors"><span>⌁</span>Холболтууд</button>
+        <button class="nav-item hidden" id="connectorsNav" data-view="connectors" aria-hidden="true" tabindex="-1" style="display:none!important"><span>⌁</span>Холболтууд</button>
         <button class="nav-item hidden" id="automationNav" data-view="automation" data-module="automation"><span>⚡</span>Automation</button>
         <button class="nav-item hidden" id="aiDirectorNav" data-view="ai-director" data-module="ai-director"><span>✦</span>AI Director</button>
-        <button class="nav-item" id="mobileNav" data-view="mobile" data-module="field"><span>▣</span>Талбарын апп</button>
+        <button class="nav-item hidden" id="mobileNav" data-view="mobile" data-module="field"><span>▣</span>Талбарын апп</button>
         <button class="nav-item hidden" id="developerNav" data-view="developer"><span>{ }</span>Модуль ба API</button>
         <button class="nav-item hidden" id="structureNav" data-view="structure" data-module="structure" aria-hidden="true" tabindex="-1" style="display:none!important"><span>♧</span>Байгууллагын бүтэц</button>
         <button class="nav-item hidden" id="employeesNav" data-view="employees"><span>♙</span>Ажилтны бүртгэл</button>
@@ -226,9 +226,9 @@
     <p class="form-error" data-form-error></p><div class="dialog-actions"><button type="button" class="secondary" data-close="passwordDialog">Болих</button><button type="submit" class="primary">Нууц үг солих</button></div>
   </form></dialog>
   <div class="toast" id="toast" role="status"></div>
-  <script src="/app.js?v=34" defer></script>
-  <script src="/employee-access.js?v=29" defer></script>
-  <script src="/business-modules.js?v=33" defer></script>
+  <script src="/app.js?v=35" defer></script>
+  <script src="/employee-access.js?v=30" defer></script>
+  <script src="/business-modules.js?v=34" defer></script>
   <script src="/organization-blueprint.js?v=5" defer></script>
   <script src="/structure-smart-import.js?v=1" defer></script>
   <script src="/organization-structure-hub.js?v=1" defer></script>
@@ -239,10 +239,10 @@
   <script src="/finance.js" defer></script>
   <script src="/executive.js?v=3" defer></script>
   <script src="/integration-lab.js" defer></script>
-  <script src="/connectors.js?v=1" defer></script>
+  <script src="/connectors.js?v=2" defer></script>
   <script src="/automation.js" defer></script>
   <script src="/ai-director.js" defer></script>
-  <script src="/mobile.js" defer></script>
+  <script src="/mobile.js?v=2" defer></script>
   <script src="/developer-platform.js" defer></script>
   <script src="/attendance.js" defer></script>
   <script src="/safety.js" defer></script>
@@ -252,7 +252,7 @@
   <script src="/lighting.js?v=4" defer></script>
   <script src="/camera.js?v=1" defer></script>
   <script src="/engineering.js?v=1" defer></script>
-  <script src="/workspace-policy.js?v=30" defer></script>
+  <script src="/workspace-policy.js?v=31" defer></script>
   <script src="/standard-workspace.js?v=32" defer></script>
 </body>
 </html>

@@ -2041,7 +2041,7 @@ async function showPublicConnectors() {
       const description = document.createElement("small"); description.textContent = item.description;
       const status = document.createElement("span"); status.className = `public-connector-state${item.available ? "" : " waiting"}`; status.textContent = item.available ? "Зөвхөн унших · Бэлэн" : "OAuth тохиргоо хүлээж байна";
       copy.append(name,description,status);
-      const action = document.createElement("a"); action.className = "public-connector-action"; action.href = "https://app.overva.com/?view=connectors"; action.textContent = "Нэвтэрч холбох";
+      const action = document.createElement("a"); action.className = "public-connector-action"; action.href = "https://app.overva.com/?view=settings&settings_tab=integrations"; action.textContent = "Нэвтэрч холбох";
       card.append(icon,copy,action); grid.append(card);
     });
   } catch (error) {

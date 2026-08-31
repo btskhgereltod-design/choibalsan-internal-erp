@@ -88,7 +88,7 @@ test("lighting is one top-level workspace with scoped internal navigation",()=>{
   const lighting=read("..","web","lighting.js");
   const dockerfile=read("..","web","Dockerfile");
   assert.equal((shell.match(/data-view="lighting"/g)||[]).length,1);
-  assert.match(shell,/Нэгдсэн ажлын урсгал/);
+  assert.match(shell,/Ажлын самбар/);
   assert.match(shell,/Нэгдсэн тайлан/);
   assert.match(app,/state\.view==="lighting"&&typeof lightingView==="function"\?lightingView\(\)/);
   assert.match(lighting,/Гэрэлтүүлгийн тайлангийн эх өгөгдөл/);

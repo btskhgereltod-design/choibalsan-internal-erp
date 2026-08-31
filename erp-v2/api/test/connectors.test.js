@@ -75,7 +75,7 @@ test("public Home exposes a real catalog route instead of creating a workspace",
   assert.match(html, /id="publicConnectorGrid"/);
   assert.match(browser, /fetch\("\/api\/public\/connectors"/);
   assert.match(browser, /workspaceConnectorsButton/);
-  assert.match(browser, /https:\/\/app\.overva\.com\/\?view=connectors/);
+  assert.match(browser, /https:\/\/app\.overva\.com\/\?view=settings&settings_tab=integrations/);
   assert.doesNotMatch(browser, /homeConnectorsButton[^\n]+beginWorkspaceFromHome/);
   assert.match(publicRoute, /router\.get\("\/connectors"/);
 });

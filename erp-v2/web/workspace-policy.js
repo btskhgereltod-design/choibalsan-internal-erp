@@ -9,13 +9,14 @@
     "map","fleet","iot","integration-lab","automation","ai-director",
     "developer","industry-profile","builder"
   ]);
-  const setupViews=new Set(["dashboard","employees","users","settings","billing","audit","connectors"]);
+  const setupViews=new Set(["dashboard","employees","users","settings","billing","audit"]);
   const nestedSetupViews=new Set(["structure"]);
+  const roleOnlyViews=new Set(["mobile"]);
   const ownerOversightViews=new Set(["work-orders","engineering","lighting","camera","executive","reports"]);
   const primaryAdminOnlyViews=new Set(["settings","users","audit"]);
   const roleViews={
     director:["dashboard","work-orders","lighting","camera","executive","reports"],
-    chief_engineer:["dashboard","assets","work-orders","engineering","lighting","camera","maintenance","safety","reports","mobile"],
+    chief_engineer:["dashboard","assets","work-orders","engineering","lighting","camera","maintenance","safety","reports"],
     accountant:["dashboard","finance","inventory","procurement","reports"],
     hr:["dashboard","hr","attendance"],
     storekeeper:["dashboard","inventory","procurement","assets"],
@@ -54,7 +55,7 @@
       // This avoids locking a director-owner out of Finance, Inventory or
       // Maintenance merely because those are not part of the director role.
       for(const [view,moduleCode] of Object.entries(viewModules)){
-        if(enabledModules.includes(moduleCode)&&!nestedSetupViews.has(view))allowed.add(view);
+        if(enabledModules.includes(moduleCode)&&!nestedSetupViews.has(view)&&!roleOnlyViews.has(view))allowed.add(view);
       }
     }
     if(isOrganizationAdmin(systemRoles))for(const view of setupViews)if(!primaryAdminOnlyViews.has(view))allowed.add(view);

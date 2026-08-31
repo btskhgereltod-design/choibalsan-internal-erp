@@ -57,6 +57,24 @@ validated at enterprise scale.
   read and mutation routes now use server-derived permissions instead of the
   legacy job-role string. All 272 repository tests pass.
 
+## Role-focused navigation and work Kanban
+
+- The primary operational work surface is now **Ажлын самбар**, rendered as
+  bounded Kanban lanes for intake/assignment, start approval, execution, and
+  review/closure. It replaces the long work table presentation; OVERVA does
+  not reintroduce the legacy Gantt. Cards retain the canonical Work Order,
+  assignee, asset, due date, history, material, and workflow actions.
+- Kanban is a view over existing governed state, not a second workflow model.
+  Approval stages cannot be bypassed by dragging cards; only server-authorized
+  action controls perform transitions and retain the existing audit evidence.
+- `Холболтууд` no longer occupies the primary sidebar. Authorized owners reach
+  the same read-only connector capability through **Тохиргоо → Холболт,
+  интеграц**; OAuth return routing also lands there.
+- `Талбарын апп` is role-only for enabled field roles (engineer, electrician,
+  camera engineer, and worker). Tenant ownership or chief-engineer oversight
+  does not add it automatically, and its client view shows only work assigned
+  to the signed-in person. Approval remains in the governed work board.
+
 ## Unreleased local work — Market guest catalog interaction
 
 - The public Market sample catalog now has a separate responsive interaction

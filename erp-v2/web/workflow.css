@@ -29,3 +29,21 @@
   cursor: wait;
   opacity: .6;
 }
+
+.work-board-help{margin:-10px 0 16px;padding:11px 14px;border:1px solid #d7e4f7;border-radius:11px;background:#f5f9ff;color:#53657d;font-size:.75rem;line-height:1.5}
+.work-kanban{display:grid;grid-template-columns:repeat(4,minmax(245px,1fr));gap:14px;align-items:start;overflow-x:auto;padding:1px 1px 12px}
+.work-kanban:has(.work-lane.closed:only-child){grid-template-columns:minmax(300px,520px)}
+.work-lane{min-width:0;border:1px solid #dfe6ef;border-radius:15px;background:#eef3f8;overflow:hidden}
+.work-lane>header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:14px;border-bottom:1px solid #dfe6ef;background:#f8fafc}
+.work-lane>header h2{margin:0;font-size:.86rem}.work-lane>header small{display:block;margin-top:4px;color:#78879a;font-size:.65rem;line-height:1.35}
+.work-lane>header>b{display:grid;place-items:center;min-width:27px;height:27px;border-radius:9px;background:#dfe9f8;color:#215eb8;font-size:.72rem}
+.work-lane.start>header{border-top:3px solid #d79a22}.work-lane.doing>header{border-top:3px solid #2670df}.work-lane.review>header{border-top:3px solid #815ac9}.work-lane.closed>header{border-top:3px solid #21956d}
+.work-lane-list{display:grid;gap:10px;max-height:calc(100vh - 315px);min-height:120px;overflow-y:auto;padding:10px}
+.work-card{padding:13px;border:1px solid #dce4ee;border-radius:12px;background:#fff;box-shadow:0 5px 14px #21344d0a}.work-card.overdue{border-color:#efb4b4}
+.work-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px}.work-overdue{color:#bd3e3e;font-size:.62rem;font-weight:800}
+.work-card-title{display:block;width:100%;margin:10px 0 4px;padding:0;border:0;background:transparent;color:#15243a;text-align:left;font-size:.84rem;font-weight:850;line-height:1.35}.work-card-title:hover{color:#1f66e5}
+.work-card-type{display:block;color:#7c899a;font-size:.65rem;line-height:1.4}.work-card-line{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;color:#7b8797;font-size:.67rem}.work-card-line b{color:#3a4a60;text-align:right;font-size:.68rem}
+.work-card-section{display:grid;gap:6px;margin-top:11px;padding-top:10px;border-top:1px solid #edf0f4}.work-card-section>span{color:#7b8797;font-size:.62rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em}.work-card .assignee-select,.work-card .status-select{width:100%;max-width:none}.work-card .workflow-control{min-width:0}.work-card .workflow-action{width:100%;text-align:center}
+.work-lane-empty{margin:0;padding:28px 10px;color:#8a97a8;text-align:center;font-size:.7rem}
+@media(max-width:1200px){.work-kanban{grid-template-columns:repeat(4,280px)}}
+@media(max-width:720px){.work-kanban{grid-template-columns:86vw}.work-lane-list{max-height:none}.work-board-help{margin-top:0}}

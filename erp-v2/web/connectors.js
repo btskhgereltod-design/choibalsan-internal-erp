@@ -6,14 +6,17 @@ state.connectorResources={};
 
 const connectorRenderBefore=render;
 render=function(){
-  if(state.view!=="connectors")return connectorRenderBefore();
-  renderConnectors();
+  if(state.view==="connectors"){
+    state.view="settings";
+    state.settingsTab="integrations";
+  }
+  return connectorRenderBefore();
 };
 
 const connectorAdjustBefore=adjustModuleNavigation;
 adjustModuleNavigation=function(){
   connectorAdjustBefore();
-  $("#connectorsNav")?.classList.toggle("hidden",!(state.permissions||[]).includes("connectors.manage"));
+  $("#connectorsNav")?.classList.add("hidden");
 };
 
 function connectorMark(code){
@@ -61,14 +64,19 @@ function renderConnectors(){
     <div class="connector-grid">${state.connectors.items.map(connectorCard).join("")}</div>`;
 }
 
+function connectorsSettingsContent(){
+  if(!state.connectors){queueMicrotask(loadConnectors);return '<section class="connector-card"><strong>Холболтын мэдээллийг ачаалж байна...</strong></section>'}
+  return `<section class="connector-summary"><div><b>${state.connectors.items.filter(x=>x.connection?.status==="connected").length}</b><span>Холбогдсон</span></div><div><b>${state.connectors.items.filter(x=>x.available).length}</b><span>OAuth бэлэн</span></div><div><b>0</b><span>Бичих эрх</span></div></section><div class="connector-grid">${state.connectors.items.map(connectorCard).join("")}</div>`;
+}
+
 async function loadConnectors(){
-  try{state.connectors=await api("/api/connectors");render()}catch(error){toast(error.message,true)}
+  try{state.connectors=await api("/api/connectors");if(state.view==="settings"&&state.settingsTab==="integrations")render()}catch(error){toast(error.message,true)}
 }
 
 async function authorizeConnector(code,button){
   button.disabled=true;
   try{
-    const result=await api(`/api/connectors/${encodeURIComponent(code)}/authorize`,{method:"POST",body:JSON.stringify({returnPath:"/?view=connectors"})});
+    const result=await api(`/api/connectors/${encodeURIComponent(code)}/authorize`,{method:"POST",body:JSON.stringify({returnPath:"/?view=settings&settings_tab=integrations"})});
     location.assign(result.authorizationUrl);
   }catch(error){button.disabled=false;toast(error.message,true)}
 }
@@ -96,18 +104,18 @@ document.addEventListener("click",event=>{
 
 window.addEventListener("load",()=>{
   const query=new URLSearchParams(location.search);
-  if(query.get("view")!=="connectors")return;
+  if(query.get("view")!=="connectors"&&query.get("settings_tab")!=="integrations")return;
   let attempts=0;
   const timer=setInterval(()=>{
     attempts+=1;
     if(state.user&&(state.permissions||[]).includes("connectors.manage")){
       clearInterval(timer);
-      setView("connectors");
+      state.settingsTab="integrations";
+      setView("settings");
       if(query.get("connector")==="connected")toast("Холболт амжилттай үүслээ");
       if(query.get("connector_error"))toast("Холболтыг дуусгаж чадсангүй. Дахин оролдоно уу.",true);
-      query.delete("connector");query.delete("connector_error");
+      query.delete("connector");query.delete("connector_error");query.delete("settings_tab");
       history.replaceState({},"",`${location.pathname}?${query.toString()}`);
     }else if(attempts>50)clearInterval(timer);
   },100);
 });
-
