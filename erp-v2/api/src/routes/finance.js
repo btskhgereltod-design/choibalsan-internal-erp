@@ -230,7 +230,7 @@ router.get(
         [org],
       ),
       getPool().query(
-        `SELECT id,code,name,category,status,created_at FROM assets WHERE organization_id=$1 ORDER BY created_at DESC LIMIT 200`,
+        `SELECT id,asset_code,asset_name,account_code,acquisition_date,unit,quantity,initial_value,accumulated_depreciation,book_value,depreciation_method FROM accounting_fixed_assets WHERE organization_id=$1 ORDER BY acquisition_date DESC,id LIMIT 5000`,
         [org],
       ),
     ]);
@@ -250,6 +250,15 @@ router.get(
         0,
       );
     s.materials_pending = materials.rows.filter((x) => !x.review_id).length;
+    s.fixed_asset_count = assets.rows.length;
+    s.fixed_asset_initial_value = assets.rows.reduce(
+      (n, x) => n + Number(x.initial_value),
+      0,
+    );
+    s.fixed_asset_book_value = assets.rows.reduce(
+      (n, x) => n + Number(x.book_value),
+      0,
+    );
     res.json({
       from,
       to,

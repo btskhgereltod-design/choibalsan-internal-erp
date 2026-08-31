@@ -37,10 +37,10 @@ test("finance API uses permission grants and governed material reconciliation",(
   assert.match(route,/finance\.material\.reconcile/);
 });
 
-test("accountant workspace exposes legacy concepts without copying legacy balances",()=>{
+test("accountant workspace exposes reviewed legacy records with provenance",()=>{
   for(const label of ["Мөнгөн журнал","Өглөг","Авлага","Материалын тулгалт","Төсөв, гүйцэтгэл","Үндсэн хөрөнгө","Тайлан"]) assert.match(web,new RegExp(label));
-  assert.match(web,/Хуучин ERP-ийн бодит дүнг энд автоматаар хуулалгүй/);
-  assert.match(web,/баталгаажуулалгүй хуулсангүй/);
+  assert.match(web,/Хуучин ERP-ийн шалгагдсан өгөгдөл/);
+  assert.match(web,/эх мөр, өртөг, элэгдлийн нотолгоог хадгалсан/);
 });
 
 test("accounting workspace is enabled only for the reviewed pilot tenant",()=>{

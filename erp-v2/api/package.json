@@ -31,6 +31,7 @@
     "import:legacy-assets": "node scripts/import-legacy-assets.js",
     "import:legacy-lighting": "node scripts/import-legacy-lighting.js",
     "import:legacy-camera-safety": "node scripts/import-legacy-camera-safety.js",
+    "import:legacy-finance-inventory": "node scripts/import-legacy-finance-inventory.js",
     "repair:legacy-assets-encoding": "node scripts/repair-legacy-assets-encoding.js",
     "repair:legacy-lighting-encoding": "node scripts/repair-legacy-lighting-encoding.js",
     "test": "node --test",

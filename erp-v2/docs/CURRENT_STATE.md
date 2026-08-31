@@ -22,13 +22,22 @@ validated at enterprise scale.
   receives `finance.read`, `finance.manage`, and `finance.reconcile`, but no
   stock-movement authority. Issued Work Order material appears in the
   accounting queue without changing warehouse quantity.
-- The separate legacy SQLite source was inspected read-only. Its cash journal,
-  payables, receivables, materials, budget, fixed-asset ledger, and report
-  concepts informed the workspace, but no historical financial amounts or
-  hard-coded budgets were copied. Historical values require reviewed import.
-- All 269 repository tests pass. Local Docker applied migrations `0070` and
-  `0071`; API and tenant web are healthy, and an authenticated finance overview
-  smoke check passes. This is local verification, not production deployment.
+- The separate legacy SQLite source is exported read-only and the reviewed
+  finance/inventory importer is restricted to `choibalsan-hugjil`, guarded for
+  explicit apply, transactional, repeatable, and reconciles every source row.
+  Immutable provenance links 665 materials, 124 movements, 157 cash-journal
+  rows, 61 payable source rows, 36 receivables, and 3,932 fixed-asset rows.
+  Eighteen sub-cent or non-positive payable anomalies remain import evidence
+  instead of being falsely presented as open liabilities; 43 valid payables
+  are operational records. Hard-coded legacy budget constants remain excluded.
+- Migrations `0073`–`0076` add a separate accounting fixed-asset ledger and
+  source-precision inventory cost. The storekeeper sees quantity, unit cost,
+  and inventory value; the accountant sees cash, obligations, and asset cost,
+  depreciation, and book value. Accounting assets remain separate from
+  operational objects and their dossiers.
+- A verified pre-import backup exists at `backups/overva-20260831T050355Z`.
+  Local Docker import and a second idempotency run passed; API and tenant web
+  are healthy. This is local pilot data, not a production deployment.
 
 ## Storekeeper workspace
 
