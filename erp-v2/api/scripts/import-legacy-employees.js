@@ -3,6 +3,7 @@
 require("dotenv").config();
 const crypto = require("node:crypto");
 const { getPool, closePool } = require("../src/db");
+const { syncPrimaryAssignment } = require("../src/services/employee-assignment");
 
 const ROLES = new Set(["director", "chief_engineer", "accountant", "hr", "storekeeper", "engineer", "electric", "safety", "camera_engineer", "worker"]);
 const dryRun = process.argv.includes("--dry-run");
@@ -79,10 +80,19 @@ async function findOrCreatePosition(client, organizationId, departmentId, title)
     [organizationId, title, departmentId]
   );
   if (existing.rowCount) return existing.rows[0].id;
+  const positionCode = code("LEGACY-POS", `${departmentId || "none"}:${title}`);
+  const jobCode = code("LEGACY-JOB", title);
+  const job = await client.query(
+    `INSERT INTO jobs(organization_id,code,name,metadata)
+     VALUES($1,$2,$3,'{"source":"legacy_demo_import"}'::jsonb)
+     ON CONFLICT(organization_id,code) DO UPDATE SET name=EXCLUDED.name,updated_at=now()
+     RETURNING id`,
+    [organizationId, jobCode, title]
+  );
   const inserted = await client.query(
-    `INSERT INTO positions(organization_id,department_id,code,title,rank_level)
-     VALUES ($1,$2,$3,$4,10) RETURNING id`,
-    [organizationId, departmentId, code("LEGACY-POS", `${departmentId || "none"}:${title}`), title]
+    `INSERT INTO positions(organization_id,department_id,job_id,code,title,rank_level,metadata)
+     VALUES ($1,$2,$3,$4,$5,10,'{"source":"legacy_demo_import"}'::jsonb) RETURNING id`,
+    [organizationId, departmentId, job.rows[0].id, positionCode, title]
   );
   return inserted.rows[0].id;
 }
@@ -128,11 +138,12 @@ async function main() {
       if (positionTitle) report.positions.add(`${departmentName || ""}:${positionTitle}`.toLowerCase());
 
       const legacyMatch = await client.query(
-        `SELECT ep.user_id AS id FROM employee_profiles ep
+        `SELECT ep.user_id AS id,ep.employee_id FROM employee_profiles ep
           WHERE ep.organization_id=$1 AND ep.legacy_user_id=$2 FOR UPDATE`,
         [organizationId, raw.id]
       );
-      if (legacyMatch.rowCount) {
+      let employeeId = legacyMatch.rows[0]?.employee_id || null;
+      if (legacyMatch.rowCount && legacyMatch.rows[0].id) {
         userId = legacyMatch.rows[0].id;
         report.matched += 1;
         await client.query(
@@ -168,16 +179,47 @@ async function main() {
       }
       if (!raw.can_login) report.loginDisabled += 1;
 
+      if (!employeeId) {
+        const linkedEmployee = await client.query(
+          "SELECT employee_id FROM users WHERE organization_id=$1 AND id=$2",
+          [organizationId, userId]
+        );
+        employeeId = linkedEmployee.rows[0]?.employee_id || null;
+      }
+      if (employeeId) {
+        await client.query(
+          `UPDATE employees SET full_name=$3,job_role=$4,active=true,updated_at=now()
+           WHERE organization_id=$1 AND id=$2`,
+          [organizationId, employeeId, fullName, ROLES.has(raw.role) ? raw.role : "worker"]
+        );
+      } else {
+        const employee = await client.query(
+          `INSERT INTO employees(organization_id,full_name,job_role,active)
+           VALUES($1,$2,$3,true) RETURNING id`,
+          [organizationId, fullName, ROLES.has(raw.role) ? raw.role : "worker"]
+        );
+        employeeId = employee.rows[0].id;
+      }
+      await client.query(
+        `UPDATE users SET employee_id=$3,person_type='employee',department_id=$4,position_id=$5,updated_at=now()
+         WHERE organization_id=$1 AND id=$2`,
+        [organizationId, userId, employeeId, departmentId, positionId]
+      );
+      await syncPrimaryAssignment(client, {
+        organizationId, employeeId, departmentId, positionId,
+        source:"import", note:"Sanitized legacy demo import",
+      });
+
       await client.query(
         `INSERT INTO employee_profiles(
-          organization_id,user_id,legacy_user_id,register_no,address,phone,hire_date,contract_type,
+          organization_id,user_id,employee_id,legacy_user_id,register_no,address,phone,hire_date,contract_type,
           contract_end,salary,status_hr,job_category,education,gender,birthdate,nationality,
           emergency_contact,contract_scan_url,avatar_url,skill_allowance_rate,skill_allowance,
           meal_allowance,tenure_years,tenure_allowance_rate,tenure_allowance,haot_exempt,
           work_condition,legacy_created_at,personal_email)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30)
          ON CONFLICT (organization_id,legacy_user_id) DO UPDATE SET
-          user_id=EXCLUDED.user_id,register_no=EXCLUDED.register_no,address=EXCLUDED.address,
+          user_id=EXCLUDED.user_id,employee_id=EXCLUDED.employee_id,register_no=EXCLUDED.register_no,address=EXCLUDED.address,
           phone=EXCLUDED.phone,hire_date=EXCLUDED.hire_date,contract_type=EXCLUDED.contract_type,
           contract_end=EXCLUDED.contract_end,salary=EXCLUDED.salary,status_hr=EXCLUDED.status_hr,
           job_category=EXCLUDED.job_category,education=EXCLUDED.education,gender=EXCLUDED.gender,
@@ -189,7 +231,7 @@ async function main() {
           tenure_allowance=EXCLUDED.tenure_allowance,haot_exempt=EXCLUDED.haot_exempt,
           work_condition=EXCLUDED.work_condition,legacy_created_at=EXCLUDED.legacy_created_at,
           personal_email=EXCLUDED.personal_email,updated_at=now()`,
-        [organizationId,userId,raw.id,text(raw.register_no),text(raw.address),text(raw.phone),date(raw.hire_date),
+        [organizationId,userId,employeeId,raw.id,text(raw.register_no),text(raw.address),text(raw.phone),date(raw.hire_date),
           text(raw.contract_type),date(raw.contract_end),number(raw.salary),text(raw.status_hr),text(raw.job_category),
           text(raw.education),text(raw.gender),date(raw.birthdate),text(raw.nationality),text(raw.emergency_contact),
           text(raw.contract_scan_url),text(raw.avatar_url),number(raw.skill_allowance_rate),number(raw.skill_allowance),

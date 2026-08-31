@@ -96,7 +96,7 @@ validated at enterprise scale.
   authorization milestone is implemented, while attachment authority
   unification, full resource history, and deterministic end-to-end measures
   remain planned.
-- All 249 repository tests pass. The local Docker stack applied schema `0065`;
+- All 250 repository tests pass. The local Docker stack applied schema `0065`;
   API and tenant web are healthy, and the served UI uses server authority
   fields. This is local verification only and is not a production deployment.
 
@@ -125,6 +125,28 @@ validated at enterprise scale.
   one-time issue, consumption, balance, stock-movement linkage, and append-only
   evidence. The disposable database was removed after verification. This is
   local verification only and is not a production deployment.
+
+## Local Choibalsan legacy demo copy
+
+- The local `choibalsan-hugjil` tenant contains a bounded, sanitized copy from
+  the separate legacy SQLite application. The source was opened read-only; the
+  legacy application and database were not mutated. A restorable PostgreSQL
+  dump was taken before import.
+- The copy contains 21 active employee names with department, position, and
+  legacy role classification; 451 lighting operational objects; 212 incidents;
+  9 repair events; 106 historical Work Orders; and 159 execution notes. Imported
+  employee accounts use synthetic `demo.invalid` identifiers, unusable random
+  password hashes, and `can_login=false`. Register numbers, phones, addresses,
+  salary, legacy credentials, tokens, and files were not copied.
+- `HR`, `assets`, `work-orders`, `inventory`, and `lighting-operations` are
+  enabled only for this local demo tenant. One demo warehouse contains the two legacy
+  lighting-material names and their source balances (320 units total); prices
+  were deliberately omitted. Import source/provenance and legacy warnings are
+  retained instead of presenting copied data as newly executed OVERVA work.
+- The legacy employee importer now creates/reuses canonical jobs, positions,
+  employees, profiles, and primary assignments instead of writing only the old
+  user-linked structure. Dry-run and committed counts matched. This local data
+  copy is not a production deployment or a live synchronization.
 
 ## Next chat start
 
