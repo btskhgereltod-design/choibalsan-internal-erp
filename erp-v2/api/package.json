@@ -30,6 +30,8 @@
     "import:legacy-employees": "node scripts/import-legacy-employees.js",
     "import:legacy-assets": "node scripts/import-legacy-assets.js",
     "import:legacy-lighting": "node scripts/import-legacy-lighting.js",
+    "repair:legacy-assets-encoding": "node scripts/repair-legacy-assets-encoding.js",
+    "repair:legacy-lighting-encoding": "node scripts/repair-legacy-lighting-encoding.js",
     "test": "node --test",
     "check": "node --check src/server.js && node --check src/app.js && node --check scripts/start.js"
   },

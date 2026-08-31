@@ -8,7 +8,7 @@
   <link rel="icon" href="/cop-icon.svg" type="image/svg+xml">
   <meta name="color-scheme" content="light">
   <title>OVERVA ERP</title>
-  <link rel="stylesheet" href="/style.css?v=45">
+  <link rel="stylesheet" href="/style.css?v=46">
   <link rel="stylesheet" href="/workflow.css?v=1">
   <link rel="stylesheet" href="/work-history.css?v=2">
   <link rel="stylesheet" href="/notifications.css">
@@ -123,6 +123,7 @@
     <label>Нэр<input name="name" placeholder="Үйлчилгээний автомашин" required maxlength="250"></label>
     <label>Ангилал<select name="category" required><option>Тээврийн хэрэгсэл</option><option>Гэрэлтүүлэг</option><option>Камер</option><option>Тоног төхөөрөмж</option><option>Барилга</option><option>Бусад</option></select></label>
     <div class="form-grid"><label>Серийн дугаар<input name="serialNumber" maxlength="200"></label><label>Байршил<input name="location" maxlength="250" placeholder="Төв байр, 2 давхар"></label></div>
+    <div class="form-grid"><label>Нийт оноож болох хэмжээ<input name="allocatableQuantity" type="number" min="0.001" step="0.001" value="1" required></label><label>Хэмжих нэгж<input name="allocationUnit" maxlength="30" value="ш" required placeholder="ш, м, км"></label></div>
     <div class="form-grid"><label>Хариуцагч<select name="responsibleUserId" id="assetResponsible"><option value="">Хариуцагчгүй</option></select></label><label>Ашиглалтад орсон огноо<input name="acquiredAt" type="date"></label></div>
     <label>Тэмдэглэл<textarea name="notes" rows="3" maxlength="5000"></textarea></label>
     <p class="form-error" data-form-error></p><div class="dialog-actions"><button type="button" class="secondary" data-close="assetDialog">Болих</button><button type="submit" class="primary">Хадгалах</button></div>
@@ -131,7 +132,7 @@
   <dialog id="assetDetailDialog" class="asset-dialog"><form id="assetDetailForm" class="dialog-form">
     <input name="id" type="hidden">
     <div class="dialog-head"><div><span class="eyebrow">ХӨРӨНГИЙН ДЭЛГЭРЭНГҮЙ</span><h2 id="assetDetailTitle">Хөрөнгө</h2></div><button type="button" class="icon-button" data-close="assetDetailDialog">×</button></div>
-    <div class="asset-detail-grid"><section class="asset-edit-fields"><div class="form-grid"><label>Код<input name="code" required maxlength="80"></label><label>Төлөв<select name="status"><option value="active">Идэвхтэй</option><option value="repair">Засварт</option><option value="inactive">Идэвхгүй</option><option value="retired">Акталсан</option></select></label></div><label>Нэр<input name="name" required maxlength="250"></label><label>Ангилал<input name="category" required maxlength="100"></label><div class="form-grid"><label>Серийн дугаар<input name="serialNumber" maxlength="200"></label><label>Байршил<input name="location" maxlength="250"></label></div><div class="form-grid"><label>Хариуцагч<select name="responsibleUserId" id="assetDetailResponsible"></select></label><label>Ашиглалтад орсон<input name="acquiredAt" type="date"></label></div><label>Тэмдэглэл<textarea name="notes" rows="3" maxlength="5000"></textarea></label><p class="form-error" data-form-error></p><button class="primary" type="submit">Өөрчлөлт хадгалах</button></section><section class="asset-related"><h3>Засвар үйлчилгээний ажлууд</h3><div id="assetWorkOrders"></div><h3>Өөрчлөлтийн түүх</h3><div id="assetEvents"></div></section></div>
+    <div class="asset-detail-grid"><section class="asset-edit-fields"><div class="form-grid"><label>Код<input name="code" required maxlength="80"></label><label>Төлөв<select name="status"><option value="active">Идэвхтэй</option><option value="repair">Засварт</option><option value="inactive">Идэвхгүй</option><option value="retired">Акталсан</option></select></label></div><label>Нэр<input name="name" required maxlength="250"></label><label>Ангилал<input name="category" required maxlength="100"></label><div class="form-grid"><label>Серийн дугаар<input name="serialNumber" maxlength="200"></label><label>Байршил<input name="location" maxlength="250"></label></div><div class="form-grid"><label>Нийт оноож болох хэмжээ<input name="allocatableQuantity" type="number" min="0.001" step="0.001" required></label><label>Хэмжих нэгж<input name="allocationUnit" maxlength="30" required></label></div><div class="form-grid"><label>Хариуцагч<select name="responsibleUserId" id="assetDetailResponsible"></select></label><label>Ашиглалтад орсон<input name="acquiredAt" type="date"></label></div><label>Тэмдэглэл<textarea name="notes" rows="3" maxlength="5000"></textarea></label><p class="form-error" data-form-error></p><button class="primary" type="submit">Өөрчлөлт хадгалах</button></section><section class="asset-related"><h3>Засвар үйлчилгээний ажлууд</h3><div id="assetWorkOrders"></div><h3>Өөрчлөлтийн түүх</h3><div id="assetEvents"></div></section></div>
     <section class="attachment-box"><h3>Хавсралтууд</h3><div class="attachment-upload"><input id="assetAttachmentFile" type="file" accept="image/jpeg,image/png,image/webp,application/pdf,text/plain,.docx,.xlsx"><button type="button" class="secondary" id="assetAttachmentUpload">Файл нэмэх</button></div><div class="attachment-list" id="assetAttachments"></div><small class="attachment-help">Зураг, PDF, TXT, DOCX, XLSX · дээд хэмжээ 10 MB</small></section>
   </form></dialog>
 
@@ -208,6 +209,13 @@
     </form>
   </dialog>
 
+  <dialog id="lightingDossierDialog" class="object-dossier-dialog">
+    <div class="dialog-form">
+      <div class="dialog-head"><div><span class="eyebrow">АШИГЛАЛТЫН ОБЪЕКТЫН ХУВИЙН ХЭРЭГ</span><h2 id="lightingDossierTitle">Объект</h2></div><button type="button" class="icon-button" data-close="lightingDossierDialog">×</button></div>
+      <div id="lightingDossierBody"></div>
+    </div>
+  </dialog>
+
   <dialog id="passwordDialog"><form id="passwordForm" class="dialog-form">
     <div class="dialog-head"><div><span class="eyebrow">Аюулгүй байдал</span><h2>Нууц үг солих</h2></div><button type="button" class="icon-button" data-close="passwordDialog">×</button></div>
     <label>Одоогийн нууц үг<input name="currentPassword" type="password" autocomplete="current-password" required></label>
@@ -216,7 +224,7 @@
     <p class="form-error" data-form-error></p><div class="dialog-actions"><button type="button" class="secondary" data-close="passwordDialog">Болих</button><button type="submit" class="primary">Нууц үг солих</button></div>
   </form></dialog>
   <div class="toast" id="toast" role="status"></div>
-  <script src="/app.js?v=33" defer></script>
+  <script src="/app.js?v=34" defer></script>
   <script src="/employee-access.js?v=29" defer></script>
   <script src="/business-modules.js?v=33" defer></script>
   <script src="/organization-blueprint.js?v=5" defer></script>
@@ -239,7 +247,7 @@
   <script src="/administration.js?v=37" defer></script>
   <script src="/industry-profile.js" defer></script>
   <script src="/builder.js" defer></script>
-  <script src="/lighting.js?v=3" defer></script>
+  <script src="/lighting.js?v=4" defer></script>
   <script src="/camera.js?v=1" defer></script>
   <script src="/workspace-policy.js?v=30" defer></script>
   <script src="/standard-workspace.js?v=32" defer></script>

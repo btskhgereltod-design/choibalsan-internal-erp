@@ -242,13 +242,37 @@ async function main() {
 
     await client.query(
       `DELETE FROM positions p WHERE p.organization_id=$1 AND p.code LIKE 'LEGACY-POS-%'
-        AND NOT EXISTS(SELECT 1 FROM users u WHERE u.organization_id=p.organization_id AND u.position_id=p.id)`,
+        AND NOT EXISTS(SELECT 1 FROM users u WHERE u.organization_id=p.organization_id AND u.position_id=p.id)
+        AND NOT EXISTS(SELECT 1 FROM employee_assignments ea WHERE ea.organization_id=p.organization_id AND ea.position_id=p.id)`,
       [organizationId]
     );
     await client.query(
       `DELETE FROM departments d WHERE d.organization_id=$1 AND d.code LIKE 'LEGACY-DEPT-%'
         AND NOT EXISTS(SELECT 1 FROM users u WHERE u.organization_id=d.organization_id AND u.department_id=d.id)
         AND NOT EXISTS(SELECT 1 FROM positions p WHERE p.organization_id=d.organization_id AND p.department_id=d.id)`,
+      [organizationId]
+    );
+    // Historical assignments are append-only evidence and may still reference
+    // rows created by the damaged transport. Keep those UUIDs, but replace the
+    // unreadable labels so they never leak question-mark text into the UI.
+    await client.query(
+      `UPDATE positions SET title='Хуучин импортын албан тушаал '||right(code,10),active=false,updated_at=now()
+        WHERE organization_id=$1 AND code LIKE 'LEGACY-POS-%' AND title LIKE '%?%'`,
+      [organizationId]
+    );
+    await client.query(
+      `UPDATE departments SET name='Хуучин импортын нэгж '||right(code,10),active=false,updated_at=now()
+        WHERE organization_id=$1 AND code LIKE 'LEGACY-DEPT-%' AND name LIKE '%?%'`,
+      [organizationId]
+    );
+    await client.query(
+      `UPDATE jobs SET name='Хуучин импортын ажил '||right(code,10),active=false,updated_at=now()
+        WHERE organization_id=$1 AND code LIKE 'LEGACY-JOB-%' AND name LIKE '%?%'`,
+      [organizationId]
+    );
+    await client.query(
+      `DELETE FROM jobs j WHERE j.organization_id=$1 AND j.code LIKE 'LEGACY-JOB-%'
+        AND NOT EXISTS(SELECT 1 FROM positions p WHERE p.organization_id=j.organization_id AND p.job_id=j.id)`,
       [organizationId]
     );
 

@@ -213,6 +213,21 @@ transaction, records a linked stock movement, and uses a tenant-scoped
 idempotency key so a retry cannot decrement stock twice. Insufficient stock
 leaves both request and balance unchanged and does not fabricate procurement.
 
+An accounting Asset remains organization master data. A functional street,
+line, facility, zone, or system is an Operational Object and may reference
+multiple Assets through dated, quantified component allocations. Allocation
+does not move, clone, or retire the Asset master record. Ending an allocation
+sets its removal date; it does not delete history. The Operational Object
+dossier presents its hierarchy, active and historical components, incidents,
+Work Orders, and attributable append-only notes/events as one operational view.
+This supports divisible components such as cable as well as discrete equipment,
+without inferring physical quantities from lamp counts or other legacy fields.
+Each Asset master declares its allocatable quantity and unit. Allocation locks
+that Asset row, totals all active tenant-scoped object allocations, enforces the
+same unit, and rejects any request above the remaining quantity. Reducing the
+master quantity below an already allocated amount or changing its unit while
+active allocations exist is also rejected.
+
 ## AI and Configuration Flow
 
 ```text

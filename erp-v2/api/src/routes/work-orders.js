@@ -142,7 +142,11 @@ router.get("/:id/history", asyncHandler(async(req,res)=>{
   const [events,scopeItems,materials,materialOptions]=await Promise.all([getPool().query(`SELECT e.id,e.event_type,e.from_status,e.to_status,e.note,e.detail,e.created_at,
     u.full_name AS actor_name,u.role AS actor_role FROM work_order_events e
     LEFT JOIN users u ON u.organization_id=e.organization_id AND u.id=e.actor_user_id
-    WHERE e.organization_id=$1 AND e.work_order_id=$2 ORDER BY e.created_at,e.id`,[req.user.organization_id,id.data]),
+    WHERE e.organization_id=$1 AND e.work_order_id=$2
+      AND NOT EXISTS(SELECT 1 FROM work_order_events correction
+        WHERE correction.organization_id=e.organization_id
+          AND correction.detail->>'correctsEventId'=e.id::text)
+    ORDER BY e.created_at,e.id`,[req.user.organization_id,id.data]),
     getPool().query(`SELECT si.*,o.name operational_object_name,a.name asset_name,u.full_name exception_accepted_by_name
       FROM work_order_scope_items si
       LEFT JOIN operational_objects o ON o.organization_id=si.organization_id AND o.id=si.operational_object_id

@@ -3,12 +3,13 @@
 require("dotenv").config();
 const {getPool,closePool}=require("../src/db");
 const dryRun=process.argv.includes("--dry-run");
+const base64Input=process.argv.includes("--base64");
 const slug=process.env.IMPORT_ORG_SLUG||"choibalsan-hugjil";
-const read=()=>new Promise((resolve,reject)=>{let body="";process.stdin.setEncoding("utf8");process.stdin.on("data",x=>body+=x);process.stdin.on("end",()=>{try{resolve(JSON.parse(body))}catch(e){reject(new Error(`Invalid JSON: ${e.message}`))}});process.stdin.on("error",reject)});
+const read=()=>new Promise((resolve,reject)=>{let body="";process.stdin.setEncoding("utf8");process.stdin.on("data",x=>body+=x);process.stdin.on("end",()=>{try{resolve(JSON.parse(base64Input?Buffer.from(body.trim(),"base64").toString("utf8"):body))}catch(e){reject(new Error(`Invalid JSON: ${e.message}`))}});process.stdin.on("error",reject)});
 const clean=x=>String(x??"").trim();
 const integer=x=>Number.isInteger(Number(x))?Number(x):0;
 const timestamp=x=>{const value=clean(x);if(!value)return null;const d=new Date(value.includes("T")?value:`${value.replace(" ","T")}Z`);return Number.isNaN(d.valueOf())?null:d.toISOString()};
-const statusAsset=x=>clean(x).toLowerCase()==="active"?"active":"inactive";
+const statusAsset=x=>{const v=clean(x).toLowerCase();return v.includes("inactive")||v.includes("идэвхгүй")?"inactive":"active"};
 const faultStatus=x=>{const v=clean(x).toLowerCase();return v.includes("дуус")||v.includes("хааг")?"resolved":v.includes("явц")?"in_progress":"open"};
 const workStatus=x=>{const v=clean(x).toLowerCase();return v.includes("дуус")||v.includes("хааг")?"completed":v.includes("цуц")||v.includes("буца")?"cancelled":v.includes("хүл")?"assigned":"in_progress"};
 const legacyAssetTable=x=>{const v=clean(x).toLowerCase();return ["sl_point","sl_points","point","meter_point"].includes(v)?"sl_points":"sl_ger_inventory"};
@@ -26,7 +27,7 @@ async function main(){
     const assetIds=new Map();
     for(const [table,prefix,category,rows,nameField] of [["sl_points","SLP","lighting.meter-point",data.points,"name"],["sl_ger_inventory","SLI","lighting.fixture-group",data.inventory,"location_name"]]){
       for(const row of rows||[]){const code=`LEGACY-${prefix}-${row.id}`;let found=await client.query("SELECT id FROM operational_objects WHERE organization_id=$1 AND code=$2",[org,code]);
-        if(!found.rowCount){found=await client.query(`INSERT INTO operational_objects(organization_id,code,name,object_type,domain,status,location,metadata,source_system,source_table,source_id) VALUES($1,$2,$3,$4,'lighting',$5,$6,$7::jsonb,$8,$9,$10) RETURNING id`,[org,code,clean(row[nameField])||code,category==='lighting.meter-point'?'meter_point':'lighting_group',statusAsset(row.status),clean(row.location||row.location_name),JSON.stringify({source:data.sourceSystem,legacyId:row.id,bagNo:row.bag_no??null,meterNo:row.meter_no??null,lightType:row.light_type??null,lampCount:row.lamp_count??row.total_count??0,headCount:row.head_count??row.total_heads??0,wattagePerLamp:row.wattage_per_lamp??null,gps:{lat:row.gps_lat??null,lng:row.gps_lng??null},notes:row.notes??""}),data.sourceSystem,table,String(row.id)]);counts.assets++}
+        if(!found.rowCount){found=await client.query(`INSERT INTO operational_objects(organization_id,code,name,object_type,domain,status,location,metadata,source_system,source_table,source_id) VALUES($1,$2,$3,$4,'lighting',$5,$6,$7::jsonb,$8,$9,$10) RETURNING id`,[org,code,clean(row[nameField])||code,category==='lighting.meter-point'?'meter_point':'lighting_group',statusAsset(row.status),clean(row.location||row.location_name),JSON.stringify({source:data.sourceSystem,legacyId:row.id,legacyAssetId:row.asset_id??null,bagNo:row.bag_no??null,meterNo:row.meter_no??null,lightType:row.light_type??null,lampCount:row.lamp_count??row.total_count??0,headCount:row.head_count??row.total_heads??0,wattagePerLamp:row.wattage_per_lamp??null,gps:{lat:row.gps_lat??null,lng:row.gps_lng??null},notes:row.notes??""}),data.sourceSystem,table,String(row.id)]);counts.assets++}
         assetIds.set(`${table}:${row.id}`,found.rows[0].id);if(!await linked(table,row.id))await provenance(table,row,"operational_object",found.rows[0].id);
       }
     }

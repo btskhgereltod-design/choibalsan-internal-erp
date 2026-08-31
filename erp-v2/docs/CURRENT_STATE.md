@@ -139,6 +139,14 @@ validated at enterprise scale.
   employee accounts use synthetic `demo.invalid` identifiers, unusable random
   password hashes, and `can_login=false`. Register numbers, phones, addresses,
   salary, legacy credentials, tokens, and files were not copied.
+- A PowerShell text-pipeline defect in the first local copy had replaced
+  Cyrillic characters with question marks. The source SQLite remained correct
+  and read-only. Employees, departments, positions, jobs, 465 Assets, 451
+  Operational Objects, 212 incidents, 106 Work Orders, and visible execution
+  notes were repaired through base64-wrapped UTF-8 input while preserving their
+  target UUIDs. Asset and object correction evidence is appended; damaged Work
+  Order notes are superseded by append-only corrected events rather than
+  mutated or deleted.
 - `HR`, `assets`, `work-orders`, `inventory`, and `lighting-operations` are
   enabled only for this local demo tenant. One demo warehouse contains the two legacy
   lighting-material names and their source balances (320 units total); prices
@@ -151,8 +159,18 @@ validated at enterprise scale.
 - The separate asset importer is tenant-scoped, dry-run capable, idempotent,
   and provenance preserving. It omits purchase price, current/book value, the
   3,932-row fixed-asset ledger, legacy files, and credentials. Two unreadable
-  legacy codes received deterministic `LEGACY-ASSET-*` replacements with
-  warnings instead of losing their records.
+  legacy codes initially received deterministic `LEGACY-ASSET-*` replacements;
+  the UTF-8 repair restored the readable source codes without changing Asset
+  IDs or their relationships.
+- The lighting Operational Object list now opens an object dossier. An
+  authorized user can allocate an Asset (including a fractional quantity and
+  unit) to an object, end the active allocation without deletion, and add
+  dossier notes. The dossier shows active/historical components, incidents,
+  Work Orders, and attributable append-only history. Asset master quantity and
+  unit now bound all active object allocations; over-allocation, unit mismatch,
+  and reducing a master total below the allocated amount fail closed. No legacy object-to-Asset
+  links were fabricated: the reviewed source has zero explicit `asset_id`
+  references, so the local demo begins with zero component allocations.
 
 ## Next chat start
 

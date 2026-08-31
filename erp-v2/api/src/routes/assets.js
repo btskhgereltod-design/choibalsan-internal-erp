@@ -15,6 +15,8 @@ const fields = {
   category: z.string().trim().min(1).max(100), serialNumber: nullableText,
   location: z.string().trim().max(250).default(""), responsibleUserId: z.string().uuid().nullable().optional(),
   acquiredAt: z.iso.date().nullable().optional(), notes: z.string().trim().max(5000).default(""),
+  allocatableQuantity: z.coerce.number().positive().max(1_000_000_000).default(1),
+  allocationUnit: z.string().trim().min(1).max(30).default("ш"),
   status: z.enum(["active", "repair", "inactive", "retired"]).default("active"),
   metadata: z.record(z.string(), z.unknown()).default({}),
 };
@@ -23,6 +25,7 @@ const updateSchema = z.object({
   code: fields.code.optional(), name: fields.name.optional(), category: fields.category.optional(),
   serialNumber: fields.serialNumber, location: fields.location.optional(), responsibleUserId: fields.responsibleUserId,
   acquiredAt: fields.acquiredAt, notes: fields.notes.optional(), status: fields.status.optional(),
+  allocatableQuantity: fields.allocatableQuantity.optional(), allocationUnit: fields.allocationUnit.optional(),
 }).refine(value => Object.keys(value).length > 0, "No changes supplied");
 
 async function responsibleUser(client, organizationId, userId) {
@@ -38,6 +41,7 @@ router.use(authenticate, requireModule("assets"));
 router.get("/", asyncHandler(async (req, res) => {
   const result = await getPool().query(
     `SELECT a.id,a.code,a.name,a.category,a.status,a.serial_number,a.location,a.responsible_user_id,
+            a.allocatable_quantity,a.allocation_unit,
             a.acquired_at,a.notes,a.metadata,a.created_at,a.updated_at,u.full_name AS responsible_name
        FROM assets a LEFT JOIN users u ON u.organization_id=a.organization_id AND u.id=a.responsible_user_id
       WHERE a.organization_id=$1 AND COALESCE(a.metadata->>'excludedFromAssetMaster','false')<>'true'
@@ -82,11 +86,11 @@ router.post("/", requireRoles(...editableRoles), asyncHandler(async (req, res) =
     const responsible = await responsibleUser(client,req.user.organization_id,value.responsibleUserId);
     if (value.responsibleUserId&&!responsible) { await client.query("ROLLBACK"); return res.status(400).json({ error: "Хариуцагч хэрэглэгч олдсонгүй" }); }
     const result = await client.query(
-      `INSERT INTO assets(organization_id,code,name,category,status,serial_number,location,responsible_user_id,acquired_at,notes,metadata,created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12)
+      `INSERT INTO assets(organization_id,code,name,category,status,serial_number,location,responsible_user_id,acquired_at,notes,metadata,created_by,allocatable_quantity,allocation_unit)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14)
        RETURNING *`,
       [req.user.organization_id,value.code,value.name,value.category,value.status,value.serialNumber||null,value.location,
-        responsible?.id||null,value.acquiredAt||null,value.notes,JSON.stringify(value.metadata),req.user.id]
+        responsible?.id||null,value.acquiredAt||null,value.notes,JSON.stringify(value.metadata),req.user.id,value.allocatableQuantity,value.allocationUnit]
     );
     const asset = result.rows[0];
     await client.query(
@@ -118,12 +122,18 @@ router.patch("/:id", requireRoles(...editableRoles), asyncHandler(async (req, re
       location:value.location??current.location,responsibleUserId:hasResponsible?(value.responsibleUserId||null):current.responsible_user_id,
       acquiredAt:Object.hasOwn(value,"acquiredAt")?value.acquiredAt:current.acquired_at,
       notes:value.notes??current.notes,status:value.status??current.status,
+      allocatableQuantity:value.allocatableQuantity??current.allocatable_quantity,
+      allocationUnit:value.allocationUnit??current.allocation_unit,
     };
+    const allocated=Number((await client.query(`SELECT COALESCE(sum(quantity),0) total FROM operational_object_components
+      WHERE organization_id=$1 AND asset_id=$2 AND removed_at IS NULL`,[req.user.organization_id,id.data])).rows[0].total);
+    if(allocated>Number(next.allocatableQuantity)){await client.query("ROLLBACK");return res.status(409).json({error:`Одоогоор ${allocated} ${current.allocation_unit} объектод оноосон тул нийт хэмжээг үүнээс бага болгох боломжгүй`});}
+    if(allocated>0&&next.allocationUnit!==current.allocation_unit){await client.query("ROLLBACK");return res.status(409).json({error:"Идэвхтэй объектын оноолттой хөрөнгийн нэгжийг өөрчлөх боломжгүй"});}
     const updated = await client.query(
       `UPDATE assets SET code=$1,name=$2,category=$3,serial_number=$4,location=$5,responsible_user_id=$6,
-              acquired_at=$7,notes=$8,status=$9,updated_at=now()
-        WHERE organization_id=$10 AND id=$11 RETURNING *`,
-      [next.code,next.name,next.category,next.serialNumber||null,next.location,next.responsibleUserId,next.acquiredAt||null,next.notes,next.status,req.user.organization_id,id.data]
+              acquired_at=$7,notes=$8,status=$9,allocatable_quantity=$10,allocation_unit=$11,updated_at=now()
+        WHERE organization_id=$12 AND id=$13 RETURNING *`,
+      [next.code,next.name,next.category,next.serialNumber||null,next.location,next.responsibleUserId,next.acquiredAt||null,next.notes,next.status,next.allocatableQuantity,next.allocationUnit,req.user.organization_id,id.data]
     );
     await client.query(
       `INSERT INTO asset_events(organization_id,asset_id,actor_user_id,event_type,detail)

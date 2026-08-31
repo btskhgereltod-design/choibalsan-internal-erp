@@ -4,9 +4,10 @@ require("dotenv").config();
 const { getPool, closePool } = require("../src/db");
 
 const dryRun=process.argv.includes("--dry-run");
+const base64Input=process.argv.includes("--base64");
 const organizationSlug=process.env.IMPORT_ORG_SLUG||process.env.BOOTSTRAP_ORG_SLUG;
 
-function readStdin(){return new Promise((resolve,reject)=>{let body="";process.stdin.setEncoding("utf8");process.stdin.on("data",chunk=>body+=chunk);process.stdin.on("end",()=>{try{resolve(JSON.parse(body))}catch(error){reject(new Error(`Invalid asset import JSON: ${error.message}`))}});process.stdin.on("error",reject)})}
+function readStdin(){return new Promise((resolve,reject)=>{let body="";process.stdin.setEncoding("utf8");process.stdin.on("data",chunk=>body+=chunk);process.stdin.on("end",()=>{try{resolve(JSON.parse(base64Input?Buffer.from(body.trim(),"base64").toString("utf8"):body))}catch(error){reject(new Error(`Invalid asset import JSON: ${error.message}`))}});process.stdin.on("error",reject)})}
 const text=value=>String(value??"").trim();
 function targetStatus(row){const condition=text(row.condition).toLowerCase(),status=text(row.status).toLowerCase();if(condition.includes("татан буулгах"))return "retired";if(condition.includes("засвар"))return "repair";if(status.includes("идэвхгүй"))return "inactive";return "active"}
 
