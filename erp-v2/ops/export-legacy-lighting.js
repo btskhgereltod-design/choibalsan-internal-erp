@@ -25,6 +25,7 @@ async function main(){
     photos:await all(`SELECT * FROM work_photos WHERE work_log_id IN (${placeholders}) ORDER BY id`,ids),
     users:await all("SELECT id,full_name,role FROM users ORDER BY id")
   };
-  process.stdout.write(JSON.stringify(data));
+  const payload=JSON.stringify(data);
+  process.stdout.write(process.argv.includes("--base64")?Buffer.from(payload,"utf8").toString("base64"):payload);
 }
 main().catch(error=>{console.error(error);process.exitCode=1}).finally(()=>db.close());

@@ -34,6 +34,7 @@
     "import:legacy-finance-inventory": "node scripts/import-legacy-finance-inventory.js",
     "repair:legacy-assets-encoding": "node scripts/repair-legacy-assets-encoding.js",
     "repair:legacy-lighting-encoding": "node scripts/repair-legacy-lighting-encoding.js",
+    "repair:legacy-camera-safety-encoding": "node scripts/repair-legacy-camera-safety-encoding.js",
     "test": "node --test",
     "check": "node --check src/server.js && node --check src/app.js && node --check scripts/start.js"
   },

@@ -20,6 +20,7 @@ test("legacy camera and safety export is read only and excludes credentials and 
   const exporter=read("..","ops","export-legacy-camera-safety.js");
   assert.match(exporter,/sqlite3\.OPEN_READONLY/);
   assert.match(exporter,/SELECT id,full_name,role FROM users/);
+  assert.match(exporter,/--base64/);
   assert.doesNotMatch(exporter,/password_hash|signature_code|gps_lat|gps_lng/);
 });
 
@@ -32,6 +33,15 @@ test("camera and safety import preserves source records and master asset allocat
   assert.match(importer,/category='camera\.repair'/);
   assert.match(importer,/source_system IN \(\$2,'choibalsan-legacy-erp'\)/);
   assert.match(importer,/GPS and file paths intentionally excluded/);
+});
+
+test("camera and safety UTF-8 repair preserves immutable evidence and appends visible corrections",()=>{
+  const repair=read("scripts","repair-legacy-camera-safety-encoding.js");
+  assert.match(repair,/--dry-run/);
+  assert.match(repair,/--base64/);
+  assert.match(repair,/correctsEventId/);
+  assert.match(repair,/legacy_camera_safety\.encoding_repair/);
+  assert.doesNotMatch(repair,/UPDATE work_order_approvals|UPDATE safety_acknowledgements|UPDATE source_import_records/);
 });
 
 test("camera workspace exposes quantities, history and object dossiers",()=>{

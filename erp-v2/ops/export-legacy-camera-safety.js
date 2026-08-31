@@ -25,7 +25,8 @@ async function main(){
     safetyTrainingAcks:await all("SELECT id,training_id,user_id,acknowledged_at,note,created_at FROM safety_training_ack ORDER BY id"),
     users:await all("SELECT id,full_name,role FROM users ORDER BY id")
   };
-  process.stdout.write(JSON.stringify(data));
+  const payload=JSON.stringify(data);
+  process.stdout.write(process.argv.includes("--base64")?Buffer.from(payload,"utf8").toString("base64"):payload);
 }
 
 main().catch(error=>{console.error(error);process.exitCode=1}).finally(()=>db.close());

@@ -34,11 +34,24 @@ validated at enterprise scale.
 - Importers were rerun in dry-run mode after apply: all 465 assets, 327
   lighting/work source rows, and 4,975 finance/inventory source rows were
   skipped as already reconciled; camera and safety created no duplicate domain
-  records or approval evidence. All 284 repository tests pass.
+  records or approval evidence.
+- The first production camera/safety and complete-work transport used a
+  PowerShell text pipe and replaced Cyrillic display text with question marks;
+  the source SQLite remained valid. Exporters now support base64-wrapped UTF-8.
+  A scoped production repair restored 451 legacy lighting helper assets, 72
+  Work Order titles/descriptions, 157 visible execution notes, 110 camera
+  objects, 30 camera incidents, 103 visible approval-history events, 92 safety
+  risks, 19 routes, and two safety documents without changing their canonical
+  IDs or relationships. Append-only damaged events were superseded by corrected
+  events, not mutated or deleted. A post-repair scan reports zero question-mark
+  corruption across all user-visible asset, object, incident, Work Order,
+  history-note, safety, employee, inventory, and accounting fields. Repeated
+  repair dry-runs report zero changes. All 285 repository tests pass.
 - The verified production restore point immediately before this data import is
   `overva-20260831T063329Z`; the verified post-import backup is
-  `overva-20260831T063544Z`. All production services and public endpoints were
-  healthy after the import.
+  `overva-20260831T063544Z`. The verified pre-repair and post-repair backups are
+  `overva-20260831T064621Z` and `overva-20260831T064729Z`. All production
+  services and public endpoints were healthy after the repair.
 - `ops/export-legacy-assets.js` is the reviewed read-only asset exporter.
   `ops/export-legacy-lighting.js --all-work` provides the complete legacy work
   set, while the camera/safety importer can reconcile those canonical Work

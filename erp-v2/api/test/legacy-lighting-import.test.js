@@ -36,6 +36,7 @@ test("legacy export is read-only and excludes credentials",()=>{
   assert.match(exporter,/sqlite3\.OPEN_READONLY/);
   assert.match(exporter,/SELECT id,full_name,role FROM users/);
   assert.match(exporter,/--all-work/);
+  assert.match(exporter,/--base64/);
   assert.match(exporter,/SELECT \* FROM asset_events ORDER BY id/);
   assert.doesNotMatch(exporter,/password_hash|passwordHash/);
 });
@@ -61,6 +62,7 @@ test("legacy lighting encoding repair is scoped, auditable and preserves provena
   assert.match(repair,/organization_id=\$1/);
   assert.match(repair,/source_system=\$2/);
   assert.match(repair,/legacy_lighting\.encoding_repair/);
+  assert.match(repair,/INSERT INTO asset_events/);
   assert.match(repair,/--dry-run/);
   assert.doesNotMatch(repair,/UPDATE source_import_records/);
 });

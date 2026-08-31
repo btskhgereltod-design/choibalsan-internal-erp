@@ -17,16 +17,24 @@ async function main(){
   const data=await read();
   if(data.format!=="overva.legacy-lighting.v1")throw new Error("Unsupported lighting import format");
   const client=await getPool().connect();
-  const counts={objects:0,incidents:0,workOrders:0,executionNotes:0};
+  const counts={assets:0,objects:0,incidents:0,workOrders:0,executionNotes:0};
   try{
     await client.query("BEGIN");
     const organization=await client.query("SELECT id FROM organizations WHERE slug=$1",[slug]);
     if(!organization.rowCount)throw new Error(`Organization not found: ${slug}`);
     const organizationId=organization.rows[0].id;
 
-    for(const [table,rows,nameField] of [["sl_points",data.points,"name"],["sl_ger_inventory",data.inventory,"location_name"]]){
+    for(const [table,prefix,category,rows,nameField] of [["sl_points","SLP","lighting.meter-point",data.points,"name"],["sl_ger_inventory","SLI","lighting.fixture-group",data.inventory,"location_name"]]){
       for(const row of rows||[]){
         const metadata={legacyId:row.id,legacyAssetId:row.asset_id??null,bagNo:row.bag_no??null,meterNo:row.meter_no??null,lightType:row.light_type??null,lampCount:row.lamp_count??row.total_count??0,headCount:row.head_count??row.total_heads??0,wattagePerLamp:row.wattage_per_lamp??null,gps:{lat:row.gps_lat??null,lng:row.gps_lng??null},notes:row.notes??""};
+        const repairedAssets=await client.query(`UPDATE assets SET name=$3,category=$4,status=$5,location=$6,notes=$7,
+          metadata=metadata||$8::jsonb,updated_at=now()
+          WHERE organization_id=$1 AND code=$2
+            AND (name LIKE '%?%' OR COALESCE(location,'') LIKE '%?%' OR COALESCE(notes,'') LIKE '%?%' OR metadata::text LIKE '%?%')
+          RETURNING id`,[organizationId,`LEGACY-${prefix}-${row.id}`,clean(row[nameField])||`Legacy asset ${row.id}`,category,statusAsset(row.status),clean(row.location||row.location_name),clean(row.notes),JSON.stringify(metadata)]);
+        for(const asset of repairedAssets.rows)await client.query(`INSERT INTO asset_events(organization_id,asset_id,actor_user_id,event_type,detail)
+          VALUES($1,$2,NULL,'updated',$3::jsonb)`,[organizationId,asset.id,JSON.stringify({reason:"legacy UTF-8 transport correction",source:data.sourceSystem,sourceTable:table,sourceId:row.id})]);
+        counts.assets+=repairedAssets.rowCount;
         const result=await client.query(`UPDATE operational_objects SET name=$5,location=$6,status=$7,metadata=metadata||$8::jsonb,updated_at=now()
           WHERE organization_id=$1 AND source_system=$2 AND source_table=$3 AND source_id=$4
             AND (name LIKE '%?%' OR COALESCE(location,'') LIKE '%?%' OR metadata::text LIKE '%?%' OR NOT (metadata ? 'legacyAssetId'))`,[organizationId,data.sourceSystem,table,String(row.id),clean(row[nameField])||`Legacy object ${row.id}`,clean(row.location||row.location_name),statusAsset(row.status),JSON.stringify(metadata)]);
