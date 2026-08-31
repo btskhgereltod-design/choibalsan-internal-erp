@@ -9,6 +9,7 @@ secrets/*
 cloudflared.production.yml
 backups/
 backups-production/
+release-artifacts/
 api/node_modules/
 *.log
 certificates/

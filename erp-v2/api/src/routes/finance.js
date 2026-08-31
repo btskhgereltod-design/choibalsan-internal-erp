@@ -784,6 +784,7 @@ router.post(
       },
       sourceEntityType: "finance_import_job",
       sourceEntityId: job.id,
+      sourceDeliveryKey: `finance-import.completed:${job.id}`,
     }).catch((error) => console.error("[automation]", error));
     res.status(201).json({ job });
   }),

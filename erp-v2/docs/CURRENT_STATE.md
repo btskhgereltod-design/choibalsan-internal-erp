@@ -6,6 +6,101 @@ This document answers one question: **what exists in the repository now?** It
 does not claim that every implemented foundation is complete or production-
 validated at enterprise scale.
 
+## Work Order assignment history foundation
+
+- Migrations `0078`–`0080` additively extend `work_order_events` with versioned, typed
+  initial-assignment, assignment, reassignment, and unassignment evidence.
+  Tenant-composite User and Employee references, optional idempotency, timeline
+  indexes, a database append-only trigger, User-to-Employee pair integrity,
+  parent-delete restriction, and stable automation delivery identity are
+  included. The compatible
+  `work_orders.assigned_to` field remains the current snapshot.
+- Existing events are deliberately not backfilled. A null
+  `assignment_history_version` remains legacy/non-canonical evidence, and
+  reports return the missing historical attribution as `unknown` rather than
+  projecting the current assignee backward in time.
+- Migration `0079` is deliberately the schema-first transition phase: it
+  accepts old-image unversioned assignment inserts as non-canonical evidence so
+  application rollback does not break writes. Strict version-1 rejection is a
+  separate future activation migration, permitted only after new writers have
+  soaked and every old image has been retired. Runtime update/delete/truncate
+  rights on the event journal are explicitly revoked in addition to the
+  append-only trigger.
+- One assignment service now owns assignee validation/reference resolution,
+  initial history, snapshot changes, typed from/to evidence, idempotent replay,
+  and same-assignee no-op handling. The Work Order create/assign API, legacy
+  lighting import, and automation-created Work Orders use that contract.
+- The management report people section now attributes period assignments and
+  completions through version-1 assignment events linked to canonical
+  Employees. Current open and overdue workload remains an explicitly current
+  snapshot. CSV output distinguishes known versus unknown period-end assignee
+  history, and the UI exposes legacy unknown counts as data-quality warnings.
+- Creation-time assignment quality uses only an `initial` event recorded no
+  later than the Work Order creation timestamp and inside the tenant-timezone
+  period boundary. A later event cannot retroactively turn an earlier unknown
+  state into known or change the creation-time unassigned count.
+- A disposable staging-equivalent rehearsal upgraded a synthetic production-
+  volume baseline from `0077` through `0080`: 106 Work Orders, 85 assigned
+  snapshots, and 656 legacy events remained unchanged, with zero fabricated
+  typed events. Rerun was a no-op. Database integrations verify timezone/as-of
+  boundaries, initial/reassigned/unassigned order, exact-payload idempotency,
+  old-writer transition compatibility, tenant and User/Employee-pair isolation,
+  restricted parent deletion, immutable events, and automation delivery replay.
+  The complete repository suite passes 310/310 tests. This foundation is now
+  deployed to production as Phase A at schema `0080`. Production assignment
+  history before the recorded migration cutoff remains unknown, and no
+  historical rows were fabricated.
+- Production release readiness now includes a successful full restore of
+  backup `overva-20260831T083827Z` into an isolated database and uploads
+  directory. Restored schema `0077`, 106 Work Orders, 85 assigned snapshots,
+  656 events, validated critical foreign keys, API health, and authenticated
+  session all reconciled before the isolated database, API container, and files
+  were removed. Timestamped evidence is in
+  `PRODUCTION_RESTORE_REHEARSAL_20260831T110319Z.md`.
+- `PRODUCTION_RELEASE_READINESS_RUNBOOK.md` pins the currently deployed API and
+  Web image digests, defines mandatory pre-build immutable tags and exported
+  image archives, supplies a no-build rollback Compose override, and gives
+  exact schema/event/trigger/FK/privilege/idempotency/report/CSV/tenant/health
+  reconciliation commands. The pre-build gate has now pinned both running
+  images with immutable local rollback tags, exported and SHA-256 hashed both
+  Docker archives, and copied the archives plus checksum manifest into a
+  private owner-only Google Drive vault. `D:` was rejected as independent
+  storage because it is on the same physical disk as `C:`. Exact artifact IDs
+  and evidence are in `PRODUCTION_RELEASE_IMAGE_RECORD_20260831T083827Z.md`
+  and `PRODUCTION_PRE_BUILD_GATE_20260831T115011Z.md`.
+- The same gate created and explicitly verified fresh production backup
+  `overva-20260831T114722Z`, including database dump, uploads archive, checksum
+  manifest, and archive readability, then copied all four files to the private
+  off-host vault. Read-only checks before and after preservation remained at
+  schema `0077`, 106 Work Orders, 85 assigned snapshots, 656 events, and zero
+  long/open transactions or relevant locks. No candidate build, migration,
+  deploy, Phase B activation, or production database data write occurred.
+- The current backup scheduler verifies each generated backup after creation,
+  but its container healthcheck does not prove freshness or checksum state and
+  `LATEST` is advanced before the separate verification finishes. The accepted
+  readiness design uses a post-verification `LAST_VERIFIED` marker, 26-hour
+  warning, 30-hour unhealthy threshold, independent verification, and a
+  31-day restore-proof gate. Scheduler behavior is not changed in this sprint.
+- A second disposable candidate rehearsal rebuilt schema `0077`, seeded the
+  106/85/656 baseline, migrated to `0080`, and ran the exact deployed
+  release-contract plus session/report/CSV smokes. Cross-tenant lookup denial,
+  exact idempotency replay, conflicting-payload rejection, 106 CSV detail rows,
+  all six CSV/report reconciliation flags, and ordinary-user HTTP 403 passed.
+  Its API container, database, and candidate-only image were removed afterward.
+- The controlled Phase A production release applied reviewed migrations
+  `0078`–`0080` with bounded timeouts and exact checksum verification, then
+  deployed API image `sha256:036bfe0f7d9f223c0136328b53c74deec4755928ca78f40bc0e8a2e96bdebbc5`
+  followed by Web image
+  `sha256:b3936e47bec669d05b7797b9c38bbab9ca9d7caac922b90b758002c6955067be`.
+  Reconciliation preserved 106 Work Orders, 85 assigned snapshots, and 656
+  legacy events with zero typed backfill, zero mismatches, all critical
+  constraints/triggers/privileges correct, no automation duplicates, and no
+  Phase B trigger. Contract, tenant isolation, idempotency, session,
+  report/CSV, authorization, service, and public-edge smokes passed. Verified
+  pre/post backups are `overva-20260831T114722Z` and
+  `overva-20260831T121439Z`; full evidence is in
+  `PRODUCTION_PHASE_A_RELEASE_20260831T121534Z.md`.
+
 ## Integrated management report foundation
 
 - The tenant application now has an evidence-backed **Нэгдсэн тайлан** draft
@@ -20,9 +115,10 @@ validated at enterprise scale.
 - Historic opening and closing states are reconstructed from append-only Work
   Order events. Unknown boundary states, unassigned new work, and assignees not
   linked to the canonical Employee master are exposed as data-quality warnings
-  instead of being silently treated as valid values. The people table is based
-  on canonical Employees; because assignment-change history is not currently
-  captured, period activity is explicitly attributed to the current assignee.
+  instead of being silently treated as valid values. The original production
+  report attributes people activity to the current assignee; the repository's
+  new `0078` foundation replaces that approximation with typed assignment
+  events after its recorded production deployment cutoff.
 - Asset counts are labelled and returned as a current snapshot, not a historic
   flow. Printable A4 landscape/PDF styling and a UTF-8 CSV reconciliation export
   are implemented. The CSV includes the opening, created, completed, cancelled,

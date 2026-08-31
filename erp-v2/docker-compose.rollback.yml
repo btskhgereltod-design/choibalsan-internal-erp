@@ -1,0 +1,8 @@
+services:
+  api:
+    image: ${OVERVA_ROLLBACK_API_IMAGE:?OVERVA_ROLLBACK_API_IMAGE is required}
+    pull_policy: never
+
+  web:
+    image: ${OVERVA_ROLLBACK_WEB_IMAGE:?OVERVA_ROLLBACK_WEB_IMAGE is required}
+    pull_policy: never

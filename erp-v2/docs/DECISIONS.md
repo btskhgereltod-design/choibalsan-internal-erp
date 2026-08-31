@@ -557,6 +557,69 @@ foundations. Implementation and production deployment remain separate gates.
 `ASSET_MAINTENANCE_VERTICAL_SLICE_CONTRACT_V1.md` define the accepted model,
 routing, baseline debt, and first proof contract.
 
+### D-033 — Preserve the current Work Order assignee snapshot and add a versioned append-only timeline
+
+Accepted: 2026-08-31
+
+`work_orders.assigned_to` remains the compatible current-assignee reference to
+a tenant User. Work Order assignment history is recorded as versioned, typed
+`assigned` events in the existing `work_order_events` journal rather than as a
+second current-state table. Version 1 distinguishes initial state, assignment,
+reassignment, and unassignment; keeps same-tenant from/to User references; and
+captures the linked Employee identifiers observed at event time for workforce
+reporting. Employee evidence does not grant login or process authority.
+
+Snapshot change, assignment event, and tenant audit are one transaction. The
+Work Order row is locked before comparison, an unchanged assignee is a no-op,
+and an optional tenant/work-order idempotency key makes a replay non-mutating.
+The event journal rejects update and delete at the database layer. UI/API,
+import, and system-created Work Orders use one assignment service contract;
+direct assignment SQL is compatibility debt to eliminate rather than copy.
+
+No existing assignment event or Work Order is rewritten or synthesized.
+Events without `assignment_history_version=1` remain legacy/non-canonical
+evidence. If no version-1 event exists for a historical boundary, the assignee
+is unknown even when the Work Order has a current snapshot. A source import may
+record the assignment observed at import time, but it may not claim that the
+assignment occurred at the source Work Order creation time. Correction uses a
+new attributable event, never mutation of prior evidence.
+
+Migrations `0078`–`0079` are additive and retain old response fields. Earlier
+application code can continue reading `assigned_to`; it must not write after
+deployment without the canonical event service. Rollback therefore means an
+application rollback to compatible reads while preserving the new columns and
+immutable evidence, not deleting the event history.
+
+### D-034 — Activate strict assignment writers only after a backward-compatible schema phase
+
+Accepted: 2026-08-31
+
+This decision replaces only D-033's rollout assumption that an earlier
+application image must stop writing immediately after migrations `0078`–`0079`.
+Production review showed that such a guard would make assignment rollback fail
+and would leave a create-write transition window while the previous API was
+still serving traffic.
+
+Assignment history therefore deploys in two releases. The first release adds
+the canonical columns, constraints, append-only trigger, delete restriction,
+pair-consistent User/Employee evidence, and new application writer while still
+accepting old-image unversioned assignment events as non-canonical transition
+evidence. No legacy or transition evidence is backfilled. The previous image
+may be restored during this phase without breaking assignment writes.
+
+Only a later, separately reviewed activation migration may reject unversioned
+assignment inserts. Its gates are: every repository and external writer uses
+version 1; the new image has completed a production soak; the old image is
+retired as a rollback target; transition-write reconciliation is complete; and
+a forward-fix procedure is rehearsed. Parent Work Order deletion is restricted,
+event mutation privileges are revoked from the runtime role, and consequential
+integration tests use a disposable database rather than deleting evidence.
+
+Idempotency means exact-request replay. Reusing an assignment or automation
+delivery identity with a different consequential payload is a conflict. A
+stable automation source delivery is processed at most once per tenant and a
+rule runs at most once per event.
+
 ## Active Hypotheses
 
 ### H-001 — Customer journey

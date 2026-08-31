@@ -10,6 +10,13 @@ const { notifyUser, notifyManagement } = require("../services/notifications");
 const { canTransition, WORKFLOW_ACTIONS, availableWorkflowActions, canPerformWorkflowAction } = require("../services/work-order-flow");
 const { canTransitionMaterial } = require("../services/work-order-material-flow");
 const {
+  activeAssignee,
+  assignmentState,
+  recordInitialAssignment,
+  replayAssignment,
+  changeAssignment,
+} = require("../services/work-order-assignment");
+const {
   WORK_ORDER_PERMISSIONS,
   hasPermission,
   canReadOrder,
@@ -29,7 +36,11 @@ const createSchema = z.object({
   priority: z.enum(["low", "normal", "high", "emergency"]).default("normal"), dueAt: z.iso.datetime().nullable().optional(),
 });
 const statusSchema = z.object({ status: z.enum(["assigned", "in_progress", "pending_review", "completed", "cancelled"]) });
-const assignmentSchema = z.object({ assignedTo: z.string().uuid().nullable() });
+const assignmentSchema = z.object({
+  assignedTo: z.string().uuid().nullable(),
+  reason: z.string().trim().max(2000).default(""),
+  idempotencyKey: z.string().uuid().nullable().optional(),
+});
 const noteSchema = z.object({ note: z.string().trim().min(1).max(2000) });
 const workflowActionSchema = z.object({ action: z.enum(Object.keys(WORKFLOW_ACTIONS)), note: z.string().trim().max(2000).default("") });
 const scopeItemSchema = z.object({
@@ -60,12 +71,6 @@ async function scopeClosure(client,organizationId,workOrderId){
     COALESCE(sum(unresolved_quantity),0) unresolved,COALESCE(sum(deferred_quantity),0) deferred
     FROM work_order_scope_items WHERE organization_id=$1 AND work_order_id=$2`,[organizationId,workOrderId]);
   return result.rows[0];
-}
-
-async function activeAssignee(client, organizationId, userId) {
-  if (!userId) return null;
-  const result = await client.query("SELECT id,full_name,role,department_id,employee_id FROM users WHERE organization_id=$1 AND id=$2 AND active=true AND can_login=true", [organizationId,userId]);
-  return result.rows[0] || null;
 }
 
 async function notifyAuthority(client, { organizationId, permission, excludeUserId, title, message, entityId }) {
@@ -140,6 +145,9 @@ router.get("/:id/history", asyncHandler(async(req,res)=>{
   const inventoryEnabled=(req.user.enabled_modules||[]).includes("inventory");
   const canRequestMaterial=inventoryEnabled&&hasPermission(req.user,WORK_ORDER_PERMISSIONS.MATERIAL_REQUEST)&&canManageScope(req.user,order.rows[0])&&!['completed','cancelled'].includes(order.rows[0].status);
   const [events,scopeItems,materials,materialOptions]=await Promise.all([getPool().query(`SELECT e.id,e.event_type,e.from_status,e.to_status,e.note,e.detail,e.created_at,
+    e.assignment_history_version,e.assignment_operation,e.assignment_source,
+    e.from_assignee_user_id,e.to_assignee_user_id,e.from_assignee_employee_id,e.to_assignee_employee_id,
+    e.assignment_reason,
     u.full_name AS actor_name,u.role AS actor_role FROM work_order_events e
     LEFT JOIN users u ON u.organization_id=e.organization_id AND u.id=e.actor_user_id
     WHERE e.organization_id=$1 AND e.work_order_id=$2
@@ -306,11 +314,15 @@ router.post("/",asyncHandler(async(req,res)=>{
     const item=result.rows[0];
     await client.query(`INSERT INTO work_order_events(organization_id,work_order_id,actor_user_id,event_type,to_status,detail)
       VALUES($1,$2,$3,'created',$4,$5::jsonb)`,[req.user.organization_id,item.id,req.user.id,status,JSON.stringify({assignedTo:assignee?.id||null,assignedName:assignee?.full_name||null,workflowStage})]);
+    await recordInitialAssignment(client,{
+      organizationId:req.user.organization_id,workOrderId:item.id,actorUserId:req.user.id,
+      assignee,status,source:"api",
+    });
     if(assignee&&assignee.id!==req.user.id)await notifyUser(client,{organizationId:req.user.organization_id,userId:assignee.id,type:"work_assigned",title:"Шинэ ажил хуваарилагдлаа",message:value.title,entityId:item.id});
     if(workflowStage){const policy=await client.query("SELECT config FROM organization_workflow_policies WHERE organization_id=$1 AND id=$2",[req.user.organization_id,item.workflow_policy_id]);const config=policy.rows[0]?.config||{};await notifyAuthority(client,{organizationId:req.user.organization_id,permission:config.startSafetyPermission,excludeUserId:req.user.id,title:"Ажил эхлүүлэх зөвшөөрөл хүлээгдэж байна",message:value.title,entityId:item.id});}
     await writeAudit(req,"work_order.create","work_order",item.id,{title:value.title,assignedTo:assignee?.id||null,workflowStage},client);
     await client.query("COMMIT");
-    await emitAutomationEvent({organizationId:req.user.organization_id,eventType:"work_order.created",payload:{id:item.id,title:item.title,priority:item.priority,status:item.status,category:item.category},sourceEntityType:"work_order",sourceEntityId:item.id}).catch(error=>console.error("[automation]",error));
+    await emitAutomationEvent({organizationId:req.user.organization_id,eventType:"work_order.created",payload:{id:item.id,title:item.title,priority:item.priority,status:item.status,category:item.category},sourceEntityType:"work_order",sourceEntityId:item.id,sourceDeliveryKey:`work-order.created:${item.id}`}).catch(error=>console.error("[automation]",error));
     res.status(201).json({item});
   }catch(error){await client.query("ROLLBACK").catch(()=>{});throw error;}finally{client.release();}
 }));
@@ -321,20 +333,28 @@ router.patch("/:id/assign",asyncHandler(async(req,res)=>{
   const client=await getPool().connect();
   try{
     await client.query("BEGIN");
-    const found=await client.query("SELECT id,status,assigned_to,department_id FROM work_orders WHERE organization_id=$1 AND id=$2 FOR UPDATE",[req.user.organization_id,id.data]);
-    const current=found.rows[0];
+    const current=await assignmentState(client,req.user.organization_id,id.data);
     if(!current){await client.query("ROLLBACK");return res.status(404).json({error:"Work order not found"});}
-    if(["completed","cancelled"].includes(current.status)){await client.query("ROLLBACK");return res.status(409).json({error:"Дууссан эсвэл цуцалсан ажлыг хуваарилах боломжгүй"});}
     if(!canAssignOrder(req.user,current)){await client.query("ROLLBACK");return deny(res,WORK_ORDER_PERMISSIONS.ASSIGN);}
+    const replay=await replayAssignment(client,{
+      organizationId:req.user.organization_id,workOrderId:id.data,
+      assigneeUserId:parsed.data.assignedTo,actorUserId:req.user.id,
+      source:"api",reason:parsed.data.reason,idempotencyKey:parsed.data.idempotencyKey||null,
+    });
+    if(replay){await client.query("COMMIT");return res.json({item:current,replayed:true});}
+    if(["completed","cancelled"].includes(current.status)){await client.query("ROLLBACK");return res.status(409).json({error:"Дууссан эсвэл цуцалсан ажлыг хуваарилах боломжгүй"});}
     const assignee=await activeAssignee(client,req.user.organization_id,parsed.data.assignedTo);
     if(parsed.data.assignedTo&&!assignee){await client.query("ROLLBACK");return res.status(400).json({error:"Хариуцагч ажилтан олдсонгүй"});}
     if(current.department_id&&assignee&&assignee.department_id!==current.department_id){await client.query("ROLLBACK");return res.status(400).json({error:"Хариуцагч ажилтан тухайн нэгжид харьяалагдахгүй байна"});}
-    const nextStatus=current.status==="new"&&assignee?"assigned":current.status==="assigned"&&!assignee?"new":current.status;
-    const updated=await client.query("UPDATE work_orders SET assigned_to=$1,status=$2,updated_at=now() WHERE organization_id=$3 AND id=$4 RETURNING *",[assignee?.id||null,nextStatus,req.user.organization_id,id.data]);
-    await client.query(`INSERT INTO work_order_events(organization_id,work_order_id,actor_user_id,event_type,from_status,to_status,detail)
-      VALUES($1,$2,$3,'assigned',$4,$5,$6::jsonb)`,[req.user.organization_id,id.data,req.user.id,current.status,nextStatus,JSON.stringify({fromAssignee:current.assigned_to,toAssignee:assignee?.id||null,assignedName:assignee?.full_name||null})]);
-    await writeAudit(req,"work_order.assign","work_order",id.data,{assignedTo:assignee?.id||null},client);
-    await client.query("COMMIT");res.json({item:updated.rows[0]});
+    const assignment=await changeAssignment(client,{
+      organizationId:req.user.organization_id,current,assignee,actorUserId:req.user.id,
+      source:"api",reason:parsed.data.reason,idempotencyKey:parsed.data.idempotencyKey||null,
+    });
+    if(assignment.changed)await writeAudit(req,"work_order.assign","work_order",id.data,{
+      fromAssignedTo:current.assigned_to,assignedTo:assignee?.id||null,
+      assignmentEventId:assignment.event?.id||null,reason:parsed.data.reason,
+    },client);
+    await client.query("COMMIT");res.json({item:assignment.item,changed:assignment.changed});
   }catch(error){await client.query("ROLLBACK").catch(()=>{});throw error;}finally{client.release();}
 }));
 

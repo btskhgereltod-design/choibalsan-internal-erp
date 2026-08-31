@@ -6,10 +6,23 @@ const path = require("path");
 const crypto = require("crypto");
 const { getPool, closePool } = require("../src/db");
 
+function boundedMilliseconds(name, fallback, minimum, maximum) {
+  const raw = process.env[name];
+  const value = raw == null || raw === "" ? fallback : Number(raw);
+  if (!Number.isInteger(value) || value < minimum || value > maximum) {
+    throw new Error(`${name} must be an integer between ${minimum} and ${maximum} milliseconds`);
+  }
+  return value;
+}
+
 async function migrate() {
   const pool = getPool();
   const client = await pool.connect();
+  const lockTimeoutMs = boundedMilliseconds("MIGRATION_LOCK_TIMEOUT_MS", 15_000, 1_000, 120_000);
+  const statementTimeoutMs = boundedMilliseconds("MIGRATION_STATEMENT_TIMEOUT_MS", 300_000, 10_000, 1_800_000);
   try {
+    await client.query("SELECT set_config('lock_timeout',$1,false)", [`${lockTimeoutMs}ms`]);
+    await client.query("SELECT set_config('statement_timeout',$1,false)", [`${statementTimeoutMs}ms`]);
     await client.query("SELECT pg_advisory_lock($1)", [9042026]);
     await client.query(`CREATE TABLE IF NOT EXISTS schema_migrations (
       version TEXT PRIMARY KEY,
@@ -20,7 +33,19 @@ async function migrate() {
     await client.query("ALTER TABLE schema_migrations ADD COLUMN IF NOT EXISTS filename TEXT");
     await client.query("ALTER TABLE schema_migrations ADD COLUMN IF NOT EXISTS checksum CHAR(64)");
     const directory = path.join(__dirname, "..", "migrations");
-    const files = fs.readdirSync(directory).filter(name => /^\d+_.+\.sql$/.test(name)).sort();
+    let files = fs.readdirSync(directory).filter(name => /^\d+_.+\.sql$/.test(name)).sort();
+    const rehearsalTarget = String(process.env.MIGRATION_REHEARSAL_TARGET_VERSION || "").trim();
+    if (rehearsalTarget) {
+      if (process.env.MIGRATION_REHEARSAL_MODE !== "1" || !/^\d{4}$/.test(rehearsalTarget)) {
+        throw new Error("MIGRATION_REHEARSAL_TARGET_VERSION requires MIGRATION_REHEARSAL_MODE=1 and a four-digit version");
+      }
+      const databaseName = (await client.query("SELECT current_database() AS name")).rows[0].name;
+      if (!/^overva_(test|rehearsal)_[a-z0-9_]+$/i.test(databaseName)) {
+        throw new Error("Targeted migration is allowed only on an overva_test_* or overva_rehearsal_* database");
+      }
+      files = files.filter(file => file.split("_")[0] <= rehearsalTarget);
+      console.log(`[migration rehearsal] target=${rehearsalTarget} database=${databaseName}`);
+    }
     const versions = files.map(file => file.split("_")[0]);
     const duplicateVersions = versions.filter((version, index) => versions.indexOf(version) !== index);
     if (duplicateVersions.length) {
@@ -57,6 +82,8 @@ async function migrate() {
       }
       await client.query("BEGIN");
       try {
+        await client.query("SELECT set_config('lock_timeout',$1,true)", [`${lockTimeoutMs}ms`]);
+        await client.query("SELECT set_config('statement_timeout',$1,true)", [`${statementTimeoutMs}ms`]);
         await client.query(sql);
         await client.query(
           "INSERT INTO schema_migrations(version,filename,checksum) VALUES ($1,$2,$3)",

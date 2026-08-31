@@ -29,10 +29,12 @@ test("management report compares an equal prior period and limits a request to o
 });
 
 test("people reporting is based on canonical employees rather than login accounts", () => {
-  assert.match(route, /FROM employees e CROSS JOIN boundaries b/);
-  assert.match(route, /basis: "canonical_employees_current_assignee"/);
+  assert.match(route, /FROM employees e/);
+  assert.match(route, /basis: "canonical_employee_assignment_events_v1"/);
+  assert.match(route, /assignment_history_version=1/);
   assert.doesNotMatch(route, /FROM users u LEFT JOIN work_orders/);
-  assert.match(web, /Оноолт өөрчлөгдсөн түүх тусдаа бүртгэгдээгүй/);
+  assert.match(web, /append-only түүхээс ажилтны үндсэн бүртгэлтэй холбож тооцов/);
+  assert.match(web, /Түүхгүй хуучин төлөвийг unknown/);
 });
 
 test("calendar boundaries and trend buckets use the tenant timezone", () => {
@@ -40,6 +42,10 @@ test("calendar boundaries and trend buckets use the tenant timezone", () => {
   assert.match(route, /organization\.timezone/);
   assert.match(route, /created_at AT TIME ZONE \$4/);
   assert.match(route, /timeZone: organization\.timezone/);
+  assert.match(route, /a\.created_at<=w\.created_at AND a\.created_at<b\.ends_at/);
+  assert.match(route, /a\.created_at<=w\.created_at AND a\.created_at<w\.ends_at/);
+  assert.match(route, /a\.assignment_operation='initial'/);
+  assert.doesNotMatch(route, /w\.created_at>=b\.starts_at AND w\.created_at<b\.ends_at AND w\.assigned_to IS NULL/);
 });
 
 test("asset values are explicitly returned as a current snapshot", () => {

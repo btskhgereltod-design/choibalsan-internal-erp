@@ -90,6 +90,20 @@ async function loadWorkPeriod(pool, organizationId, from, to, timeZone) {
             ORDER BY e.created_at DESC,e.id DESC LIMIT 1
          ) history ON true
         WHERE w.organization_id=$1 AND w.created_at<b.ends_at
+     ), created_in_period AS (
+       SELECT w.id,w.due_at,initial_assignment.assignment_history_version,
+              initial_assignment.to_assignee_user_id
+         FROM work_orders w CROSS JOIN boundaries b
+         LEFT JOIN LATERAL (
+           SELECT a.assignment_history_version,a.to_assignee_user_id
+             FROM work_order_events a
+            WHERE a.organization_id=w.organization_id AND a.work_order_id=w.id
+              AND a.event_type='assigned' AND a.assignment_history_version=1
+              AND a.assignment_operation='initial'
+              AND a.created_at<=w.created_at AND a.created_at<b.ends_at
+            ORDER BY a.created_at,a.id LIMIT 1
+         ) initial_assignment ON true
+        WHERE w.organization_id=$1 AND w.created_at>=b.starts_at AND w.created_at<b.ends_at
      ), completed AS (
        SELECT DISTINCT e.work_order_id FROM work_order_events e CROSS JOIN boundaries b
         WHERE e.organization_id=$1 AND e.event_type='status_changed' AND e.to_status='completed'
@@ -100,17 +114,43 @@ async function loadWorkPeriod(pool, organizationId, from, to, timeZone) {
           AND e.created_at>=b.starts_at AND e.created_at<b.ends_at
      ) SELECT
        (SELECT count(*) FROM status_at_start WHERE status NOT IN ('completed','cancelled','unknown'))::int AS opening_backlog,
-       (SELECT count(*) FROM work_orders w,boundaries b WHERE w.organization_id=$1 AND w.created_at>=b.starts_at AND w.created_at<b.ends_at)::int AS created,
+       (SELECT count(*) FROM created_in_period)::int AS created,
        (SELECT count(*) FROM completed)::int AS completed,
        (SELECT count(*) FROM cancelled)::int AS cancelled,
        (SELECT count(*) FROM status_at_end WHERE status NOT IN ('completed','cancelled','unknown'))::int AS closing_backlog,
        (SELECT count(*) FROM status_at_end,boundaries b WHERE status NOT IN ('completed','cancelled','unknown') AND due_at<b.ends_at)::int AS overdue,
        (SELECT count(*) FROM status_at_start WHERE status='unknown')::int AS unknown_status_at_start,
        (SELECT count(*) FROM status_at_end WHERE status='unknown')::int AS unknown_status_at_end,
-       (SELECT count(*) FROM work_orders w,boundaries b WHERE w.organization_id=$1 AND w.created_at>=b.starts_at AND w.created_at<b.ends_at AND w.assigned_to IS NULL)::int AS unassigned_created`,
+       (SELECT count(*) FROM created_in_period
+         WHERE assignment_history_version=1 AND to_assignee_user_id IS NULL)::int AS unassigned_created`,
     [organizationId, from, to, timeZone]
   );
   return numberRow(result.rows[0]);
+}
+
+async function loadAssignmentQuality(pool, organizationId, from, to, timeZone) {
+  const result = await pool.query(
+    `WITH boundaries AS (SELECT ($2::date::timestamp AT TIME ZONE $4) AS starts_at,
+       LEAST((($3::date+1)::timestamp AT TIME ZONE $4),now()) AS ends_at),
+     created_in_period AS (
+       SELECT w.id,w.created_at,b.ends_at FROM work_orders w CROSS JOIN boundaries b
+        WHERE w.organization_id=$1 AND w.created_at>=b.starts_at AND w.created_at<b.ends_at
+     ), completed_in_period AS (
+       SELECT e.work_order_id,e.created_at FROM work_order_events e CROSS JOIN boundaries b
+        WHERE e.organization_id=$1 AND e.event_type='status_changed' AND e.to_status='completed'
+          AND e.created_at>=b.starts_at AND e.created_at<b.ends_at
+     ) SELECT
+       (SELECT count(*) FROM created_in_period w WHERE NOT EXISTS(
+         SELECT 1 FROM work_order_events a WHERE a.organization_id=$1 AND a.work_order_id=w.id
+           AND a.event_type='assigned' AND a.assignment_history_version=1
+           AND a.assignment_operation='initial'
+           AND a.created_at<=w.created_at AND a.created_at<w.ends_at))::int AS unknown_created_assignment,
+       (SELECT count(*) FROM completed_in_period c WHERE NOT EXISTS(
+         SELECT 1 FROM work_order_events a WHERE a.organization_id=$1 AND a.work_order_id=c.work_order_id
+           AND a.event_type='assigned' AND a.assignment_history_version=1 AND a.created_at<=c.created_at))::int AS unknown_completed_assignment`,
+    [organizationId,from,to,timeZone]
+  );
+  return result;
 }
 
 router.get("/overview", asyncHandler(async (req, res) => {
@@ -123,7 +163,7 @@ router.get("/overview", asyncHandler(async (req, res) => {
   const params = [organizationId, period.from, period.to, organization.timezone];
   const granularity = period.days > 62 ? "month" : "day";
   const step = granularity === "month" ? "1 month" : "1 day";
-  const [current, previous, statuses, priorities, assets, assignees, trend, unlinkedAssignees] = await Promise.all([
+  const [current, previous, statuses, priorities, assets, assignees, trend, unlinkedAssignees, assignmentQuality] = await Promise.all([
     loadWorkPeriod(pool, organizationId, period.from, period.to, organization.timezone),
     loadWorkPeriod(pool, organizationId, period.previous.from, period.previous.to, organization.timezone),
     pool.query(
@@ -146,24 +186,49 @@ router.get("/overview", asyncHandler(async (req, res) => {
       [organizationId]),
     pool.query(
       `WITH boundaries AS (SELECT ($2::date::timestamp AT TIME ZONE $4) AS starts_at,
-        LEAST((($3::date+1)::timestamp AT TIME ZONE $4),now()) AS ends_at), completed AS (
-         SELECT DISTINCT e.work_order_id FROM work_order_events e CROSS JOIN boundaries b WHERE e.organization_id=$1
-          AND e.event_type='status_changed' AND e.to_status='completed'
-          AND e.created_at>=b.starts_at AND e.created_at<b.ends_at
-       ), activity AS (
-         SELECT e.id,e.full_name,e.active,e.job_role,d.name AS department,p.title AS position,u.id AS user_id,
-           count(w.id) FILTER(WHERE w.created_at>=b.starts_at AND w.created_at<b.ends_at)::int AS assigned,
-           count(c.work_order_id)::int AS completed,
+        LEAST((($3::date+1)::timestamp AT TIME ZONE $4),now()) AS ends_at),
+       assigned_activity AS (
+         SELECT a.to_assignee_employee_id AS employee_id,count(DISTINCT a.work_order_id)::int AS assigned
+           FROM work_order_events a CROSS JOIN boundaries b
+          WHERE a.organization_id=$1 AND a.event_type='assigned' AND a.assignment_history_version=1
+            AND a.to_assignee_employee_id IS NOT NULL
+            AND a.created_at>=b.starts_at AND a.created_at<b.ends_at
+          GROUP BY a.to_assignee_employee_id
+       ), completion_events AS (
+         SELECT e.work_order_id,max(e.created_at) AS completed_at
+           FROM work_order_events e CROSS JOIN boundaries b
+          WHERE e.organization_id=$1 AND e.event_type='status_changed' AND e.to_status='completed'
+            AND e.created_at>=b.starts_at AND e.created_at<b.ends_at GROUP BY e.work_order_id
+       ), completed_activity AS (
+         SELECT assignment.to_assignee_employee_id AS employee_id,count(*)::int AS completed
+           FROM completion_events c
+           JOIN LATERAL (
+             SELECT a.to_assignee_employee_id FROM work_order_events a
+              WHERE a.organization_id=$1 AND a.work_order_id=c.work_order_id
+                AND a.event_type='assigned' AND a.assignment_history_version=1
+                AND a.created_at<=c.completed_at
+              ORDER BY a.created_at DESC,a.id DESC LIMIT 1
+           ) assignment ON assignment.to_assignee_employee_id IS NOT NULL
+          GROUP BY assignment.to_assignee_employee_id
+       ), current_activity AS (
+         SELECT u.employee_id,
            count(w.id) FILTER(WHERE w.status NOT IN ('completed','cancelled'))::int AS open_now,
            count(w.id) FILTER(WHERE w.due_at<now() AND w.status NOT IN ('completed','cancelled'))::int AS overdue_now
-         FROM employees e CROSS JOIN boundaries b
+           FROM work_orders w JOIN users u ON u.organization_id=w.organization_id AND u.id=w.assigned_to
+          WHERE w.organization_id=$1 GROUP BY u.employee_id
+       )
+       SELECT e.id,e.full_name,e.active,e.job_role,d.name AS department,p.title AS position,u.id AS user_id,
+         COALESCE(a.assigned,0)::int AS assigned,COALESCE(c.completed,0)::int AS completed,
+         COALESCE(n.open_now,0)::int AS open_now,COALESCE(n.overdue_now,0)::int AS overdue_now
+         FROM employees e
          LEFT JOIN users u ON u.organization_id=e.organization_id AND u.employee_id=e.id
          LEFT JOIN departments d ON d.organization_id=e.organization_id AND d.id=e.department_id
          LEFT JOIN positions p ON p.organization_id=e.organization_id AND p.id=e.position_id
-         LEFT JOIN work_orders w ON w.organization_id=e.organization_id AND w.assigned_to=u.id
-         LEFT JOIN completed c ON c.work_order_id=w.id
-        WHERE e.organization_id=$1 GROUP BY e.id,d.name,p.title,u.id,b.starts_at,b.ends_at
-       ) SELECT * FROM activity WHERE assigned>0 OR completed>0 ORDER BY completed DESC,assigned DESC,full_name`, params),
+         LEFT JOIN assigned_activity a ON a.employee_id=e.id
+         LEFT JOIN completed_activity c ON c.employee_id=e.id
+         LEFT JOIN current_activity n ON n.employee_id=e.id
+        WHERE e.organization_id=$1 AND (COALESCE(a.assigned,0)>0 OR COALESCE(c.completed,0)>0 OR COALESCE(n.open_now,0)>0)
+        ORDER BY completed DESC,assigned DESC,full_name`, params),
     pool.query(
       `WITH boundaries AS (SELECT ($2::date::timestamp AT TIME ZONE $4) AS starts_at,
           LEAST((($3::date+1)::timestamp AT TIME ZONE $4),now()) AS ends_at),
@@ -188,6 +253,7 @@ router.get("/overview", asyncHandler(async (req, res) => {
        LEFT JOIN employees e ON e.organization_id=u.organization_id AND e.id=u.employee_id
        WHERE w.organization_id=$1 AND e.id IS NULL
          AND (w.created_at>=b.starts_at AND w.created_at<b.ends_at OR w.status NOT IN ('completed','cancelled'))`, params),
+    loadAssignmentQuality(pool,organizationId,period.from,period.to,organization.timezone),
   ]);
   const generatedAt = new Date().toISOString();
   res.json({
@@ -195,7 +261,7 @@ router.get("/overview", asyncHandler(async (req, res) => {
     organization, period, comparison: { period: period.previous, work: previous },
     work: current, statuses: statuses.rows, priorities: priorities.rows,
     assetSnapshot: { asOf: generatedAt, statuses: assets.rows },
-    people: { basis: "canonical_employees_current_assignee", participants: assignees.rows },
+    people: { basis: "canonical_employee_assignment_events_v1", participants: assignees.rows },
     trend: { granularity, timeZone: organization.timezone, points: trend.rows },
     dataQuality: {
       unknownHistoricalStatus: current.unknown_status_at_end,
@@ -205,7 +271,10 @@ router.get("/overview", asyncHandler(async (req, res) => {
       previousUnknownStatusAtEnd: previous.unknown_status_at_end,
       unassignedCreated: current.unassigned_created,
       unlinkedAssignees: Number(unlinkedAssignees.rows[0].count),
+      unknownCreatedAssignment: Number(assignmentQuality.rows[0].unknown_created_assignment),
+      unknownCompletedAssignment: Number(assignmentQuality.rows[0].unknown_completed_assignment),
       historicalStatusSource: "work_order_events",
+      historicalAssignmentSource: "work_order_events.assignment_v1",
     },
   });
 }));
@@ -221,14 +290,19 @@ router.get("/work-orders.csv", asyncHandler(async (req, res) => {
               LEAST((($3::date+1)::timestamp AT TIME ZONE $4),now()) AS ends_at
      ), report_rows AS (
        SELECT w.*,a.code AS asset_code,a.name AS asset_name,e.full_name AS assigned_name,
+              CASE WHEN end_assignment.assignment_history_version=1 THEN 'known' ELSE 'unknown' END AS assignment_knowledge,
               d.name AS department,p.title AS position,b.starts_at,b.ends_at,
               COALESCE(start_state.to_status,CASE WHEN w.created_at<b.starts_at AND w.updated_at<b.starts_at THEN w.status ELSE 'unknown' END) AS start_status,
               COALESCE(end_state.to_status,CASE WHEN w.updated_at<b.ends_at THEN w.status ELSE 'unknown' END) AS end_status,
               completed.completed_at,cancelled.cancelled_at
          FROM work_orders w CROSS JOIN boundaries b
          LEFT JOIN assets a ON a.organization_id=w.organization_id AND a.id=w.asset_id
-         LEFT JOIN users u ON u.organization_id=w.organization_id AND u.id=w.assigned_to
-         LEFT JOIN employees e ON e.organization_id=u.organization_id AND e.id=u.employee_id
+         LEFT JOIN LATERAL (SELECT event.assignment_history_version,event.to_assignee_employee_id
+           FROM work_order_events event
+          WHERE event.organization_id=w.organization_id AND event.work_order_id=w.id
+            AND event.event_type='assigned' AND event.assignment_history_version=1 AND event.created_at<b.ends_at
+          ORDER BY event.created_at DESC,event.id DESC LIMIT 1) end_assignment ON true
+         LEFT JOIN employees e ON e.organization_id=w.organization_id AND e.id=end_assignment.to_assignee_employee_id
          LEFT JOIN departments d ON d.organization_id=e.organization_id AND d.id=e.department_id
          LEFT JOIN positions p ON p.organization_id=e.organization_id AND p.id=e.position_id
          LEFT JOIN LATERAL (SELECT event.to_status FROM work_order_events event
@@ -256,7 +330,7 @@ router.get("/work-orders.csv", asyncHandler(async (req, res) => {
     [req.user.organization_id, range.from, range.to, organization.timezone]
   );
   const rows = result.rows.map(item => [
-    item.id,item.title,item.category,item.priority,item.asset_code,item.asset_name,item.assigned_name,item.department,item.position,
+    item.id,item.title,item.category,item.priority,item.asset_code,item.asset_name,item.assigned_name,item.assignment_knowledge,item.department,item.position,
     item.start_status,item.end_status,item.status,
     item.created_at < item.starts_at && !["completed","cancelled","unknown"].includes(item.start_status) ? "1" : "0",
     item.created_at >= item.starts_at && item.created_at < item.ends_at ? "1" : "0",
@@ -267,7 +341,7 @@ router.get("/work-orders.csv", asyncHandler(async (req, res) => {
     item.completed_at ? new Date(item.completed_at).toISOString() : "",item.cancelled_at ? new Date(item.cancelled_at).toISOString() : "",
   ]);
   const csv = toCsv([
-    "Ажлын ID","Ажлын нэр","Ангилал","Яаралтай эсэх","Хөрөнгийн код","Хөрөнгийн нэр","Одоогийн хариуцагч",
+    "Ажлын ID","Ажлын нэр","Ангилал","Яаралтай эсэх","Хөрөнгийн код","Хөрөнгийн нэр","Тайлангийн эцсийн хариуцагч","Хариуцагчийн түүх",
     "Хэлтэс","Албан тушаал","Эхний төлөв","Эцсийн төлөв","Одоогийн төлөв","Эхний үлдэгдэл","Хугацаанд үүссэн",
     "Хугацаанд дууссан","Хугацаанд цуцалсан","Эцсийн үлдэгдэл","Эцэст хугацаа хэтэрсэн","Дуусах хугацаа",
     "Үүсгэсэн огноо","Хугацаанд дууссан огноо","Хугацаанд цуцалсан огноо",
@@ -278,3 +352,5 @@ router.get("/work-orders.csv", asyncHandler(async (req, res) => {
 }));
 
 module.exports = router;
+module.exports._loadWorkPeriod = loadWorkPeriod;
+module.exports._loadAssignmentQuality = loadAssignmentQuality;

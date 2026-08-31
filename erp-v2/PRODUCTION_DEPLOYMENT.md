@@ -91,6 +91,45 @@ Development uses `.env`/`.env.development.example`; staging uses a separate host
 
 Before first launch, verify a backup of the current pilot and rehearse its restore on a separate database/server. Production migrations include ordered migrations already used by OVERVA; do not skip migration numbers.
 
+Migration waits are bounded. `MIGRATION_LOCK_TIMEOUT_MS` defaults to 15000 and
+`MIGRATION_STATEMENT_TIMEOUT_MS` defaults to 300000. A timeout is a stopped
+release, not permission to raise limits during an active incident without a
+new lock and volume review.
+
+### Staging migration rehearsal
+
+Rehearse on a disposable database named `overva_rehearsal_*`; never point these
+commands at production. The runner permits a targeted old-schema stop only when
+both the disposable name and `MIGRATION_REHEARSAL_MODE=1` are present:
+
+1. Create an empty `overva_rehearsal_*` database on staging.
+2. Run `MIGRATION_REHEARSAL_MODE=1 MIGRATION_REHEARSAL_TARGET_VERSION=0077 npm run migrate`.
+3. Run `MIGRATION_REHEARSAL_MODE=1 node scripts/seed-work-order-hardening-rehearsal.js`.
+4. Unset the target version and run `npm run migrate` to the candidate head.
+5. Run `npm run migrate` again and require a no-op rerun.
+6. Run `npm test`, `npm run test:work-assignment`, and
+   `npm run test:automation-idempotency` against that database.
+7. Reconcile 106 Work Orders, 85 assigned snapshots, 656 unchanged legacy
+   events, zero fabricated typed events, validated identity/FK constraints,
+   enabled append-only trigger, and zero duplicate automation rule/event runs.
+8. Drop the entire disposable database after evidence is recorded. Do not
+   delete individual immutable rows as test cleanup.
+
+### Work Order assignment phased rollout
+
+Migrations `0078`–`0080` are phase A. They remain readable and writable by the
+previous API image: any old-image unversioned assignment insert remains explicit
+non-canonical transition evidence. Deploy the new API, record the application
+cutoff, and reconcile all post-cutoff Work Orders and typed assignment events.
+An application-only rollback during phase A keeps the additive schema and does
+not remove history.
+
+Do not add or run the phase-B strict version trigger in the same release. Phase
+B requires a separate review after the new writer has soaked, every old image
+and external writer has been retired, transition evidence is reconciled, and a
+forward-fix has been rehearsed. Until then reports truthfully return missing
+assignment history as unknown.
+
 ```sh
 docker compose --env-file .env.production -f docker-compose.production.yml config --quiet
 docker compose --env-file .env.production -f docker-compose.production.yml build
@@ -156,3 +195,17 @@ Gateways fetch `/api/iot/device/policy`, verify its checksum, store it durably a
 ## Rollback
 
 Keep the previous application image/configuration and a verified pre-deployment backup. Application rollback must never run old code against a schema it cannot understand. Prefer forward-compatible migrations; if database rollback is unavoidable, stop writes and restore the full database plus uploads together into new volumes, validate, then switch traffic.
+
+For assignment-history phase A, prefer application-only rollback while keeping
+the additive `0078`–`0080` schema. Stop and forward-fix if migration state is
+partial, baseline counts change, a constraint is invalid, append-only mutation
+succeeds, a cross-tenant or mismatched User/Employee pair is accepted, an exact
+idempotent replay duplicates work, or historical unknown coverage changes
+retroactively. Never drop assignment columns or delete event rows as rollback.
+
+For this phase-A release, the exact immutable image capture, reconciliation,
+application rollback commands, stop conditions, and backup freshness design are
+maintained in `docs/PRODUCTION_RELEASE_READINESS_RUNBOOK.md`. The latest real
+restore evidence is
+`docs/PRODUCTION_RESTORE_REHEARSAL_20260831T110319Z.md`. Both documents are
+release gates rather than optional background notes.

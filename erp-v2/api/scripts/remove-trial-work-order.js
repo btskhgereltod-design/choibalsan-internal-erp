@@ -27,15 +27,30 @@ async function main() {
     if (item.title !== "dsfsdfsfdfs" || item.import_count !== 0 || item.approval_count !== 0) {
       throw new Error("Safety check failed: this is not the identified disposable trial work order");
     }
+    if (item.status === "completed") throw new Error("Refusing to retire a completed Work Order");
+    let retired = item;
+    if (item.status !== "cancelled") {
+      retired = (await client.query(
+        "UPDATE work_orders SET status='cancelled',updated_at=now() WHERE organization_id=$1 AND id=$2 RETURNING *",
+        [item.organization_id,item.id]
+      )).rows[0];
+      await client.query(
+        `INSERT INTO work_order_events(
+           organization_id,work_order_id,actor_user_id,event_type,from_status,to_status,note,detail
+         ) VALUES($1,$2,$3,'status_changed',$4,'cancelled',$5,$6::jsonb)`,
+        [item.organization_id,item.id,item.created_by,item.status,
+          "Disposable trial record retired without deleting append-only evidence",
+          JSON.stringify({reason:"Owner requested retirement of a disposable trial record",previousEventCount:item.event_count})]
+      );
+    }
     await client.query(`INSERT INTO audit_logs
       (organization_id,user_id,action,entity_type,entity_id,detail)
-      VALUES($1,$2,'work_order.trial_record_removed','work_order',$3,$4::jsonb)`, [
+      VALUES($1,$2,'work_order.trial_record_retired','work_order',$3,$4::jsonb)`, [
       item.organization_id, item.created_by, item.id,
-      JSON.stringify({title:item.title,status:item.status,createdAt:item.created_at,eventCount:item.event_count,reason:"Owner requested removal of a disposable trial record"})
+      JSON.stringify({title:item.title,fromStatus:item.status,toStatus:"cancelled",createdAt:item.created_at,eventCount:item.event_count,historyPreserved:true})
     ]);
-    const removed = await client.query("DELETE FROM work_orders WHERE organization_id=$1 AND id=$2 RETURNING id,title", [item.organization_id,item.id]);
     await client.query("COMMIT");
-    console.log(JSON.stringify({removed:removed.rows[0],auditPreserved:true,eventsRemoved:item.event_count}, null, 2));
+    console.log(JSON.stringify({retired:{id:retired.id,title:retired.title,status:retired.status},auditPreserved:true,eventsRemoved:0}, null, 2));
   } catch (error) {
     await client.query("ROLLBACK").catch(()=>{});
     throw error;

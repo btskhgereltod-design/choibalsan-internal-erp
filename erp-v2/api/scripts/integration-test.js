@@ -51,6 +51,10 @@ async function integrationTest() {
   const createdUserIds = [];
   const createdAttachmentIds = [];
   try {
+    const databaseName = (await pool.query("SELECT current_database() AS name")).rows[0].name;
+    if (!/^overva_(test|rehearsal)_[a-z0-9_]+$/i.test(databaseName)) {
+      throw new Error("Integration test requires a disposable overva_test_* or overva_rehearsal_* database because append-only evidence cannot be hard-deleted");
+    }
     const passwordHash = await bcrypt.hash(tenantB.password, 12);
     const client = await pool.connect();
     try {
@@ -371,38 +375,12 @@ async function integrationTest() {
     console.log("Integration passed: system status, audit, attachments, and tenant isolation.");
   } finally {
     if (createdAttachmentIds.length) {
-      await pool.query("DELETE FROM audit_logs WHERE entity_id = ANY($1::text[])", [createdAttachmentIds]);
-      const remaining = await pool.query("DELETE FROM attachments WHERE id = ANY($1::uuid[]) RETURNING stored_name", [createdAttachmentIds]);
-      await Promise.all(remaining.rows.map(item => fs.unlink(path.join(process.env.UPLOAD_DIR || "/app/uploads", item.stored_name)).catch(() => {})));
+      await Promise.all(createdAttachmentIds.map(async id => {
+        const item = (await pool.query("SELECT stored_name FROM attachments WHERE id=$1", [id])).rows[0];
+        if (item) await fs.unlink(path.join(process.env.UPLOAD_DIR || "/app/uploads", item.stored_name)).catch(() => {});
+      }));
     }
-    if (createdWorkOrderIds.length) {
-      await pool.query("DELETE FROM automation_events WHERE source_entity_type='work_order' AND source_entity_id = ANY($1::text[])", [createdWorkOrderIds]);
-      await pool.query("DELETE FROM audit_logs WHERE entity_id = ANY($1::text[])", [createdWorkOrderIds]);
-      await pool.query("DELETE FROM work_orders WHERE id = ANY($1::uuid[])", [createdWorkOrderIds]);
-    }
-    if (createdAssetIds.length) {
-      await pool.query("DELETE FROM audit_logs WHERE entity_id = ANY($1::text[])", [createdAssetIds]);
-      await pool.query("DELETE FROM assets WHERE id = ANY($1::uuid[])", [createdAssetIds]);
-    }
-    if (createdUserIds.length) {
-      await pool.query("DELETE FROM audit_logs WHERE entity_id = ANY($1::text[])", [createdUserIds]);
-      await pool.query("DELETE FROM users WHERE id = ANY($1::uuid[])", [createdUserIds]);
-    }
-    if (tenantBId) {
-      await pool.query("DELETE FROM audit_logs WHERE organization_id = $1", [tenantBId]);
-      await pool.query("DELETE FROM organization_settings WHERE organization_id = $1", [tenantBId]);
-      await pool.query("DELETE FROM subscriptions WHERE organization_id = $1", [tenantBId]);
-      await pool.query("DELETE FROM users WHERE organization_id = $1", [tenantBId]);
-      await pool.query("DELETE FROM organizations WHERE id = $1", [tenantBId]);
-    }
-    if (platformTenantId) {
-      await pool.query("DELETE FROM platform_audit_logs WHERE entity_id = $1::text", [platformTenantId]);
-      await pool.query("DELETE FROM audit_logs WHERE organization_id = $1", [platformTenantId]);
-      await pool.query("DELETE FROM subscriptions WHERE organization_id = $1", [platformTenantId]);
-      await pool.query("DELETE FROM organization_settings WHERE organization_id = $1", [platformTenantId]);
-      await pool.query("DELETE FROM users WHERE organization_id = $1", [platformTenantId]);
-      await pool.query("DELETE FROM organizations WHERE id = $1", [platformTenantId]);
-    }
+    console.log("Integration evidence retained in the disposable database; drop the database after verification.");
     await closePool();
   }
 }

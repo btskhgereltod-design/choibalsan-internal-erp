@@ -213,6 +213,37 @@ transaction, records a linked stock movement, and uses a tenant-scoped
 idempotency key so a retry cannot decrement stock twice. Insufficient stock
 leaves both request and balance unchanged and does not fabricate procurement.
 
+Work Order assignment has two compatible representations with different
+purposes. `work_orders.assigned_to` is the current tenant User snapshot used by
+existing authorization, operational boards, and clients. Version-1 `assigned`
+records in `work_order_events` are the canonical append-only timeline for an
+initial state, assignment, reassignment, or unassignment. They preserve typed
+same-tenant User references and the Employee link observed at the event time.
+Snapshot change, history, and audit are committed atomically; retries may use a
+tenant/work-order idempotency key and an unchanged assignee is a no-op. Reusing
+that key with a different target, reason, source, or actor is a conflict, never
+a replay. User and Employee evidence must be the same tenant-owned pair, not
+merely two independently valid same-tenant identifiers. Events
+without a history version are legacy evidence and never authorize a fabricated
+backfill. Historical reporting returns their assignment state as unknown.
+The journal rejects row mutation, runtime update/delete/truncate privileges are
+revoked, and its parent relation uses delete restriction rather than cascade.
+
+Assignment enforcement deploys in two phases. The schema-first phase accepts
+unversioned events from a previous application image as explicitly non-
+canonical transition evidence, allowing safe application rollback. A later
+activation migration may reject unversioned assignment writes only after every
+writer is version-1 capable and the old image is retired. Migration and full
+integration tests that create immutable evidence run only against disposable
+`overva_test_*` or `overva_rehearsal_*` databases.
+
+Automation sources may supply a stable tenant-scoped delivery key. Repeating
+the same key and exact payload returns the original event without rerunning
+rules, creating another Work Order, or queuing another webhook. Reusing the key
+with different event identity or payload is an explicit conflict. Each rule may
+run at most once for one automation event; existing events are not backfilled
+with synthetic keys.
+
 An accounting Asset remains organization master data. A functional street,
 line, facility, zone, or system is an Operational Object and may reference
 multiple Assets through dated, quantified component allocations. Allocation
