@@ -42,6 +42,26 @@ services:
       timeout: 3s
       retries: 10
 
+  legacy-canonical-importer:
+    build:
+      context: ./api
+      dockerfile: Dockerfile.legacy-canonical-importer
+    profiles: ["legacy-import"]
+    restart: "no"
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: ${DATABASE_URL}
+      LEGACY_DB_PATH: /legacy-snapshot/app.db
+      LEGACY_UPLOAD_ROOT: /legacy-snapshot/uploads
+    volumes:
+      - uploads_data:/app/uploads
+      - ./backups/legacy-canonical-precommit/20260901T101143Z:/legacy-snapshot:ro
+    depends_on:
+      db:
+        condition: service_healthy
+
   web:
     build:
       context: ./web
@@ -67,6 +87,28 @@ services:
     depends_on:
       db:
         condition: service_healthy
+
+  workflow-notification-worker:
+    build:
+      context: ./api
+    restart: unless-stopped
+    profiles: ["notifications"]
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: ${DATABASE_URL}
+      WORKFLOW_NOTIFICATION_PROVIDER: ${WORKFLOW_NOTIFICATION_PROVIDER:-disabled}
+      WORKFLOW_NOTIFICATION_WORKER_INTERVAL_MS: ${WORKFLOW_NOTIFICATION_WORKER_INTERVAL_MS:-30000}
+    command: ["node", "scripts/workflow-notification-worker.js"]
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "const fs=require('fs');const p='/tmp/workflow-notification-worker-heartbeat';if(!fs.existsSync(p)||Date.now()-Number(fs.readFileSync(p,'utf8'))>90000)process.exit(1)"]
+      interval: 30s
+      timeout: 3s
+      retries: 4
 
   backup-scheduler:
     image: postgres:16-alpine

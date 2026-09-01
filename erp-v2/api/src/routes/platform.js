@@ -899,7 +899,7 @@ router.post("/organizations", requirePlatformPermissions("platform.organizations
       slug: value.slug, planCode: value.planCode, trialDays: value.trialDays,
     });
     await client.query("COMMIT");
-    res.status(201).json({ item: { ...organization, ...subscription.rows[0] } });
+    res.status(201).json({ item: { ...organization, ...subscription } });
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;

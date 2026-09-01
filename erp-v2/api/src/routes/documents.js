@@ -10,6 +10,7 @@ const { getPool } = require("../db");
 const { authenticate, requirePermissions } = require("../middleware/auth");
 const { writeAudit } = require("../services/audit");
 const { writeLifecycleEvent } = require("../services/data-lifecycle");
+const { recordDocumentLink } = require("../services/document-links");
 const { asyncHandler } = require("../utils/async-handler");
 
 const router = express.Router();
@@ -61,6 +62,7 @@ router.post("/",asyncHandler(async(req,res)=>{
     (organization_id,document_no,title,document_type,classification_code,retention_class,linked_entity_type,linked_entity_id,created_by,updated_by)
     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$9) RETURNING *`,[req.user.organization_id,v.documentNo,v.title,v.documentType,v.classificationCode,v.retentionClass,v.linkedEntityType||null,v.linkedEntityId||null,req.user.id])).rows[0];
     await client.query(`INSERT INTO document_lifecycle_events(organization_id,document_id,action,to_status,actor_user_id) VALUES($1,$2,'created','draft',$3)`,[req.user.organization_id,item.id,req.user.id]);
+    if(v.linkedEntityType){await recordDocumentLink({req,documentId:item.id,entityType:v.linkedEntityType,entityId:v.linkedEntityId,source:"api",client});}
     await writeLifecycleEvent(req,{assetCode:"document",recordKey:item.id,eventType:"document.created",entityType:"document",entityId:item.id,detail:{documentNo:item.document_no}},client);
     await writeAudit(req,"document.create","document",item.id,{documentNo:item.document_no},client);await client.query("COMMIT");
   }catch(error){await client.query("ROLLBACK").catch(()=>{});throw error}finally{client.release()}

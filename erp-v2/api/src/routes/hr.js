@@ -6,6 +6,7 @@ const { getPool } = require("../db");
 const { authenticate, requireModule, requirePermissions } = require("../middleware/auth");
 const { writeAudit } = require("../services/audit");
 const { syncPrimaryAssignment } = require("../services/employee-assignment");
+const { recordDocumentLink } = require("../services/document-links");
 const { asyncHandler } = require("../utils/async-handler");
 
 const router = express.Router();
@@ -306,6 +307,7 @@ router.post("/employees/:id/documents", asyncHandler(async(req,res)=>{
     if(!employee.rowCount){await client.query("ROLLBACK");return res.status(404).json({error:"Employee not found"});}
     const result=await client.query(`INSERT INTO documents(organization_id,document_no,title,document_type,status,classification_code,retention_class,linked_entity_type,linked_entity_id,created_by,updated_by) VALUES($1,$2,$3,$4,'draft',$5,$6,'employee',$7,$8,$8) RETURNING *`,[org,v.documentNo,v.title,v.documentType,v.classification,v.retentionClass,id.data,req.user.id]);
     await client.query(`INSERT INTO document_lifecycle_events(organization_id,document_id,action,to_status,note,actor_user_id) VALUES($1,$2,'created','draft','Created from employee personal file',$3)`,[org,result.rows[0].id,req.user.id]);
+    await recordDocumentLink({req,documentId:result.rows[0].id,entityType:"employee",entityId:id.data,source:"domain",requiredPermissions:["hr.manage"],client});
     await writeAudit(req,"hr.employee_document_create","document",result.rows[0].id,{employeeId:id.data,documentNo:v.documentNo,classification:v.classification},client);
     await client.query("COMMIT");res.status(201).json({item:result.rows[0]});
   }catch(error){await client.query("ROLLBACK").catch(()=>{});throw error}finally{client.release()}

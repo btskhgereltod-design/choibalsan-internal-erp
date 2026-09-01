@@ -4,8 +4,8 @@ require("dotenv").config();
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
-const bcrypt = require("bcryptjs");
 const { getPool, closePool } = require("../src/db");
+const { provisionTenant } = require("../src/services/tenant-provisioning");
 
 const baseUrl = process.env.INTEGRATION_BASE_URL || "http://127.0.0.1:4100";
 const suffix = Date.now().toString(36);
@@ -55,23 +55,31 @@ async function integrationTest() {
     if (!/^overva_(test|rehearsal)_[a-z0-9_]+$/i.test(databaseName)) {
       throw new Error("Integration test requires a disposable overva_test_* or overva_rehearsal_* database because append-only evidence cannot be hard-deleted");
     }
-    const passwordHash = await bcrypt.hash(tenantB.password, 12);
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
-      const org = await client.query(
-        "INSERT INTO organizations(slug, name) VALUES ($1, $2) RETURNING id",
-        [tenantB.slug, tenantB.name]
-      );
-      tenantBId = org.rows[0].id;
+      const provisioned = await provisionTenant(client, {
+        slug: tenantB.slug,
+        name: tenantB.name,
+        adminName: "Tenant B Admin",
+        adminEmail: tenantB.email,
+        adminUsername: tenantB.username,
+        adminPassword: tenantB.password,
+        planCode: "integration-test",
+        trialDays: 30,
+        enabledModules: ["assets", "work-orders"],
+      });
+      tenantBId = provisioned.organization.id;
+      // This legacy broad harness exercises asset and work-order HTTP routes.
+      // Enable only those capabilities in its disposable fixture instead of
+      // relying on whichever modules happen to be active in a developer DB.
       await client.query(
-        `INSERT INTO users(organization_id, email, username, password_hash, full_name, role)
-         VALUES ($1, $2, $3, $4, 'Tenant B Admin', 'director')`,
-        [tenantBId, tenantB.email, tenantB.username, passwordHash]
-      );
-      await client.query(
-        "INSERT INTO subscriptions(organization_id, plan_code, status) VALUES ($1, 'integration-test', 'trial')",
-        [tenantBId]
+        `INSERT INTO organization_modules(organization_id,module_code,enabled)
+         SELECT organization.id,module.code,true
+           FROM organizations organization CROSS JOIN module_catalog module
+          WHERE organization.slug=$1 AND module.code=ANY($2::text[])
+         ON CONFLICT(organization_id,module_code) DO UPDATE SET enabled=true`,
+        [process.env.BOOTSTRAP_ORG_SLUG,["assets","work-orders"]]
       );
       await client.query("COMMIT");
     } catch (error) {
@@ -307,8 +315,8 @@ async function integrationTest() {
       headers: { authorization: `Bearer ${tokenA}` },
     });
     assert.equal(overview.response.status, 200, JSON.stringify(overview.body));
-    assert(overview.body.summary.total >= 1);
-    assert(overview.body.assignees.some(item => item.id === managedUser.body.item.id && item.total >= 1));
+    assert(overview.body.work.created >= 1);
+    assert(overview.body.people.participants.some(item => item.user_id === managedUser.body.item.id && item.assigned >= 1));
     const forbiddenReport = await request(`/api/reports/overview?from=${reportDay}&to=${reportDay}`, {
       headers: { authorization: `Bearer ${managedToken}` },
     });

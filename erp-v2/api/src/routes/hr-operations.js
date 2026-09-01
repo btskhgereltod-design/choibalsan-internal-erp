@@ -211,7 +211,7 @@ router.patch("/leave-requests/:id/decision", asyncHandler(async (req, res) => {
   try {
     await client.query("BEGIN");
     const result = await client.query(`UPDATE hr_leave_requests SET status=$3,decided_by=$4,decided_at=now(),decision_note=$5,updated_at=now()
-      WHERE organization_id=$1 AND id=$2 AND status='pending' RETURNING *`,
+      WHERE organization_id=$1 AND id=$2 AND status='pending' AND workflow_case_id IS NULL RETURNING *`,
     [req.user.organization_id,id.data,parsed.data.decision,req.user.id,parsed.data.note]);
     if (!result.rowCount) { await client.query("ROLLBACK"); return res.status(409).json({ error: "Pending request not found" }); }
     await client.query(`INSERT INTO hr_leave_events(organization_id,leave_request_id,event_type,note,actor_user_id)

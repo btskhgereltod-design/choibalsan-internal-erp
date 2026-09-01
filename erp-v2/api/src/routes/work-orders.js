@@ -376,7 +376,7 @@ router.patch("/:id/status",asyncHandler(async(req,res)=>{
   const client=await getPool().connect();
   try{
     await client.query("BEGIN");
-    const found=await client.query("SELECT id,status,assigned_to,workflow_policy_id FROM work_orders WHERE organization_id=$1 AND id=$2 FOR UPDATE",[req.user.organization_id,id.data]);
+    const found=await client.query("SELECT id,title,status,assigned_to,workflow_policy_id FROM work_orders WHERE organization_id=$1 AND id=$2 FOR UPDATE",[req.user.organization_id,id.data]);
     const current=found.rows[0];
     if(!current){await client.query("ROLLBACK");return res.status(404).json({error:"Work order not found"});}
     if(current.workflow_policy_id){await client.query("ROLLBACK");return res.status(409).json({error:"Энэ ажил баталгаажуулалтын шаттай. Тухайн шатны үйлдлийг ашиглана уу."});}
@@ -387,6 +387,7 @@ router.patch("/:id/status",asyncHandler(async(req,res)=>{
     const updated=await client.query("UPDATE work_orders SET status=$1,updated_at=now() WHERE organization_id=$2 AND id=$3 RETURNING *",[parsed.data.status,req.user.organization_id,id.data]);
     await client.query("INSERT INTO work_order_events(organization_id,actor_user_id,work_order_id,event_type,from_status,to_status) VALUES($1,$2,$3,'status_changed',$4,$5)",[req.user.organization_id,req.user.id,id.data,current.status,parsed.data.status]);
     if(parsed.data.status==="pending_review")await notifyManagement(client,{organizationId:req.user.organization_id,excludeUserId:req.user.id,type:"review_requested",title:"Ажил хянуулах хүсэлт ирлээ",message:`Ажлын дугаар: ${id.data}`,entityId:id.data});
+    if(parsed.data.status==="completed"&&current.assigned_to)await notifyUser(client,{organizationId:req.user.organization_id,userId:current.assigned_to,type:"work_completed",title:"Ажил баталгаажиж хаагдлаа",message:current.title,entityId:id.data});
     await writeAudit(req,"work_order.status_change","work_order",id.data,{from:current.status,to:parsed.data.status},client);
     await client.query("COMMIT");res.json({item:updated.rows[0]});
   }catch(error){await client.query("ROLLBACK").catch(()=>{});throw error;}finally{client.release();}

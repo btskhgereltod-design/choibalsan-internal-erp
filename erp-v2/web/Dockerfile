@@ -71,6 +71,8 @@ COPY structure-smart-import.css /usr/share/nginx/html/structure-smart-import.css
 COPY structure-hub.js /usr/share/nginx/html/structure-hub.js
 COPY structure-hub.css /usr/share/nginx/html/structure-hub.css
 COPY legacy-theme.css /usr/share/nginx/html/legacy-theme.css
+COPY legacy-migration-review.css /usr/share/nginx/html/legacy-migration-review.css
+COPY legacy-migration-review.js /usr/share/nginx/html/legacy-migration-review.js
 COPY --from=vendor /vendor/node_modules/leaflet/dist /usr/share/nginx/html/vendor/leaflet
 COPY platform.html /usr/share/nginx/html/platform.html
 COPY platform.css /usr/share/nginx/html/platform.css

@@ -58,8 +58,11 @@ function createApp() {
   app.use("/api/dataset-discoveries", require("./routes/dataset-discoveries"));
   app.use("/api/hr/smart-imports", require("./routes/smart-imports"));
   app.use("/api/hr", require("./routes/hr"));
+  app.use("/api/hr", require("./routes/hr-workflows"));
   app.use("/api/hr", require("./routes/hr-operations"));
+  app.use("/api/legacy-migration", require("./routes/legacy-migration"));
   app.use("/api/records", require("./routes/records"));
+  app.use("/api/complaints", require("./routes/complaints"));
   app.use("/api/archive", require("./routes/archive"));
   app.use("/api/data-governance", require("./routes/data-governance"));
   app.use("/api/documents", require("./routes/documents"));
@@ -87,12 +90,14 @@ function createApp() {
     const governanceError = String(error.code || "").startsWith("GOVERNANCE_") || error.message === "GOVERNANCE_ACTIVE_HOLD";
     const importError = String(error.code || "").startsWith("IMPORT_") || error.code === "LIMIT_FILE_SIZE";
     const marketIdentityInactive = error.code === "MARKET_IDENTITY_INACTIVE";
-    const status = marketIdentityInactive ? 401 : (error.code === "23505" || governanceError || assignmentConflict || automationConflict) ? 409 : (error.code === "23503" || assignmentError || importError) ? 400 : 500;
+    const boundedDomainError = error.name === "WorkflowError" || String(error.code || "").startsWith("DOMAIN_") || Number.isInteger(error.status);
+    const status = boundedDomainError ? (Number.isInteger(error.status) ? error.status : 400) : marketIdentityInactive ? 401 : (error.code === "23505" || governanceError || assignmentConflict || automationConflict) ? 409 : (error.code === "23503" || assignmentError || importError) ? 400 : 500;
     const message = error.message === "GOVERNANCE_ACTIVE_HOLD" ? "Идэвхтэй хадгалалтын хоригтой өгөгдлийн хүсэлтийг батлах боломжгүй"
       : (assignmentError || automationConflict || governanceError || importError) ? error.message
       : marketIdentityInactive ? "Market identity is inactive"
+      : boundedDomainError ? (error.code || error.message)
       : status === 409 ? "Duplicate record" : status === 400 ? "Invalid reference" : "Internal server error";
-    res.status(status).json({ error: message, ...(assignmentConflict || automationConflict ? {code:error.code} : {}) });
+    res.status(status).json({ error: message, ...(boundedDomainError || assignmentConflict || automationConflict ? {code:error.code} : {}) });
   });
   return app;
 }

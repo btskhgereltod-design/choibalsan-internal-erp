@@ -1,6 +1,6 @@
 # OVERVA Decisions
 
-Last updated: 2026-08-29
+Last updated: 2026-09-01
 
 This is a lightweight decision log. It preserves rationale without freezing
 implementation. Hypotheses are labelled separately from accepted decisions.
@@ -619,6 +619,190 @@ Idempotency means exact-request replay. Reusing an assignment or automation
 delivery identity with a different consequential payload is a conflict. A
 stable automation source delivery is processed at most once per tenant and a
 rule runs at most once per event.
+
+### D-035 — Shared workflow coordinates domains but never replaces their authority
+
+Accepted: 2026-09-01
+
+OVERVA uses one reusable tenant-scoped workflow coordination foundation for
+case identity, current coordination snapshot, optimistic version, assignment,
+transition, decision, reason, comment, idempotency, audit and notification
+intent. Transition, assignment, decision, comment and command-receipt evidence
+is append-only. Consequential commands derive tenant and actor from the
+authenticated request, require backend permissions and reject a stale version
+or an idempotency key reused with a different payload.
+
+The coordination snapshot is not authoritative business state. HR employment
+state remains in HR, correspondence state remains in correspondence, and
+archive/retention/disposition state remains in archive. A future domain adapter
+must validate its domain transition and permission, then update the domain row
+and append workflow/audit/outbox evidence in the same transaction. Generic
+workflow code may record domain before/after values as evidence but may not
+project or invent them. This phase adds no business state machine or UI.
+
+### D-036 — Canonical documents gain append-only relationships through compatibility
+
+Accepted: 2026-09-01
+
+`documents` and immutable `document_versions` remain the canonical formal
+document model. Many-to-many domain relationships are added as append-only
+`document_links` with tenant-composite references and attributable recording.
+The existing `documents.linked_entity_type/linked_entity_id` pair and current
+attachments, correspondence and archive records are retained as supported
+compatibility surfaces. New compatible writers dual-record a relationship in
+one transaction, and a compatibility view includes legacy-only writers.
+
+Migration may project a link only when an existing document explicitly stores
+both legacy entity fields. Unknown correspondence, archive or attachment links
+remain null. No timestamp is claimed as the original historical linking time,
+no file is moved, and no legacy reference is deleted. Domain adoption and any
+correction/unlink event contract are separate reviewed work.
+
+### D-037 — Tenant RLS context is transaction-local and activated by audited slice
+
+Accepted: 2026-09-01
+
+Tenant RLS context uses PostgreSQL transaction-local `app.organization_id`.
+The server derives the organization from authenticated authority, begins a
+transaction, sets and verifies the context in a separate statement, and rejects
+both missing context and a different tenant on the same transaction. Context is
+never session-global, so commit/rollback and pooled connection reuse clear it.
+Application permissions, server-derived tenant predicates and composite tenant
+foreign keys remain mandatory; RLS is defense in depth, not an authorization
+replacement.
+
+RLS activation is incremental. Migration `0085` enables only the ten audited
+workflow, delivery and canonical-link tables. The document compatibility view
+is security-invoker and explicitly tenant-filters its canonical and legacy
+branches. Other staged policies require a route, query, report, background job
+and admin compatibility inventory before activation. System transactions are
+disabled by default, require a deployment gate plus an explicit reason, and can
+bypass RLS only when the database role itself has reviewed bypass authority.
+
+### D-038 — Notification intent, delivery coordination and attempt evidence are separate
+
+Accepted: 2026-09-01
+
+`workflow_notification_outbox` is immutable business intent committed in the
+same transaction as workflow evidence. It is never rewritten into a delivery
+status. `workflow_notification_delivery_state` is the mutable claim/lease and
+retry projection, while `workflow_notification_delivery_events` is the
+append-only attempt journal. Pending, processing, retry-scheduled, delivered
+and dead-letter states use bounded retry, lease recovery and stable outbox ID as
+the provider idempotency identity.
+
+Delivery is asynchronous and tenant-explicit. Provider failure cannot roll back
+an already committed domain/workflow transaction. An enabled adapter must state
+that it honors idempotency and returns attributable provider metadata. Until a
+real email/SMS/push adapter and its operational controls are reviewed, the
+shipped adapter remains disabled and claims no intent; no fake success provider
+is permitted.
+
+### D-039 — Consequential offline commands require matching server confirmation
+
+Accepted: 2026-09-01
+
+Offline storage may queue local drafts, but approval, rejection, return,
+termination, archive destruction, final closure and permission/security change
+remain `awaiting_server` and may not appear final. Unknown command types default
+to server confirmation rather than optimistic success. Retry envelopes carry a
+client-generated request UUID and idempotency UUID, contain no client-selected
+tenant, and become final only after a server response confirms the exact two
+identities. Domain APIs must still implement their own authorization,
+idempotency and version checks when Phase 2 adapters are added.
+
+### D-040 — Domain authority remains separate under shared workflow coordination
+
+Accepted: 2026-09-01
+
+Choibalsan Human Resources, correspondence, complaints and archive each retain
+their own authoritative aggregate and explicit state machine. Shared workflow
+is used only for coordination identity/version, assignment, decision, comment,
+immutable transition evidence and notification intent. A consequential command
+must commit the domain change, workflow evidence, audit and outbox intent in one
+tenant transaction and must require an expected version plus exact-payload
+idempotency identity.
+
+Formal evidence uses the canonical `documents`/`document_links` authority while
+legacy attachment and domain-reference reads remain compatible. Existing
+employees receive no fabricated appointment history or guessed employee number.
+Existing correspondence and archive records receive no synthetic histories.
+
+Archive disposal is a separated-duty evidence process, not a status toggle. It
+requires retention eligibility, legal-hold review, stable item-set hash,
+commission decision, a canonical destruction act, execution and verification
+by different users. None of appointment finalization, employment exit,
+official response send or archive disposal may appear final offline.
+
+### D-041 — Legacy migration decisions are provenance, not imported history
+
+Accepted: 2026-09-01
+
+Every legacy row is identified within a tenant by source, table and legacy ID.
+An identical checksum-bearing replay is idempotent; reuse of that identity with
+changed source or payload evidence is a conflict. Classification and review are
+versioned projections backed by an append-only human decision journal and
+attributable audit. They do not become Employee, HR, correspondence, archive or
+workflow history merely by being staged.
+
+Existing identifiers take precedence. A display name alone can suggest human
+review but cannot merge a record. Choibalsan Employees use the retained legacy
+user identifier; derived masters may be matched only when those identified
+Employees and their active assignments corroborate one tenant target. Legacy
+status is stored as provenance only and must never fabricate transitions,
+approvals, appointment/termination/leave cases or archive events. Actual import
+requires a later, separately approved adapter and reconciliation gate.
+
+### D-042 — Deterministic legacy grouping reduces review effort without deciding truth
+
+Accepted: 2026-09-01
+
+Legacy review may deterministically group already staged provenance and propose
+`IMPORT_NEW`, `LEGACY_ONLY`, manual review or external reconciliation. Group
+identity, membership, source signals and recommendation are immutable evidence.
+A human decision changes only a tenant-scoped, versioned migration-review
+projection through an append-only journal and exact-payload idempotent batch
+receipt; it does not import, merge, create or update authoritative domain data.
+
+Attendance uses legacy Employee/date only as a reconciliation-group identity.
+The latest row and earlier superseded rows are candidates, not accepted history.
+Approval and legacy-only disposition fail closed until production comparison
+evidence is separately verified. An equal content hash is a duplicate signal,
+never sufficient authority to merge logical documents. Name overlap is a human
+review signal, never an Employee match key, and legacy correspondence is not
+automatically promoted to a complaint.
+
+### D-043 — Canonical legacy import requires separate approval and immutable mapping evidence
+
+Accepted: 2026-09-01
+
+Reviewer approval and import execution are separate authorities. Only an
+approved, high-confidence order/decision or correspondence recommendation may
+enter the canonical adapter. Approval itself never starts an import. The
+adapter is dry-run by default; commit additionally requires a dedicated backend
+permission, explicit environment gate, tenant transaction and idempotency key.
+
+Every committed source keeps its provenance identity and immutable mapping to
+canonical targets. Documents, versions and links use the canonical document
+model; correspondence uses its 0086 authoritative table. Existing masters are
+read-only match dependencies and cannot be updated. Legacy status remains
+provenance metadata, never workflow or approval history. Checksum drift,
+unstable Employee/User linkage and unexplained number collisions fail closed.
+An exact rerun reuses its mapping, while a partial failure rolls back database
+writes and newly created files.
+
+### D-044 — Legacy SQLite executes only in an isolated one-shot importer runtime
+
+Accepted: 2026-09-01
+
+The request-serving API does not carry the legacy SQLite native dependency or
+its install/build chain. Canonical legacy import executes only through a
+dedicated non-root, no-port, opt-in one-shot runtime with its own locked
+dependencies and a read-only mount of the approved immutable source snapshot.
+It retains the existing tenant-scoped PostgreSQL authority, default dry-run,
+explicit commit flag and environment gate. Runtime isolation is a packaging
+and security boundary; it does not change migration schema, reviewer approval,
+provenance, checksums, canonical mapping rules or domain authority.
 
 ## Active Hypotheses
 

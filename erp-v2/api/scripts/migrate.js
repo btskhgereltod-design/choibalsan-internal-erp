@@ -6,6 +6,23 @@ const path = require("path");
 const crypto = require("crypto");
 const { getPool, closePool } = require("../src/db");
 
+// The first local 0079 artifact was applied before the release copy was
+// corrected and hashed. Keep that applied checksum as evidence; 0081 performs
+// an explicit, idempotent schema reconciliation. No other checksum drift is
+// accepted here.
+const RECONCILED_LEGACY_MIGRATIONS = new Map([
+  [
+    "0079:0079_work_order_assignment_write_guard.sql",
+    new Set(["5c67374512217eec036f8f2d46830d3635863e07e95ea0a3c75fd10d66357d33"]),
+  ],
+]);
+
+function isReconciledLegacyMigration({ version, filename, appliedChecksum }) {
+  return RECONCILED_LEGACY_MIGRATIONS
+    .get(`${version}:${filename}`)
+    ?.has(String(appliedChecksum || "").trim()) === true;
+}
+
 function boundedMilliseconds(name, fallback, minimum, maximum) {
   const raw = process.env[name];
   const value = raw == null || raw === "" ? fallback : Number(raw);
@@ -70,7 +87,15 @@ async function migrate() {
           throw new Error(`Migration ${version} was applied as ${applied.filename}, not ${file}`);
         }
         if (applied.checksum && applied.checksum.trim() !== checksum) {
-          throw new Error(`Applied migration changed: ${file}`);
+          if (!isReconciledLegacyMigration({
+            version,
+            filename:file,
+            appliedChecksum:applied.checksum,
+          })) {
+            throw new Error(`Applied migration changed: ${file}`);
+          }
+          console.warn(`[migration reconciliation] preserving known legacy checksum for ${file}; 0081 verifies and repairs the schema`);
+          continue;
         }
         if (!applied.filename || !applied.checksum) {
           await client.query(
@@ -109,4 +134,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { migrate };
+module.exports = { migrate, isReconciledLegacyMigration };

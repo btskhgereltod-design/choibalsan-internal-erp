@@ -1,6 +1,6 @@
 # OVERVA Architecture
 
-Last reviewed: 2026-08-29
+Last reviewed: 2026-09-01
 
 This is a current map and a stable default, not a permanent restriction. For
 production operations, see `../PRODUCTION_DEPLOYMENT.md`. For data rules, see
@@ -38,6 +38,103 @@ public application endpoints.
 - `api/migrations/` — ordered source of truth for PostgreSQL schema evolution.
 - `ops/` — backup, restore, tunnel, startup, and operational scripts.
 - `docs/` — governed product, architecture, data, AI, and delivery knowledge.
+
+## Choibalsan governed administration domains
+
+The Choibalsan pilot exposes four connected but separately authoritative
+administration domains under the tenant shell:
+
+- Human Resources owns appointment cases, leave requests, employment-exit
+  cases and the resulting canonical Employee lifecycle/assignment changes.
+- Records owns incoming, outgoing and internal correspondence state.
+- Complaints owns request, complaint and suggestion case state.
+- Archive owns archive intake, location, retention, access and disposal state.
+
+`bounded-domain-workflow.js` is the transaction coordinator for those domain
+aggregates. A command locks the tenant/domain aggregate, verifies its expected
+version and allowed state, updates the domain source of truth, advances the
+shared workflow projection, appends transition/assignment/decision evidence,
+writes attributable audit evidence, records an exact-payload idempotency
+receipt, and creates notification intent. Those writes share one PostgreSQL
+transaction. `workflow_cases.coordination_state` is never the authoritative HR,
+correspondence, complaint or archive state.
+
+Formal evidence is referenced through canonical `documents` plus append-only
+`document_links`. Existing attachment arrays, legacy document entity columns,
+correspondence references and archive references remain readable during the
+compatibility period. New domain code does not create a second file authority.
+
+Phase 2 domain evidence and command receipts reject update/delete at the
+database. New tenant tables have active fail-closed RLS policies; application
+tenant predicates, composite tenant foreign keys and server-side RBAC remain
+mandatory. Existing correspondence/archive aggregate RLS stays in the staged
+rollout until every pre-Phase-2 compatibility reader is audited.
+
+Archive disposal has additional gates: a retention-eligible record, no active
+legal hold, immutable item-set hash, commission decision, canonical disposal
+act, explicit execution permission, and verification by a user other than the
+executor. Browser UI never treats execution or verification as final before
+the server response.
+
+## Legacy migration evidence boundary
+
+Legacy migration review is separate from both source systems and authoritative
+OVERVA domains. The read-only extractor produces a checksum-bearing evidence
+envelope. Staging may write only the tenant-scoped provenance registry, its
+append-only decision journal and attributable audit; it has no employee,
+master, attendance, document, correspondence, archive or workflow mutation
+path.
+
+The source identity is `(organization, legacy source, legacy table, legacy
+id)`. Replays with identical source and payload hashes are idempotent; a changed
+payload under the same identity is a conflict. Human decisions require live
+backend permission, expected version and exact-payload idempotency. Current
+classification is a review projection backed by an immutable decision row,
+not authoritative domain state. Legacy status remains provenance evidence and
+is never translated into synthetic workflow transitions, approvals or cases.
+
+Schema `0089` adds a deterministic coordination layer over that evidence. A
+review group owns no domain state: it records a category, immutable source
+membership, signals, recommendation, confidence and any external-evidence
+gate. Group decisions and tenant-scoped batch-command receipts are append-only;
+the current group status is a versioned projection tied to an exact decision
+and actor. Selected batch commands lock groups and member provenance in stable
+order, require expected versions and exact-payload UUID idempotency, and commit
+atomically. Approval changes only migration classification/review projections;
+it never invokes an import.
+
+Attendance is grouped by legacy Employee/date. Latest and superseded rows are
+candidates, not facts; final approval or legacy-only disposition is blocked
+until separately governed production reconciliation evidence is verified. File
+hash equality is a duplicate signal rather than a logical merge identity, and
+legacy correspondence is not inferred to be a complaint.
+
+An existing target is validated inside the authorization tenant. Employee
+matching uses the retained legacy identifier. Derived organization masters are
+corroborated through those identified employees and their active primary
+assignments; display names alone cannot merge records. `IMPORT_NEW` means only
+eligible for a separately approved importer.
+
+Schema `0090` adds that bounded adapter for approved high-confidence order and
+correspondence groups. Dry-run is the default and has no write path. Commit is
+separately permissioned and environment-gated, executes in one tenant
+transaction, stores immutable run/source-target/event evidence, uses canonical
+`documents`, `document_versions` and `document_links`, and creates only the
+0086 correspondence baseline. Stable mappings make source reruns no-op/replay;
+number collisions, missing stable assignees and checksum drift fail closed.
+Legacy status stays provenance metadata, and the adapter never creates
+historical correspondence events, workflow cases, approvals or HR state. A
+successful import may set `imported_at` once only through a matching append-only
+import event. No HTTP import endpoint exists.
+
+The SQLite source adapter is packaged outside the request-serving API runtime.
+It runs only as the non-root, no-port, one-shot `legacy-canonical-importer`
+service behind an opt-in Compose profile. The main API dependency and image do
+not contain SQLite or its native build chain. The importer has its own locked
+runtime, mounts the approved immutable database and attachment snapshot
+read-only, and retains the same default-dry-run, explicit commit flag and
+environment gate. This packaging boundary changes no schema, approval,
+provenance, checksum or source-to-target rule.
 
 ## Domain Routing
 

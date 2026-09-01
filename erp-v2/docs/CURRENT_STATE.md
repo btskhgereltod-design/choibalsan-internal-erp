@@ -1,10 +1,247 @@
 # OVERVA Current State
 
-Last updated: 2026-08-31
+Last updated: 2026-09-01
 
 This document answers one question: **what exists in the repository now?** It
 does not claim that every implemented foundation is complete or production-
 validated at enterprise scale.
+
+## Legacy migration provenance and review foundation
+
+- Repository and local development schema now reach `0090`; documented
+  production remains `0080` and was not connected to, migrated, written or
+  deployed. Migrations `0087`-`0090` are additive, change no prior migration
+  checksum and import no domain record. `0088` binds provenance projection
+  updates to exact decision evidence. `0089` adds deterministic review cases,
+  append-only membership/decisions and immutable batch-command receipts.
+- `legacy_provenance_records` gives every staged source row a unique
+  `(organization_id, legacy_source, legacy_table, legacy_id)` identity,
+  source/payload checksums, classification, optional validated target,
+  duplicate signals and current review projection. Source identity and evidence
+  cannot be updated or deleted. `imported_at` can move from null exactly once
+  only when a matching append-only `IMPORT_COMMITTED` event exists; it cannot
+  be silently edited.
+- `legacy_provenance_decisions` is the append-only registration/review journal.
+  Review writes require a backend permission, expected version, UUID
+  idempotency identity and exact payload hash. Reuse with another payload,
+  stale/concurrent writes, cross-tenant targets, silent projection changes,
+  decision mutation and audit mutation are rejected. Runtime grants also revoke
+  decision update/delete/truncate and registry delete/truncate.
+- The legacy extractor opens SQLite read-only with `PRAGMA query_only`; its
+  staging script writes only provenance, decisions and one batch audit. It
+  resolves Employees by existing `legacy_user_id`. Departments, Jobs and
+  Positions are corroborated through those Employees and their one active
+  primary assignment, never by a name-only merge. No employee, master,
+  attendance, document, correspondence, archive or workflow writer exists in
+  this slice.
+- Local review staging contains 2,318 identities: 73 `MATCH_EXISTING`, 48
+  `IMPORT_NEW`, 2,196 `REVIEW_REQUIRED`, and one `LEGACY_ONLY`. All 21 active
+  Employees, three Departments, fourteen Jobs, fourteen Positions and twenty-
+  one active Assignments have validated existing targets. Exact rerun produced
+  zero creates and 2,318 replays.
+- The 2,196 unresolved source rows are now represented by 1,901 deterministic
+  review cases, reducing raw human-review units by 295. Attendance becomes
+  1,806 employee/date cases: 145 duplicate groups contain 431 rows, with a
+  latest-row candidate and explicitly non-final superseded candidates. Orders
+  become 55 cases from 57 rows; correspondence remains 13 cases; seventeen
+  risky document/attachment rows become ten cases. Duplicate evidence includes
+  two document-number groups, four content-hash groups affecting eleven files,
+  and two orphan attachments.
+- Recommendations contain 31 high-confidence `IMPORT_NEW` review cases (25
+  orders/decisions and six correspondence), 64 true manual-review cases
+  covering 73 rows, and 1,806 reconciliation-blocked attendance cases covering
+  2,092 rows. All seventeen inactive users remain manual: every one has an
+  active-employee name-overlap signal and ten also have HR evidence. Names and
+  hashes remain signals only; they are not merge keys. Correspondence is not
+  auto-classified as a complaint.
+- Authorized reviewers can select up to 200 cases and approve an eligible
+  recommendation, retain non-attendance evidence as legacy-only, send cases to
+  manual review and add a note. Every command is tenant-scoped, exact-payload
+  idempotent, expected-version guarded and atomic. Attendance approval and
+  legacy-only disposition fail closed while production reconciliation evidence
+  is missing. A review decision changes only migration projections; no actual
+  import or canonical target creation occurs.
+- Safe `IMPORT_NEW` approval is now fail-closed to high-confidence,
+  no-external-evidence `ORDER_DECISION` and `CORRESPONDENCE` groups. The UI can
+  select the visible safe set, but approval remains a separate review command
+  and never invokes the importer. The Web image now includes the review JS/CSS;
+  missing script or stylesheet paths return `404` instead of the SPA shell.
+  Local verification approved exactly 25 order and six correspondence groups
+  with the authorized reviewer note, advancing each to version one. The batch,
+  group and provenance decisions and audit are append-only; the exact command
+  replayed idempotently and did not invoke the importer.
+- Migration `0090` adds tenant/RLS-scoped, append-only canonical import run,
+  source-to-target mapping and import-event evidence. Only owner/administrator
+  roles receive the separate `legacy_migration.import` permission. Production
+  runtime grants cannot mutate those journals.
+- The canonical adapter reads legacy SQLite in query-only mode, verifies the
+  database, parent-row and attachment checksums, requires an approved safe
+  group and stable Employee/User linkage, and fails on number or identity
+  collisions. It creates only canonical Documents/Versions/Links and the 0086
+  correspondence aggregate baseline. Legacy status remains mapping metadata;
+  no correspondence event, shared workflow case or historical transition is
+  synthesized. Exact source reruns reuse mappings, changed idempotency payloads
+  conflict, and a partial failure rolls back the tenant transaction and removes
+  newly written files.
+- The CLI is dry-run by default. Commit requires both `--commit` and
+  `ALLOW_LEGACY_CANONICAL_IMPORT=true`; no HTTP import action exists. The local
+  importer now uses an explicit raw-byte SHA-256 helper for file content while
+  retaining the existing canonical JSON hash for structured source and command
+  payloads. Existing staged evidence was not rewritten. The local post-approval
+  dry-run verified 31 parent rows and 32 attachment files, planned 31 Documents,
+  32 Versions and six Correspondence records with 69 source-to-target mappings,
+  and found zero skips, checksum failures or conflicts. After separate explicit
+  approval, the same immutable snapshot and approved set were committed only to
+  the local environment. The commit created the planned 31 Documents, 32
+  Versions, six Correspondence records, 53 Document links, 69 mappings, 63
+  import events and 63 imported provenance markers. A same-key replay returned
+  the original run and produced no additional write.
+- The rebuilt local API image contains the raw-byte checksum fix but no
+  `sqlite3`, `node-gyp`, `tar` or related importer build chain. Canonical legacy
+  import now runs only in a non-root, no-port, one-shot container behind the
+  opt-in `legacy-import` Compose profile. Its separate locked runtime uses
+  `sqlite3@6.0.1` with patched `tar@7.5.22`; both API and importer production
+  audits report zero vulnerabilities, and compiler, optional `node-gyp` and
+  package cache are absent from the final importer image. The immutable
+  SQLite/attachment snapshot at
+  `backups/legacy-canonical-precommit/20260901T101143Z` has database SHA-256
+  `5df2aa170d5ef865e46ed09bab5d576d3c229454a78557df06abb676e4bf1a47`;
+  its mount is read-only and its manifest plus 60 attachment checksums remain
+  unchanged. `OPEN_READONLY`, `PRAGMA query_only=ON` and an expected rejected
+  write were verified against the snapshot. The isolated container reproduces
+  the approved 31 source/32 file/31 Document/32 Version/six Correspondence/69
+  mapping dry-run with zero reuse, skips, conflicts, checksum failures, database
+  writes or canonical-upload changes. The later controlled local commit used
+  the gate only for its one-shot execution; production was not connected to,
+  deployed or written and remains a separate approval boundary.
+- Forty-seven other attachments plus one employee file remain eligible only for
+  a later importer. The grouped stager created 1,901 cases/2,196 memberships;
+  exact rerun created zero and replayed all 1,901.
+- Local post-import invariants remain: 21 Employees, all 21 null `employee_no`,
+  zero attendance and workflow cases/transitions, and no fabricated historical
+  workflow evidence. The approved import added 31 canonical Documents, 32
+  Versions, six Correspondence records and 63 non-null `imported_at` values;
+  other review groups remain untouched. Approval evidence still consists of 31
+  version-one group decisions, 31 version-one provenance decisions, one
+  immutable batch receipt and one batch audit; no attendance, inactive-user or
+  manual document/attachment review group was decided.
+  Clean `0001` to `0090` disposable migration, grouped-review, provenance and
+  canonical-import PostgreSQL integrations, 371/371 repository tests and
+  JavaScript syntax checks pass. The importer integration verifies dry-run,
+  permission/tenant scope, checksum conflict, canonical mapping, replay,
+  rollback/file cleanup, immutable evidence and absence of fabricated workflow
+  history. Disposable databases were removed afterward.
+
+## Choibalsan HR, records, complaints and archive Phase 2
+
+- Phase 2 domain migration `0086` remains the implemented domain baseline;
+  repository/local schema now reach `0090`. Documented
+  production remains `0080` and was not connected to, migrated or written.
+  Migration `0086` is additive except for explicit widening of existing leave,
+  correspondence and archive state checks. It creates no historical cases or
+  events and does not infer any employee number.
+- The tenant shell now has keyboard-accessible, refresh-stable expandable Human
+  Resources, Records, Complaints and Archive navigation. Existing HR registry,
+  structure and document surfaces are reused. Permission filtering affects
+  visibility only; every command is independently authorized by the server.
+- Authoritative domain aggregates now cover appointment, leave, employment
+  exit, correspondence, complaint and archive records/access/destruction. Their
+  state remains in the domain table. Shared workflow stores coordination,
+  assignment, decision, comment, immutable transition and notification intent
+  evidence in the same transaction.
+- Consequential commands require an idempotency UUID and expected aggregate
+  version, validate allowed state and evidence, write append-only domain and
+  workflow history, audit the actor/reason/state/version/request identity, and
+  enqueue notification intent. Exact retries replay; changed payloads and stale
+  versions conflict. Critical browser actions remain pending until server ACK.
+- Appointment finalization requires completed required-document checks,
+  management approval, effective date and canonical order evidence. It links or
+  creates the canonical Employee and primary assignment without inventing an
+  `employee_no`. Leave uses request-supplied/configurable routing, overlap
+  checks and explicit return/reject/cancel. Employment exit requires order and
+  handover completion before the canonical employee lifecycle is changed.
+- Correspondence uses collision-guarded registration, assignment/reassignment,
+  response approval, official delivery evidence, close and archive transfer.
+  Complaints have a separate authoritative case lifecycle and derived overdue
+  signal. Archive supports intake, retention review, access/issue/return,
+  destruction proposal, commission decision, immutable act, legal-hold checks,
+  item-set hash and separate executor/verifier.
+- Formal evidence uses the `0083` canonical `documents` and append-only
+  `document_links` model. Legacy attachment and entity-reference reads remain;
+  no existing reference is deleted or rewritten. Restricted consequential
+  commands require the explicit backend `documents.restricted.read` capability.
+- Empty Phase 2 datasets are intentional. Local migration retained 21
+  Employees, all 21 null `employee_no` values, and 106 Work Orders, while
+  creating zero complaint cases and zero fabricated command receipts.
+- Clean `0001`→`0089`, rerun/no-op and known-`0079` drift checks pass. The full
+  unit/source regression is 362/362, and the disposable PostgreSQL Phase 2
+  integration passes tenant denial, RLS activation, duplicate replay/conflict,
+  concurrency, assignment, leave, appointment, archive, canonical documents,
+  audit/event immutability and pending outbox intent.
+
+## Shared workflow, tenant context and canonical document foundation
+
+- Repository migrations now reach `0090`; the local development database has
+  been reconciled from its known pre-release `0079` variant through `0090`.
+  The last documented production schema remains `0080`. No production
+  deployment, connection or data write was performed.
+- Migration history remains evidentiary: the known local `0079` checksum is not
+  rewritten. A narrowly matched compatibility rule permits the forward repair,
+  and `0081` restores the canonical assignment identity guard and parent-delete
+  restriction without creating or changing business history.
+- A tenant-scoped shared workflow service provides case identity, coordination
+  state/version, assignment/reassignment, transition decisions,
+  approval/reject/return evidence, reasons/comments, exact-payload idempotency,
+  optimistic concurrency, append-only evidence, backend authorization, audit
+  integration and an immutable notification intent. It is a coordination
+  primitive only: HR, correspondence, complaint and archive domain tables
+  remain their respective sources of truth.
+- Database tenant context is now transaction-local. Missing context fails
+  closed, a second tenant on the same transaction is rejected, and pooled
+  connection reuse was verified to retain no prior tenant. Background delivery
+  enumerates the non-tenant organization registry and performs every business
+  claim/update inside an explicit tenant transaction. System bypass is disabled
+  by default, requires an explicit environment gate and reason, and has no
+  application caller.
+- Migration `0085` activated ten audited workflow, delivery and canonical-link
+  tables; later Phase 2, provenance and grouped-review tables also activate
+  their own audited policies. Local schema `0089` has active RLS on 38 of 75
+  policy-bearing public tables. Remaining staged policies still require route,
+  report, worker and admin compatibility audits. Application authorization and
+  explicit tenant predicates remain mandatory.
+- Migration `0084` keeps immutable notification intent separate from mutable
+  delivery coordination and append-only attempt evidence. The worker supports
+  pending, processing leases, retry scheduling, delivered and dead-letter
+  states, bounded backoff, expired-lease recovery, stable provider idempotency,
+  correlation/request identity and provider metadata. No email/SMS/push adapter
+  is fabricated: the shipped provider is safely disabled and does not claim or
+  consume pending intent.
+- Canonical document relationships use append-only `document_links` while
+  retaining `documents.linked_entity_type/linked_entity_id` and existing domain
+  references. General and employee document creation dual-write atomically.
+  The security-invoker compatibility view filters both canonical and legacy
+  branches by transaction tenant. Concurrent duplicates converge on one link;
+  cross-tenant attachment/document references and orphaning deletes are
+  rejected. Unknown historical relationships remain null rather than inferred.
+- The offline/retry foundation classifies drafts separately from actions that
+  require server confirmation. Approval, rejection, termination, archive
+  destruction, final close and permission/security changes can never appear
+  final offline; retry envelopes require matching request and idempotency UUIDs
+  and never accept a client-selected tenant.
+- The broad legacy HTTP harness now uses canonical tenant provisioning and the
+  current report contract. The Platform organization-create response preserves
+  its flat subscription fields, and direct Work Order completion again notifies
+  its assignee. The full harness passes on a disposable `0085` database.
+- Clean `0001` to `0089` and local rerun/no-op migration gates pass; the prior
+  known-`0079` drift reconciliation through `0088` remains covered and `0089`
+  is the next additive step. The full unit/source suite passes 362/362. Workflow, delivery,
+  RLS/pool-leak, canonical document, grouped legacy review, broad HTTP, Work Order assignment and
+  material integrations pass on disposable databases. A production-migration
+  rehearsal also verified that runtime may insert immutable intent/evidence and
+  update delivery state, but cannot mutate/delete journals or delete the state
+  projection. Local migration preserved
+  21 Employees, all 21 null `employee_no` values, one organization and 106 Work
+  Orders; no historical workflow/document attempt was invented.
 
 ## Work Order assignment history foundation
 
