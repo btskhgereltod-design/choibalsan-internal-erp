@@ -22,6 +22,22 @@ production business row was written by the rollout or its smoke checks.
 - Off-device rollback directory:
   `D:\OVERVA\release-artifacts\20260902T145717Z`
 
+The user-review follow-up commit `af40d14e4e4e10e2402b4951becb998a9312b37a`
+is also live. It renames the ambiguous team lane to **Ажил болгосон**, explains
+that the next action is assignment or self-claim, and serves the segmented
+filter styling under fresh cache identities `app.js?v=44` and
+`workflow.css?v=6`.
+
+- Follow-up artifact ID: `20260902T150906Z`
+- Final Web image:
+  `sha256:68c4faa439c8c55075f709b9fad481cbce1d897208882195d230b548a6ad87d3`
+- Follow-up rollback Web image:
+  `sha256:25f1478da517da128b51d4e75f4c5482e295da2ecf344938796b71ea10fd4eb8`
+- Follow-up Web rollback archive SHA-256:
+  `60DDEFB3B6EAEE6F0D8909A5019AD6EADA789511B31CB68C7A45C6702AEE8280`
+- Follow-up off-device rollback directory:
+  `D:\OVERVA\release-artifacts\20260902T150906Z`
+
 Only API and Web were recreated with `--no-build --no-deps`. DB, Caddy, public
 site, backup scheduler, and monitor were not restarted. The schema remained
 `0096`, so the preserved application images are rollback-compatible.
@@ -30,7 +46,7 @@ site, backup scheduler, and monitor were not restarted. The schema remained
 
 - Full repository suite: `417/417` passed.
 - Candidate API JavaScript syntax and Web image contracts passed before
-  cutover; the Web contains `app.js?v=43`.
+  cutover; the final Web contains `app.js?v=44` and `workflow.css?v=6`.
 - Production session/report/CSV smoke passed with 25 modules and 91
   permissions; ordinary-user report access remained HTTP `403`.
 - Authenticated role-scoped intake smoke returned:

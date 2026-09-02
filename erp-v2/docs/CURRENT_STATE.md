@@ -14,6 +14,9 @@ validated at enterprise scale.
   role smoke proves the chief engineer sees all `236` current intake items,
   while the electric and camera engineers see only their own routed department
   queues (`206` lighting and `30` camera); an ordinary worker receives zero.
+  User-review follow-up `af40d14` is also live: the post-intake lane is named
+  **Ажил болгосон**, and fresh Web cache identities serve the segmented source
+  filters instead of the browser's stale unstyled buttons.
 - The repository and production migration paths reach `0096`. The controlled
   rollout of commit `1a49a1f` is recorded in
   `PRODUCTION_WORK_ROUTING_RELEASE_20260902T143412Z.md`. Migration `0096` keeps one canonical
