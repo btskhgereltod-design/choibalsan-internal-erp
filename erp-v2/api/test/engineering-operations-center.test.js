@@ -29,9 +29,11 @@ test("monthly engineering commentary is tenant-scoped and audited",()=>{
 test("tenant shell wires the chief-engineer center without duplicating a module",()=>{
   const html=read("../web/index.html"),docker=read("../web/Dockerfile"),client=read("../web/engineering.js");
   assert.match(html,/id="engineeringNav"[^>]*data-module="work-orders"/);
-  assert.match(html,/engineering\.js\?v=2/);
+  assert.match(html,/engineering\.js\?v=3/);
   assert.match(docker,/COPY engineering\.js/);
   assert.match(client,/viewModules\.engineering="work-orders"/);
   assert.match(client,/\/api\/engineering\/overview/);
   assert.match(client,/data-workflow-action/);
+  assert.match(client,/function engineeringNeedsManagement/);
+  assert.match(client,/!item\.workflow_policy_id&&item\.status==="pending_review"/);
 });
