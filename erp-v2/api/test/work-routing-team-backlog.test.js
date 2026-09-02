@@ -48,7 +48,7 @@ test("department tabs filter presentation without becoming workflow stages",()=>
   assert.match(app,/work_type_code/);
   assert.match(app,/work-orders\.exception\.decide/);
   assert.match(app,/workIntakeCapabilities\.scope==="organization"/);
-  assert.match(html,/app\.js\?v=44/);
+  assert.match(html,/app\.js\?v=45/);
   assert.match(html,/workflow\.css\?v=6/);
   assert.doesNotMatch(app,/\{key:"lighting",title:/);
   assert.doesNotMatch(app,/\{key:"camera",title:/);
