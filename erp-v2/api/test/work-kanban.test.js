@@ -18,7 +18,7 @@ test("work orders render as bounded Kanban lanes instead of a long table or Gant
   for (const title of ["Асуудал ба хэрэгцээ", "Ерөнхий инженерийн шийдвэр", "ХАБЭА эхлэх зөвшөөрөл", "Гүйцэтгэж буй", "ХАБЭА дуусгалтын шалгалт", "Ерөнхий инженерийн хүлээн авалт", "Дууссан"]) {
     assert.match(app, new RegExp(title));
   }
-  assert.match(app, /class="work-kanban"/);
+  assert.match(app, /class="work-kanban \$\{state\.workFilter\}"/);
   assert.match(workflow, /max-height:calc\(100vh - 315px\)/);
   assert.doesNotMatch(app, /function workOrders\(\).*<table class="data-table"/);
   assert.doesNotMatch(app, /gantt/i);

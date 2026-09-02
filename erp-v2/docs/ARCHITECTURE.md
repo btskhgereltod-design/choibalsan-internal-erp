@@ -392,6 +392,15 @@ controls safety and approval gates. Tenant-owned intake routes may suggest an
 active Work Type from an incident domain, which in turn supplies the configured
 department and workflow. Suggestions never create or assign work automatically.
 
+Intake authority has two bounded projections. A user with organization-wide
+Work Order read and create permissions may see all tenant intake. A user with
+create authority but no organization-wide read may see and convert only items
+whose active tenant-owned domain route resolves to that user's department. The
+create command revalidates the exact domain, Work Type, and department route
+server-side. Source-category tabs and badges are presentation filters over the
+same workflow; they are never departments, workflow states, or permission
+grants. The management exception queue is a separate permission-gated view.
+
 A normal unassigned Work Order enters a team backlog only when Work Type,
 department, and operational stream are all known. A user may claim it only with
 both assignment and progress permissions and a matching department. The claim

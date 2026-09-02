@@ -211,8 +211,9 @@ router.get("/options", asyncHandler(async(req,res)=>{
 }));
 
 router.get("/intake", asyncHandler(async(req,res)=>{
-  const canTriage=hasPermission(req.user,WORK_ORDER_PERMISSIONS.READ_ALL)
-    &&hasPermission(req.user,WORK_ORDER_PERMISSIONS.CREATE);
+  const canReadAll=hasPermission(req.user,WORK_ORDER_PERMISSIONS.READ_ALL);
+  const canTriage=hasPermission(req.user,WORK_ORDER_PERMISSIONS.CREATE)
+    &&(canReadAll||Boolean(req.user.department_id));
   if(!canTriage)return res.json({items:[],capabilities:{canTriage:false}});
   const result=await withTenantTransaction(req.user.organization_id,client=>client.query(`SELECT i.id,i.domain,i.incident_type,i.title,i.location,
     i.affected_quantity,i.resolved_quantity,(i.affected_quantity-i.resolved_quantity) AS remaining_quantity,
@@ -221,14 +222,15 @@ router.get("/intake", asyncHandler(async(req,res)=>{
     COALESCE(related.open_count,0)::int AS related_open_work_count,
     related.first_work_id AS related_work_order_id,related.first_work_title AS related_work_order_title,
     suggestion.work_type_id AS suggested_work_type_id,suggestion.work_type_name AS suggested_work_type_name,
-    suggestion.operational_stream AS suggested_operational_stream,suggestion.department_name AS suggested_department_name,
+    suggestion.operational_stream AS suggested_operational_stream,suggestion.department_id AS suggested_department_id,
+    suggestion.department_name AS suggested_department_name,
     suggestion.workflow_name AS suggested_workflow_name
     FROM operational_incidents i
     LEFT JOIN operational_objects oo ON oo.organization_id=i.organization_id AND oo.id=i.operational_object_id
     LEFT JOIN assets a ON a.organization_id=i.organization_id AND a.id=i.asset_id
     LEFT JOIN LATERAL(
       SELECT wt.id AS work_type_id,wt.name AS work_type_name,wt.operational_stream,
-        d.name AS department_name,p.name AS workflow_name
+        wr.organization_unit_id AS department_id,d.name AS department_name,p.name AS workflow_name
       FROM organization_work_intake_routes ir
       JOIN organization_work_types wt ON wt.organization_id=ir.organization_id AND wt.id=ir.work_type_id AND wt.active=true
       LEFT JOIN organization_work_type_routes wr ON wr.organization_id=wt.organization_id AND wr.work_type_id=wt.id AND wr.active=true
@@ -246,6 +248,7 @@ router.get("/intake", asyncHandler(async(req,res)=>{
           OR (i.operational_object_id IS NULL AND i.asset_id IS NOT NULL AND w.asset_id=i.asset_id))
     ) related ON true
     WHERE i.organization_id=$1 AND i.status IN('open','in_progress')
+      AND ($2::boolean OR suggestion.department_id=$3::uuid)
       AND NOT EXISTS(
         SELECT 1 FROM operational_incident_work_orders l
         JOIN work_orders linked ON linked.organization_id=l.organization_id AND linked.id=l.work_order_id
@@ -253,8 +256,8 @@ router.get("/intake", asyncHandler(async(req,res)=>{
           AND linked.status NOT IN('completed','cancelled')
       )
     ORDER BY CASE i.status WHEN 'open' THEN 0 ELSE 1 END,i.reported_at DESC,i.id
-    LIMIT 300`,[req.user.organization_id]));
-  res.json({items:result.rows,capabilities:{canTriage:true}});
+    LIMIT 300`,[req.user.organization_id,canReadAll,req.user.department_id||null]));
+  res.json({items:result.rows,capabilities:{canTriage:true,scope:canReadAll?"organization":"department"}});
 }));
 
 function routingState(item){
@@ -269,7 +272,7 @@ router.get("/", asyncHandler(async(req,res)=>{
     w.operational_stream,w.assignment_kind,w.title,w.description,w.category,w.priority,w.status,w.assigned_to,w.created_by,w.due_at,w.created_at,w.updated_at,
     COALESCE(oo.code,a.code) AS asset_code,COALESCE(oo.name,a.name) AS asset_name,
     oo.code AS operational_object_code,oo.name AS operational_object_name,
-    a.code AS fixed_asset_code,a.name AS fixed_asset_name,wt.name AS work_type_name,d.name AS department_name,
+    a.code AS fixed_asset_code,a.name AS fixed_asset_name,wt.code AS work_type_code,wt.name AS work_type_name,d.name AS department_name,
     p.name AS workflow_name,p.config AS workflow_config,assignee.full_name AS assigned_name,
     assignee.role AS assigned_role,creator.full_name AS created_by_name
     FROM work_orders w
@@ -449,7 +452,6 @@ router.post("/",asyncHandler(async(req,res)=>{
   const parsed=createSchema.safeParse(req.body);
   if(!parsed.success)return res.status(400).json({error:"Invalid work order",issues:parsed.error.issues});
   if(parsed.data.assignedTo&&!hasPermission(req.user,WORK_ORDER_PERMISSIONS.ASSIGN))return deny(res,WORK_ORDER_PERMISSIONS.ASSIGN);
-  if(parsed.data.incidentId&&!hasPermission(req.user,WORK_ORDER_PERMISSIONS.READ_ALL))return deny(res,WORK_ORDER_PERMISSIONS.READ_ALL);
   const value=parsed.data,client=await getPool().connect();
   try{
     await client.query("BEGIN");
@@ -484,6 +486,14 @@ router.post("/",asyncHandler(async(req,res)=>{
       workType=routed.rows[0];
       if(workType.organization_unit_id&&assignee&&assignee.department_id!==workType.organization_unit_id){await client.query("ROLLBACK");return res.status(400).json({error:"Хариуцагч ажилтан энэ ажлын нэгжид харьяалагдахгүй байна"});}
     }
+    if(incident&&!hasPermission(req.user,WORK_ORDER_PERMISSIONS.READ_ALL)){
+      const ownRoute=workType&&workType.organization_unit_id===req.user.department_id
+        ?await client.query(`SELECT 1 FROM organization_work_intake_routes
+          WHERE organization_id=$1 AND incident_domain=$2 AND work_type_id=$3 AND active=true`,
+        [req.user.organization_id,incident.domain,workType.id]):{rowCount:0};
+      if(!ownRoute.rowCount){await client.query("ROLLBACK");return res.status(403).json({
+        error:"Энэ асуудал танай багийн батлагдсан чиглэлд хамаарахгүй байна",code:"WORK_INTAKE_ROUTE_FORBIDDEN"});}
+    }
     if(workType?.operational_stream&&value.operationalStream&&workType.operational_stream!==value.operationalStream){
       await client.query("ROLLBACK");return res.status(400).json({error:"Ажлын зорилгын ангилал сонгосон Work Type-тэй зөрж байна"});
     }
@@ -510,7 +520,7 @@ router.post("/",asyncHandler(async(req,res)=>{
         WHERE organization_id=$1 AND id=$2`,[req.user.organization_id,incident.id]);
       await client.query(`INSERT INTO operational_incident_events(organization_id,incident_id,actor_user_id,event_type,note,detail)
         VALUES($1,$2,$3,'progress',$4,$5::jsonb)`,[req.user.organization_id,incident.id,req.user.id,
-        'Ерөнхий инженер ажлын урсгалд оруулав',JSON.stringify({workOrderId:item.id})]);
+        'Асуудлыг ажлын урсгалд оруулав',JSON.stringify({workOrderId:item.id})]);
     }
     await client.query(`INSERT INTO work_order_events(organization_id,work_order_id,actor_user_id,event_type,to_status,detail)
       VALUES($1,$2,$3,'created',$4,$5::jsonb)`,[req.user.organization_id,item.id,req.user.id,status,JSON.stringify({assignedTo:assignee?.id||null,assignedName:assignee?.full_name||null,workflowStage,operationalStream,assignmentKind})]);

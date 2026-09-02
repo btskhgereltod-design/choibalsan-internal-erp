@@ -41,6 +41,18 @@ test("team claim is visible while exception and safety remain separate dimension
   assert.match(engineering,/w\.operational_stream,w\.assignment_kind/);
 });
 
+test("department tabs filter presentation without becoming workflow stages",()=>{
+  const app=read("../web/app.js"),html=read("../web/index.html");
+  assert.match(app,/function intakeFilterDomain/);
+  assert.match(app,/function workFilterDomain/);
+  assert.match(app,/work_type_code/);
+  assert.match(app,/work-orders\.exception\.decide/);
+  assert.match(app,/workIntakeCapabilities\.scope==="organization"/);
+  assert.match(html,/app\.js\?v=43/);
+  assert.doesNotMatch(app,/\{key:"lighting",title:/);
+  assert.doesNotMatch(app,/\{key:"camera",title:/);
+});
+
 test("migration rehearsal runner can target only an explicitly disposable database",()=>{
   const runner=read("scripts/rehearse-migrate.js");
   assert.match(runner,/MIGRATION_REHEARSAL_MODE !== "1"/);

@@ -20,6 +20,17 @@ validated at enterprise scale.
   configured department and workflow, but never creates or assigns work by
   itself. Choibalsan receives exactly two reviewed pilot mappings: lighting and
   camera repair. Other organizations receive none.
+- Organization-wide readers with create authority may triage the full intake.
+  A department specialist with create authority sees only incidents whose
+  active tenant-owned intake route resolves to that specialist's own
+  department. Conversion is checked again server-side against the exact
+  incident-domain/Work-Type route; a UI filter cannot expand this authority.
+- The Work Board keeps source categories as presentation, not workflow state.
+  Lighting, camera and other intake tabs filter the same end-to-end lanes, and
+  source badges keep mixed backlog cards recognizable. Lighting and camera
+  specialists start in their own category; management's exception decision is
+  a separate permission-gated view instead of a permanent lane in everyone's
+  normal board.
 - A normal, classified and routed unassigned Work Order appears in the
   responsible team's backlog. An active user in that department with both
   assignment and progress authority may claim it for themselves. Claiming is a
@@ -29,9 +40,9 @@ validated at enterprise scale.
 - Unclassified, special and emergency work remains in the chief engineer's
   exception queue. The chief engineer retains oversight and final acceptance,
   but does not become the mandatory manual dispatcher for every routine item.
-  The Work Board therefore presents eight stages: issue/need intake, exception
-  decision, team backlog, HSE start, execution, HSE completion, chief-engineer
-  acceptance and completed history.
+  The normal Work Board therefore presents seven stages: issue/need intake,
+  team backlog, HSE start, execution, HSE completion, chief-engineer acceptance
+  and completed history. Exception decision is a separate management view.
 - The production-clone rehearsal preserved the `4/25/25/63/1715/106/768/103/
   0/31/32` organization, user, employee, assignment, attendance, Work Order,
   event, approval, safety-review, document and version invariants. It classified
@@ -40,7 +51,7 @@ validated at enterprise scale.
   and 9 exception items without changing status, workflow stage or history.
   Runtime grants, RLS (`2` Choibalsan routes, `0` other-tenant routes), all four
   checks and an idempotent `0096` rerun passed. The full repository suite passes
-  `416/416` tests. Production authenticated smoke returned the same `26`
+  `417/417` tests. Production authenticated smoke returned the same `26`
   assigned, `9` team-backlog, `9` exception and `62` closed projection.
 
 ## Unified operational intake and Work Order coordination
@@ -55,11 +66,12 @@ validated at enterprise scale.
 - The Work Board foundation introduced seven understandable stages. Migration
   `0096` extends it with the team-backlog stage described above; the separate
   closed view retains the full completed/cancelled history.
-- Intake is permission-gated to organization-wide Work Order readers who can
-  create work. It combines generic incident domains rather than hard-coding
-  lighting or camera as universal product rules, shows possible same-object
-  active work as a duplicate warning, and prevents one incident from creating a
-  second active linked Work Order.
+- Intake combines generic incident domains rather than hard-coding lighting or
+  camera as universal product rules. Organization-wide readers with create
+  authority see the full queue; department specialists with create authority
+  see only their exact configured route. It shows possible same-object active
+  work as a duplicate warning and prevents one incident from creating a second
+  active linked Work Order.
 - A routed Work Order without an assignee stays in the chief-engineer decision
   stage. Assignment moves it to HSE start review and notifies the configured
   safety authority; this removes the false HSE backlog caused by treating every

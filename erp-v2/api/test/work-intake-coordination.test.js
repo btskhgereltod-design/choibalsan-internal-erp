@@ -20,16 +20,20 @@ test("0095 links intake truth to execution truth without weakening tenant bounda
   assert.match(productionMigrate,/REVOKE UPDATE,DELETE,TRUNCATE ON[^;]*operational_incident_work_orders/);
 });
 
-test("chief-engineer intake is permission-gated, tenant-scoped and duplicate-safe",()=>{
+test("intake is tenant scoped, department bounded for specialists, and duplicate safe",()=>{
   const route=read("src/routes/work-orders.js");
   assert.match(route,/router\.get\("\/intake"/);
-  assert.match(route,/WORK_ORDER_PERMISSIONS\.READ_ALL/);
+  assert.match(route,/const canReadAll=hasPermission\(req\.user,WORK_ORDER_PERMISSIONS\.READ_ALL\)/);
   assert.match(route,/WORK_ORDER_PERMISSIONS\.CREATE/);
+  assert.match(route,/\$2::boolean OR suggestion\.department_id=\$3::uuid/);
+  assert.match(route,/scope:canReadAll\?"organization":"department"/);
+  assert.match(route,/organization_work_intake_routes[\s\S]*incident_domain=\$2 AND work_type_id=\$3/);
+  assert.match(route,/WORK_INTAKE_ROUTE_FORBIDDEN/);
   assert.match(route,/withTenantTransaction\(req\.user\.organization_id/);
   assert.match(route,/linked\.status NOT IN\('completed','cancelled'\)/);
   assert.match(route,/Энэ асуудал аль хэдийн нээлттэй ажилтай холбогдсон/);
   assert.match(route,/INSERT INTO operational_incident_work_orders/);
-  assert.match(route,/Ерөнхий инженер ажлын урсгалд оруулав/);
+  assert.match(route,/Асуудлыг ажлын урсгалд оруулав/);
   assert.match(route,/incidentId:incident\?\.id\|\|null/);
 });
 
@@ -53,7 +57,12 @@ test("unified board exposes intake, exception decision, team backlog, governed c
   assert.match(html,/name="incidentId"/);
   assert.match(app,/Багийн хийх ажлууд/);
   assert.match(app,/data-claim-work/);
-  assert.match(css,/repeat\(8/);
+  assert.match(app,/data-intake-filter/);
+  assert.match(app,/Шийдвэр шаардсан/);
+  assert.match(app,/camera_engineer:"camera",electric:"lighting",safety:"other"/);
+  assert.match(app,/workBoardLanes\.filter\(x=>!\["closed","decision"\]\.includes\(x\.key\)\)/);
+  assert.match(css,/repeat\(7/);
+  assert.match(css,/work-intake-tabs/);
 });
 
 test("final acceptance resolves its linked source without inventing approval history",()=>{
