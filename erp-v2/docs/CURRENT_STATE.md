@@ -8,6 +8,21 @@ validated at enterprise scale.
 
 ## Purpose-aware work routing and team backlog
 
+- Repository migration `0097` adds tenant-owned work service areas as a
+  presentation/reporting dimension independent from department, Work Type and
+  workflow stage. Choibalsan alone is configured with the five reviewed legacy
+  lighting areas: **Авто замын гэрэл**, **Гэр хорооллын гэрэл**, **Цамхагийн
+  гэрэл**, **Шит/Самбар**, and **Гэрлэн дохио**. The Work Board exposes them as
+  a second filter row only while **Гэрэлтүүлэг** is selected, keeps the selected
+  area through every canonical lane, and lets direct urgent work record an
+  area. Intake conversion inherits the source area's tenant-scoped identifier
+  and rejects a conflicting client override. Counts explicitly represent live
+  queue items rather than the legacy screen's mixed asset, location and fault
+  totals. The full repository suite passes `418/418`; a production-clone
+  rehearsal preserved business invariants, seeded five Choibalsan areas and
+  zero other-tenant areas, and left two source-ambiguous open lighting records
+  visibly unclassified. Current production remains at `0096` until the
+  controlled `0097` rollout is completed.
 - The controlled API/Web rollout of commit `57f6c4f` is live at schema `0096`
   and recorded in
   `PRODUCTION_WORK_BOARD_SOURCE_VIEWS_RELEASE_20260902T150131Z.md`. Production

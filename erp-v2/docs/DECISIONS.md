@@ -982,6 +982,29 @@ pilot configuration and are not universal OVERVA rules. Fleet, facilities,
 general administration and future domains use the same engine only after their
 own reviewed configuration.
 
+### D-052 — Service area is independent from ownership and workflow
+
+Accepted: 2026-09-02
+
+A Work Board may need a second, organization-specific classification below a
+broad source domain. This service area answers what kind of organizational
+service the need or work belongs to. It must not be represented as a department
+column, Work Type, permission, or Kanban stage. Filtering by service area changes
+presentation only and follows the same canonical Work Order through intake,
+team backlog, safety, execution and acceptance.
+
+The source incident owns its reviewed service-area classification. Work created
+from that incident inherits the same tenant-scoped identifier, while direct
+urgent work may select one explicitly. A conflicting client override is
+rejected. When legacy or imported evidence is incomplete, the record remains
+unclassified and visible in the broader queue rather than being guessed.
+
+Choibalsan's five lighting areas are tenant configuration derived from its
+reviewed legacy operating view. The old screen mixed open-fault counts with
+inventory-location and asset totals; the new Work Board counts only current
+queue items and states that distinction. No other organization receives these
+names or records automatically.
+
 ## Active Hypotheses
 
 ### H-001 — Customer journey

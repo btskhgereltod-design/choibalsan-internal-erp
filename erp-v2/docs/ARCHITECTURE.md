@@ -401,6 +401,16 @@ server-side. Source-category tabs and badges are presentation filters over the
 same workflow; they are never departments, workflow states, or permission
 grants. The management exception queue is a separate permission-gated view.
 
+An organization may additionally configure service areas within a source
+domain. A service area answers what kind of service the condition or Work Order
+belongs to; it does not answer who owns it, which technical Work Type applies,
+or which approval stage is current. An incident may carry the reviewed source
+classification, and a Work Order created from that incident inherits its
+tenant-scoped identifier. Direct work may select one explicitly. Missing source
+evidence remains unclassified and visible in the broader queue instead of being
+guessed. Service-area tabs filter the same canonical lanes and grant no
+authority.
+
 A normal unassigned Work Order enters a team backlog only when Work Type,
 department, and operational stream are all known. A user may claim it only with
 both assignment and progress permissions and a matching department. The claim

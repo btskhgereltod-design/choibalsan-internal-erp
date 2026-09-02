@@ -33,6 +33,7 @@ const router = express.Router();
 const createSchema = z.object({
   assetId: z.string().uuid().nullable().optional(), operationalObjectId: z.string().uuid().nullable().optional(),
   incidentId: z.string().uuid().nullable().optional(),
+  serviceAreaId: z.string().uuid().nullable().optional(),
   assignedTo: z.string().uuid().nullable().optional(),
   workTypeId: z.string().uuid().nullable().optional(), title: z.string().trim().min(1).max(300),
   operationalStream: z.enum(["core_service", "internal_operation"]).nullable().optional(),
@@ -200,14 +201,17 @@ function requireInventory(req,res) {
 router.use(authenticate, requireModule("work-orders"));
 
 router.get("/options", asyncHandler(async(req,res)=>{
-  const result=await getPool().query(`SELECT wt.id,wt.code,wt.name,wt.category,wt.operational_stream,r.organization_unit_id AS department_id,
+  const [result,serviceAreas]=await Promise.all([getPool().query(`SELECT wt.id,wt.code,wt.name,wt.category,wt.operational_stream,r.organization_unit_id AS department_id,
     d.name AS department_name,r.workflow_policy_id,p.name AS workflow_name
     FROM organization_work_types wt
     LEFT JOIN organization_work_type_routes r ON r.organization_id=wt.organization_id AND r.work_type_id=wt.id AND r.active=true
     LEFT JOIN departments d ON d.organization_id=r.organization_id AND d.id=r.organization_unit_id
     LEFT JOIN organization_workflow_policies p ON p.organization_id=r.organization_id AND p.id=r.workflow_policy_id AND p.active=true
-    WHERE wt.organization_id=$1 AND wt.active=true ORDER BY wt.category,wt.name`,[req.user.organization_id]);
-  res.json({items:result.rows});
+    WHERE wt.organization_id=$1 AND wt.active=true ORDER BY wt.category,wt.name`,[req.user.organization_id]),
+  getPool().query(`SELECT id,domain,code,name,icon,sort_order
+    FROM organization_work_service_areas
+    WHERE organization_id=$1 AND active=true ORDER BY domain,sort_order,name`,[req.user.organization_id])]);
+  res.json({items:result.rows,serviceAreas:serviceAreas.rows});
 }));
 
 router.get("/intake", asyncHandler(async(req,res)=>{
@@ -217,7 +221,8 @@ router.get("/intake", asyncHandler(async(req,res)=>{
   if(!canTriage)return res.json({items:[],capabilities:{canTriage:false}});
   const result=await withTenantTransaction(req.user.organization_id,client=>client.query(`SELECT i.id,i.domain,i.incident_type,i.title,i.location,
     i.affected_quantity,i.resolved_quantity,(i.affected_quantity-i.resolved_quantity) AS remaining_quantity,
-    i.status,i.reported_at,i.operational_object_id,i.asset_id,i.detail,
+    i.status,i.reported_at,i.operational_object_id,i.asset_id,i.service_area_id,i.detail,
+    area.domain AS service_area_domain,area.code AS service_area_code,area.name AS service_area_name,area.icon AS service_area_icon,
     COALESCE(oo.code,a.code) AS object_code,COALESCE(oo.name,a.name) AS object_name,
     COALESCE(related.open_count,0)::int AS related_open_work_count,
     related.first_work_id AS related_work_order_id,related.first_work_title AS related_work_order_title,
@@ -226,6 +231,8 @@ router.get("/intake", asyncHandler(async(req,res)=>{
     suggestion.department_name AS suggested_department_name,
     suggestion.workflow_name AS suggested_workflow_name
     FROM operational_incidents i
+    LEFT JOIN organization_work_service_areas area
+      ON area.organization_id=i.organization_id AND area.id=i.service_area_id AND area.active=true
     LEFT JOIN operational_objects oo ON oo.organization_id=i.organization_id AND oo.id=i.operational_object_id
     LEFT JOIN assets a ON a.organization_id=i.organization_id AND a.id=i.asset_id
     LEFT JOIN LATERAL(
@@ -269,13 +276,16 @@ function routingState(item){
 
 router.get("/", asyncHandler(async(req,res)=>{
   const result=await getPool().query(`SELECT w.id,w.asset_id,w.operational_object_id,w.work_type_id,w.department_id,w.workflow_policy_id,w.workflow_stage,
-    w.operational_stream,w.assignment_kind,w.title,w.description,w.category,w.priority,w.status,w.assigned_to,w.created_by,w.due_at,w.created_at,w.updated_at,
+    w.operational_stream,w.assignment_kind,w.service_area_id,w.title,w.description,w.category,w.priority,w.status,w.assigned_to,w.created_by,w.due_at,w.created_at,w.updated_at,
+    area.domain AS service_area_domain,area.code AS service_area_code,area.name AS service_area_name,area.icon AS service_area_icon,
     COALESCE(oo.code,a.code) AS asset_code,COALESCE(oo.name,a.name) AS asset_name,
     oo.code AS operational_object_code,oo.name AS operational_object_name,
     a.code AS fixed_asset_code,a.name AS fixed_asset_name,wt.code AS work_type_code,wt.name AS work_type_name,d.name AS department_name,
     p.name AS workflow_name,p.config AS workflow_config,assignee.full_name AS assigned_name,
     assignee.role AS assigned_role,creator.full_name AS created_by_name
     FROM work_orders w
+    LEFT JOIN organization_work_service_areas area
+      ON area.organization_id=w.organization_id AND area.id=w.service_area_id AND area.active=true
     LEFT JOIN operational_objects oo ON oo.organization_id=w.organization_id AND oo.id=w.operational_object_id
     LEFT JOIN assets a ON a.organization_id=w.organization_id AND a.id=w.asset_id
     LEFT JOIN organization_work_types wt ON wt.organization_id=w.organization_id AND wt.id=w.work_type_id
@@ -497,6 +507,18 @@ router.post("/",asyncHandler(async(req,res)=>{
     if(workType?.operational_stream&&value.operationalStream&&workType.operational_stream!==value.operationalStream){
       await client.query("ROLLBACK");return res.status(400).json({error:"Ажлын зорилгын ангилал сонгосон Work Type-тэй зөрж байна"});
     }
+    const serviceAreaId=value.serviceAreaId||incident?.service_area_id||null;
+    if(value.serviceAreaId&&incident?.service_area_id&&value.serviceAreaId!==incident.service_area_id){
+      await client.query("ROLLBACK");return res.status(409).json({error:"Үйлчилгээний чиглэл эх асуудлын ангилалтай зөрж байна"});
+    }
+    if(serviceAreaId){
+      const serviceArea=await client.query(`SELECT id,domain FROM organization_work_service_areas
+        WHERE organization_id=$1 AND id=$2 AND active=true`,[req.user.organization_id,serviceAreaId]);
+      if(!serviceArea.rowCount){await client.query("ROLLBACK");return res.status(400).json({error:"Үйлчилгээний чиглэл олдсонгүй"});}
+      if(incident&&serviceArea.rows[0].domain!==incident.domain){
+        await client.query("ROLLBACK");return res.status(409).json({error:"Үйлчилгээний чиглэл эх асуудлын төрөлтэй тохирохгүй байна"});
+      }
+    }
     const operationalObjectId=value.operationalObjectId||incident?.operational_object_id||null;
     const assetId=value.assetId||incident?.asset_id||null;
     if(operationalObjectId){
@@ -507,10 +529,10 @@ router.post("/",asyncHandler(async(req,res)=>{
     const assignmentKind=value.priority==="emergency"?"emergency":value.assignmentKind;
     const status=assignee?"assigned":"new",workflowStage=workType?.workflow_policy_id&&assignee?"awaiting_safety_start":null;
     const result=await client.query(`INSERT INTO work_orders(organization_id,asset_id,operational_object_id,work_type_id,department_id,workflow_policy_id,workflow_stage,
-      operational_stream,assignment_kind,title,description,category,priority,status,assigned_to,due_at,created_by)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
+      operational_stream,assignment_kind,service_area_id,title,description,category,priority,status,assigned_to,due_at,created_by)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
     [req.user.organization_id,assetId,operationalObjectId,workType?.id||null,workType?.organization_unit_id||null,workType?.workflow_policy_id||null,
-      workflowStage,operationalStream,assignmentKind,value.title,value.description,workType?.category||value.category,value.priority,status,assignee?.id||null,value.dueAt||null,req.user.id]);
+      workflowStage,operationalStream,assignmentKind,serviceAreaId,value.title,value.description,workType?.category||value.category,value.priority,status,assignee?.id||null,value.dueAt||null,req.user.id]);
     const item=result.rows[0];
     if(incident){
       await client.query(`INSERT INTO operational_incident_work_orders(organization_id,incident_id,work_order_id,link_role,linked_by,detail)
@@ -523,14 +545,14 @@ router.post("/",asyncHandler(async(req,res)=>{
         'Асуудлыг ажлын урсгалд оруулав',JSON.stringify({workOrderId:item.id})]);
     }
     await client.query(`INSERT INTO work_order_events(organization_id,work_order_id,actor_user_id,event_type,to_status,detail)
-      VALUES($1,$2,$3,'created',$4,$5::jsonb)`,[req.user.organization_id,item.id,req.user.id,status,JSON.stringify({assignedTo:assignee?.id||null,assignedName:assignee?.full_name||null,workflowStage,operationalStream,assignmentKind})]);
+      VALUES($1,$2,$3,'created',$4,$5::jsonb)`,[req.user.organization_id,item.id,req.user.id,status,JSON.stringify({assignedTo:assignee?.id||null,assignedName:assignee?.full_name||null,workflowStage,operationalStream,assignmentKind,serviceAreaId})]);
     await recordInitialAssignment(client,{
       organizationId:req.user.organization_id,workOrderId:item.id,actorUserId:req.user.id,
       assignee,status,source:"api",
     });
     if(assignee&&assignee.id!==req.user.id)await notifyUser(client,{organizationId:req.user.organization_id,userId:assignee.id,type:"work_assigned",title:"Шинэ ажил хуваарилагдлаа",message:value.title,entityId:item.id});
     if(workflowStage){const policy=await client.query("SELECT config FROM organization_workflow_policies WHERE organization_id=$1 AND id=$2",[req.user.organization_id,item.workflow_policy_id]);const config=policy.rows[0]?.config||{};await notifyAuthority(client,{organizationId:req.user.organization_id,permission:config.startSafetyPermission,excludeUserId:req.user.id,title:"Ажил эхлүүлэх зөвшөөрөл хүлээгдэж байна",message:value.title,entityId:item.id});}
-    await writeAudit(req,"work_order.create","work_order",item.id,{title:value.title,assignedTo:assignee?.id||null,workflowStage,operationalStream,assignmentKind,incidentId:incident?.id||null},client);
+    await writeAudit(req,"work_order.create","work_order",item.id,{title:value.title,assignedTo:assignee?.id||null,workflowStage,operationalStream,assignmentKind,serviceAreaId,incidentId:incident?.id||null},client);
     await client.query("COMMIT");
     await emitAutomationEvent({organizationId:req.user.organization_id,eventType:"work_order.created",payload:{id:item.id,title:item.title,priority:item.priority,status:item.status,category:item.category},sourceEntityType:"work_order",sourceEntityId:item.id,sourceDeliveryKey:`work-order.created:${item.id}`}).catch(error=>console.error("[automation]",error));
     res.status(201).json({item});

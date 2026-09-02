@@ -9,7 +9,7 @@
   <meta name="color-scheme" content="light">
   <title>OVERVA ERP</title>
   <link rel="stylesheet" href="/style.css?v=47">
-  <link rel="stylesheet" href="/workflow.css?v=6">
+  <link rel="stylesheet" href="/workflow.css?v=7">
   <link rel="stylesheet" href="/work-history.css?v=2">
   <link rel="stylesheet" href="/notifications.css">
   <link rel="stylesheet" href="/asset-detail.css">
@@ -146,6 +146,7 @@
     <input type="hidden" name="incidentId"><div id="workOrderSource" class="work-order-source hidden"></div>
     <label>Ажлын нэр<input name="title" placeholder="Камерын тэжээл шалгах" required maxlength="300"></label>
     <label>Ажлын төрөл ба хариуцах нэгж<select name="workTypeId" id="workOrderType"><option value="">Ердийн ажлын захиалга</option></select><small class="field-help">Ажлын төрлөөс хариуцах тасаг, зөвшөөрөл болон хяналтын урсгал автоматаар сонгогдоно.</small></label>
+    <label>Үйлчилгээний чиглэл<select name="serviceAreaId" id="workOrderServiceArea"><option value="">Үйлчилгээний чиглэл сонгохгүй</option></select><small class="field-help">Жишээ нь авто замын гэрэл, шит/самбар. Энэ нь тасаг эсвэл ажлын шат биш.</small></label>
     <label>Холбогдох хөрөнгө<select name="assetId" id="workOrderAsset"><option value="">Хөрөнгө сонгохгүй</option></select></label>
     <label>Хариуцагч ажилтан<select name="assignedTo" id="workOrderAssignee"><option value="">Дараа хуваарилах</option></select></label>
     <div class="form-grid"><label>Ажлын зорилго<select name="operationalStream"><option value="">Төрлөөс автоматаар</option><option value="core_service">Үндсэн үйлчилгээ</option><option value="internal_operation">Дотоод үйл ажиллагаа</option></select></label><label>Үүргийн шинж<select name="assignmentKind"><option value="normal">Ердийн</option><option value="special">Тусгай үүрэг</option><option value="emergency">Яаралтай үүрэг</option></select></label></div>
@@ -250,7 +251,7 @@
     <p class="form-error" data-form-error></p><div class="dialog-actions"><button type="button" class="secondary" data-close="passwordDialog">Болих</button><button type="submit" class="primary">Нууц үг солих</button></div>
   </form></dialog>
   <div class="toast" id="toast" role="status"></div>
-  <script src="/app.js?v=45" defer></script>
+  <script src="/app.js?v=46" defer></script>
   <script src="/employee-access.js?v=30" defer></script>
   <script src="/business-modules.js?v=35" defer></script>
   <script src="/organization-blueprint.js?v=5" defer></script>
