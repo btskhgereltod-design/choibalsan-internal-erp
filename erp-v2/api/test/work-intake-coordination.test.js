@@ -55,7 +55,7 @@ test("unified board exposes intake, exception decision, team backlog, governed c
   assert.match(app,/data-intake-id/);
   assert.match(app,/related_open_work_count/);
   assert.match(html,/name="incidentId"/);
-  assert.match(app,/Багийн хийх ажлууд/);
+  assert.match(app,/Ажил болгосон/);
   assert.match(app,/data-claim-work/);
   assert.match(app,/data-intake-filter/);
   assert.match(app,/Шийдвэр шаардсан/);
