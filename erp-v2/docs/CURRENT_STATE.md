@@ -37,13 +37,21 @@ validated at enterprise scale.
   execution, HSE completion, chief approval and closed). The HSE workspace has
   dedicated start, monitored-execution and completion queues, including
   structured review and suspension actions.
-- Verification passes the full `400/400` repository suite and JavaScript syntax
+- Migration `0094` also extends the existing notification type constraint
+  without removing any previously accepted value. It admits the
+  `work_order_workflow` and `work_order_returned` notifications emitted by the
+  governed Work Order flow, so creation and return actions remain transactional
+  instead of failing with PostgreSQL `23514`.
+- Verification passes the full `402/402` repository suite and JavaScript syntax
   checks. Clean `0001` to `0094` migration passed on a disposable database. A
   second disposable rehearsal inserted both Choibalsan and an unrelated future
   organization before applying the pilot migrations: the resulting template
   and route counts were `2/7` for Choibalsan and `0/0` for the other tenant;
   all three new authorities exposed tenant RLS policies. Both rehearsal
-  databases were removed afterward.
+  databases were removed afterward. A further disposable clean-schema API
+  regression created a workflow-routed Work Order with HTTP `201`, verified its
+  `work_order_workflow` notification, and verified the return notification type;
+  that database was also removed afterward.
 
 ## Confidential disciplinary cases
 

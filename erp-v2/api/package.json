@@ -16,6 +16,7 @@
     "test:operations": "node -e \"process.env.RUN_OPERATIONS_INTEGRATION='1'; require('./scripts/operations-integration-test')\"",
     "test:work-material": "node -e \"process.env.RUN_WORK_ORDER_MATERIAL_INTEGRATION='1'; require('./scripts/work-order-material-integration-test')\"",
     "test:work-assignment": "node -e \"process.env.RUN_WORK_ORDER_ASSIGNMENT_INTEGRATION='1'; require('./scripts/work-order-assignment-integration-test')\"",
+    "test:work-workflow-notifications": "node -e \"process.env.RUN_WORK_ORDER_WORKFLOW_NOTIFICATION_INTEGRATION='1'; require('./scripts/work-order-workflow-notification-integration-test')\"",
     "test:automation-idempotency": "node -e \"process.env.RUN_AUTOMATION_IDEMPOTENCY_INTEGRATION='1'; require('./scripts/automation-idempotency-integration-test')\"",
     "test:workflow-foundation": "node -e \"process.env.RUN_WORKFLOW_FOUNDATION_INTEGRATION='1'; require('./scripts/workflow-foundation-integration-test')\"",
     "test:workflow-delivery": "node -e \"process.env.RUN_WORKFLOW_DELIVERY_INTEGRATION='1'; require('./scripts/workflow-notification-delivery-integration-test')\"",

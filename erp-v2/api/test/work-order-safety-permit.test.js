@@ -22,6 +22,17 @@ test("0094 separates reusable safety authority from tenant checklist data",()=>{
   assert.match(migration,/FROM \(SELECT id FROM organizations WHERE slug='choibalsan-hugjil'\) tenant/);
 });
 
+test("0094 keeps Work Order creation and return notifications compatible",()=>{
+  const migration=read("migrations/0094_work_order_safety_permits.sql");
+  const route=read("src/routes/work-orders.js");
+  for(const type of [
+    "work_assigned","review_requested","work_completed","automation_alert",
+    "work_order_workflow","work_order_returned",
+  ])assert.match(migration,new RegExp(`'${type}'`));
+  assert.match(route,/workflowStage.*notifyAuthority/s);
+  assert.match(route,/type:"work_order_returned"/);
+});
+
 test("safety decisions require structured evidence and share the workflow transaction",()=>{
   const route=read("src/routes/work-orders.js");
   assert.match(route,/safetyReviewSchema/);

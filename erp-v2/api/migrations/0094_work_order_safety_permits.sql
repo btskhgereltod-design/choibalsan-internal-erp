@@ -2,6 +2,14 @@
 -- Organization-specific checklists are configuration data. The only pilot
 -- templates seeded here are explicitly scoped to Choibalsan Hugjil.
 
+-- Preserve every notification type accepted before this release while adding
+-- the workflow queue and return notifications emitted by the Work Order API.
+ALTER TABLE notifications DROP CONSTRAINT notifications_type_check;
+ALTER TABLE notifications ADD CONSTRAINT notifications_type_check CHECK(type IN(
+  'work_assigned','review_requested','work_completed','automation_alert',
+  'work_order_workflow','work_order_returned'
+));
+
 CREATE TABLE organization_work_safety_templates (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE RESTRICT,
