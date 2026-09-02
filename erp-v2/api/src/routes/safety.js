@@ -2,7 +2,7 @@
 
 const express = require("express");
 const { z } = require("zod");
-const { getPool } = require("../db");
+const { getPool, withTenantTransaction } = require("../db");
 const { authenticate, requireModule, requirePermissions } = require("../middleware/auth");
 const { writeAudit } = require("../services/audit");
 const { riskBand, nextReference } = require("../services/safety");
@@ -17,6 +17,7 @@ const riskStatus = z.enum(["open","in_progress","controlled","closed"]);
 const incidentStatus = z.enum(["reported","investigating","corrective_action","closed"]);
 const manage = requirePermissions("safety.manage");
 const investigate = requirePermissions("safety.investigate");
+const reviewWork = requirePermissions("work-orders.workflow.safety");
 
 const createRiskSchema = z.object({
   title: requiredText(250), category: requiredText(120), location: optionalText(250),
@@ -79,6 +80,50 @@ router.get("/overview",asyncHandler(async(req,res)=>{
     getPool().query(`SELECT * FROM safety_route_plans WHERE organization_id=$1 ORDER BY route_date DESC,created_at DESC LIMIT 200`,[org]),
   ]);
   res.json({summary:summary.rows[0],risks:risks.rows.map(row=>({...row,risk_band:riskBand(row.risk_score)})),incidents:incidents.rows,briefings:briefings.rows,documents:documents.rows,routes:routes.rows,canManage:(req.user.permissions||[]).includes("safety.manage")});
+}));
+
+router.get("/work-orders",reviewWork,asyncHandler(async(req,res)=>{
+  const items=await withTenantTransaction(req.user.organization_id,async client=>(await client.query(`SELECT
+    w.id,w.title,w.description,w.category,w.priority,w.status,w.workflow_stage,w.assigned_to,w.due_at,w.updated_at,
+    wt.name AS work_type_name,assignee.full_name AS assigned_name,t.id AS safety_template_id,t.code AS safety_template_code,
+    t.name AS safety_template_name,t.version AS safety_template_version,
+    start_review.decision AS start_decision,start_review.valid_until AS permit_valid_until,start_review.risk_score AS start_risk_score,
+    completion_review.decision AS completion_decision
+    FROM work_orders w
+    JOIN organization_work_types wt ON wt.organization_id=w.organization_id AND wt.id=w.work_type_id
+    JOIN organization_work_safety_template_routes tr ON tr.organization_id=w.organization_id AND tr.work_type_id=w.work_type_id AND tr.active=true
+    JOIN organization_work_safety_templates t ON t.organization_id=tr.organization_id AND t.id=tr.safety_template_id AND t.active=true
+    LEFT JOIN users assignee ON assignee.organization_id=w.organization_id AND assignee.id=w.assigned_to
+    LEFT JOIN LATERAL(SELECT r.decision,r.valid_until,r.risk_score FROM work_order_safety_reviews r
+      WHERE r.organization_id=w.organization_id AND r.work_order_id=w.id AND r.review_type='start'
+      ORDER BY r.created_at DESC,r.id DESC LIMIT 1) start_review ON true
+    LEFT JOIN LATERAL(SELECT r.decision FROM work_order_safety_reviews r
+      WHERE r.organization_id=w.organization_id AND r.work_order_id=w.id AND r.review_type='completion'
+      ORDER BY r.created_at DESC,r.id DESC LIMIT 1) completion_review ON true
+    WHERE w.organization_id=$1 AND w.workflow_stage IN('awaiting_safety_start','execution','awaiting_safety_completion')
+    ORDER BY CASE w.workflow_stage WHEN 'awaiting_safety_completion' THEN 1 WHEN 'awaiting_safety_start' THEN 2 ELSE 3 END,w.updated_at`,
+  [req.user.organization_id])).rows);
+  res.json({items});
+}));
+
+router.get("/work-orders/:id/review-context",reviewWork,asyncHandler(async(req,res)=>{
+  const id=uuid.safeParse(req.params.id),action=z.enum(["safety_authorize_start","safety_return_start","safety_suspend_execution","safety_accept_completion","safety_return_to_execution"]).safeParse(req.query.action);
+  if(!id.success||!action.success)return res.status(400).json({error:"ХАБЭА шалгалтын хүсэлт буруу байна"});
+  const expected={safety_authorize_start:"awaiting_safety_start",safety_return_start:"awaiting_safety_start",safety_suspend_execution:"execution",safety_accept_completion:"awaiting_safety_completion",safety_return_to_execution:"awaiting_safety_completion"}[action.data];
+  const item=await withTenantTransaction(req.user.organization_id,async client=>(await client.query(`SELECT
+    w.id,w.title,w.description,w.category,w.priority,w.status,w.workflow_stage,w.assigned_to,w.due_at,
+    wt.name AS work_type_name,assignee.full_name AS assigned_name,t.id AS template_id,t.code AS template_code,
+    t.name AS template_name,t.version AS template_version,t.start_checklist,t.completion_checklist
+    FROM work_orders w
+    JOIN organization_work_types wt ON wt.organization_id=w.organization_id AND wt.id=w.work_type_id
+    JOIN organization_work_safety_template_routes tr ON tr.organization_id=w.organization_id AND tr.work_type_id=w.work_type_id AND tr.active=true
+    JOIN organization_work_safety_templates t ON t.organization_id=tr.organization_id AND t.id=tr.safety_template_id AND t.active=true
+    LEFT JOIN users assignee ON assignee.organization_id=w.organization_id AND assignee.id=w.assigned_to
+    WHERE w.organization_id=$1 AND w.id=$2`,[req.user.organization_id,id.data])).rows[0]);
+  if(!item)return res.status(404).json({error:"Ажилд тохирох ХАБЭА checklist олдсонгүй"});
+  if(item.workflow_stage!==expected)return res.status(409).json({error:"Ажлын одоогийн шат энэ ХАБЭА үйлдэлтэй тохирохгүй байна"});
+  const reviewType=action.data.includes("start")||action.data==="safety_suspend_execution"?"start":"completion";
+  res.json({item:{...item,action:action.data,reviewType,checklist:reviewType==="start"?item.start_checklist:item.completion_checklist}});
 }));
 
 router.post("/risks",asyncHandler(async(req,res)=>{

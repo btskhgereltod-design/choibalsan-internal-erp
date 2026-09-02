@@ -15,7 +15,7 @@ const engineering = fs.readFileSync(path.join(web, "engineering.js"), "utf8");
 const safety = fs.readFileSync(path.join(web, "safety.js"), "utf8");
 
 test("work orders render as bounded Kanban lanes instead of a long table or Gantt", () => {
-  for (const title of ["Шинэ ба хуваарилах", "Эхлэх зөвшөөрөл", "Гүйцэтгэж буй", "Хяналт ба хаалт", "Хаагдсан"]) {
+  for (const title of ["Шинэ ба хуваарилах", "ХАБЭА эхлэх зөвшөөрөл", "Гүйцэтгэж буй", "ХАБЭА дуусгалтын шалгалт", "Ерөнхий инженерийн баталгаа", "Хаагдсан"]) {
     assert.match(app, new RegExp(title));
   }
   assert.match(app, /class="work-kanban"/);
@@ -29,6 +29,8 @@ test("Kanban preserves governed actions instead of drag bypass", () => {
   assert.match(app, /assignmentControl\(item\)/);
   assert.match(app, /Батлах шаттай ажлыг чирж алгасахгүй/);
   assert.match(app, /data-workflow-action/);
+  assert.match(app, /safety-review/);
+  assert.match(app, /management-review/);
 });
 
 test("field app returns only work assigned to the signed-in person", () => {

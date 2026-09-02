@@ -2,12 +2,13 @@
 
 const express = require("express");
 const { z } = require("zod");
-const { getPool } = require("../db");
+const { getPool, setTenantContext, withTenantTransaction } = require("../db");
 const { authenticate, requireModule } = require("../middleware/auth");
 const { writeAudit } = require("../services/audit");
 const { emitAutomationEvent } = require("../services/automation");
 const { notifyUser, notifyManagement } = require("../services/notifications");
-const { canTransition, WORKFLOW_ACTIONS, availableWorkflowActions, canPerformWorkflowAction } = require("../services/work-order-flow");
+const { payloadHash } = require("../services/workflow-coordination");
+const { canTransition, WORKFLOW_ACTIONS, availableWorkflowActions, canPerformWorkflowAction, resolveWorkflowAction } = require("../services/work-order-flow");
 const { canTransitionMaterial } = require("../services/work-order-material-flow");
 const {
   activeAssignee,
@@ -42,7 +43,19 @@ const assignmentSchema = z.object({
   idempotencyKey: z.string().uuid().nullable().optional(),
 });
 const noteSchema = z.object({ note: z.string().trim().min(1).max(2000) });
-const workflowActionSchema = z.object({ action: z.enum(Object.keys(WORKFLOW_ACTIONS)), note: z.string().trim().max(2000).default("") });
+const safetyChecklistItemSchema=z.object({code:z.string().trim().min(1).max(120),checked:z.boolean(),note:z.string().trim().max(1000).default("")});
+const safetyReviewSchema=z.object({
+  templateId:z.string().uuid(),reviewType:z.enum(["start","completion"]),
+  likelihood:z.coerce.number().int().min(1).max(5).nullable().optional(),severity:z.coerce.number().int().min(1).max(5).nullable().optional(),
+  hazards:z.array(z.string().trim().min(1).max(500)).max(50).default([]),controls:z.array(z.string().trim().min(1).max(500)).max(50).default([]),
+  ppe:z.array(z.string().trim().min(1).max(200)).max(50).default([]),checklist:z.array(safetyChecklistItemSchema).max(100),
+  validUntil:z.union([z.iso.datetime(),z.null()]).optional(),note:z.string().trim().min(1).max(2000),
+});
+const workflowActionSchema = z.object({
+  action: z.enum(Object.keys(WORKFLOW_ACTIONS)), note: z.string().trim().max(2000).default(""),
+  idempotencyKey:z.string().uuid(),
+  safetyReview:safetyReviewSchema.optional(),
+});
 const scopeItemSchema = z.object({
   operationalObjectId:z.string().uuid().nullable().optional(),assetId:z.string().uuid().nullable().optional(),
   itemCode:z.string().trim().min(1).max(80),description:z.string().trim().min(1).max(500),
@@ -71,6 +84,64 @@ async function scopeClosure(client,organizationId,workOrderId){
     COALESCE(sum(unresolved_quantity),0) unresolved,COALESCE(sum(deferred_quantity),0) deferred
     FROM work_order_scope_items WHERE organization_id=$1 AND work_order_id=$2`,[organizationId,workOrderId]);
   return result.rows[0];
+}
+
+const safetyActionReviewType=Object.freeze({
+  safety_authorize_start:"start",safety_return_start:"start",safety_suspend_execution:"start",
+  safety_accept_completion:"completion",safety_return_to_execution:"completion",
+});
+
+async function recordSafetyReview(client,{organizationId,userId,work,action,value}){
+  const reviewType=safetyActionReviewType[action];
+  if(!reviewType)return null;
+  if(work.config?.safetyReviewRequired!==true)return null;
+  if(!value)return {error:"Энэ шатанд ХАБЭА-ийн бүтэцтэй шалгалт, нотолгоо шаардлагатай"};
+  if(value.reviewType!==reviewType)return {error:"ХАБЭА шалгалтын төрөл одоогийн шаттай тохирохгүй байна"};
+  const template=(await client.query(`SELECT t.* FROM organization_work_safety_template_routes r
+    JOIN organization_work_safety_templates t ON t.organization_id=r.organization_id AND t.id=r.safety_template_id
+    WHERE r.organization_id=$1 AND r.work_type_id=$2 AND r.active=true AND t.active=true AND t.id=$3`,
+  [organizationId,work.work_type_id,value.templateId])).rows[0];
+  if(!template)return {error:"Энэ ажлын төрөлд тохирох идэвхтэй ХАБЭА checklist олдсонгүй"};
+  const decision=action==="safety_suspend_execution"?"revoked":action.includes("return")?"returned":"approved";
+  const required=reviewType==="start"?template.start_checklist:template.completion_checklist;
+  const supplied=new Map(value.checklist.map(item=>[item.code,item]));
+  const unknown=value.checklist.find(item=>!required.some(expected=>expected.code===item.code));
+  if(unknown)return {error:`Checklist-д үл таних мөр байна: ${unknown.code}`};
+  if(decision==="approved"){
+    const missing=required.filter(item=>item.required!==false&&!supplied.get(item.code)?.checked);
+    if(missing.length)return {error:"Заавал шалгах бүх нөхцөлийг хангаагүй байна",missingChecklist:missing.map(item=>item.code)};
+    if(reviewType==="start"&&(!value.likelihood||!value.severity||!value.hazards.length||!value.controls.length||!value.ppe.length))return {error:"Эхлэх зөвшөөрөлд эрсдэл, хамгаалах арга хэмжээ, PPE болон үнэлгээ бүрэн шаардлагатай"};
+    if(reviewType==="start"&&(!value.validUntil||new Date(value.validUntil)<=new Date()))return {error:"Эхлэх зөвшөөрлийн хүчинтэй хугацаа ирээдүйд байх шаардлагатай"};
+  }
+  const scope=(await client.query(`SELECT count(*)::int AS count,COALESCE(max(updated_at)::text,'') AS changed_at
+    FROM work_order_scope_items WHERE organization_id=$1 AND work_order_id=$2`,[organizationId,work.id])).rows[0];
+  const snapshot={assignedTo:work.assigned_to,workTypeId:work.work_type_id,departmentId:work.department_id,
+    operationalObjectId:work.operational_object_id,assetId:work.asset_id,title:work.title,dueAt:work.due_at,
+    scopeCount:scope.count,scopeChangedAt:scope.changed_at};
+  const inserted=await client.query(`INSERT INTO work_order_safety_reviews(
+    organization_id,work_order_id,safety_template_id,template_version,review_type,decision,likelihood,severity,
+    hazards,controls,ppe,checklist,note,valid_until,work_snapshot,actor_user_id)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::jsonb,$11::jsonb,$12::jsonb,$13,$14,$15::jsonb,$16) RETURNING *`,
+  [organizationId,work.id,template.id,template.version,reviewType,decision,value.likelihood||null,value.severity||null,
+    JSON.stringify(value.hazards),JSON.stringify(value.controls),JSON.stringify(value.ppe),JSON.stringify(value.checklist),value.note,value.validUntil||null,JSON.stringify(snapshot),userId]);
+  return {item:inserted.rows[0],template};
+}
+
+async function validateActiveStartPermit(client,organizationId,work){
+  if(work.config?.safetyReviewRequired!==true)return null;
+  const review=(await client.query(`SELECT * FROM work_order_safety_reviews
+    WHERE organization_id=$1 AND work_order_id=$2 AND review_type='start'
+    ORDER BY created_at DESC,id DESC LIMIT 1`,[organizationId,work.id])).rows[0];
+  if(!review||review.decision!=="approved")return "Хүчинтэй ХАБЭА эхлэх зөвшөөрөл байхгүй байна";
+  if(!review.valid_until||new Date(review.valid_until)<=new Date())return "ХАБЭА эхлэх зөвшөөрлийн хугацаа дууссан байна";
+  const snapshot=review.work_snapshot||{},scope=(await client.query(`SELECT count(*)::int AS count,COALESCE(max(updated_at)::text,'') AS changed_at
+    FROM work_order_scope_items WHERE organization_id=$1 AND work_order_id=$2`,[organizationId,work.id])).rows[0];
+  if(snapshot.assignedTo!==work.assigned_to||snapshot.workTypeId!==work.work_type_id||snapshot.departmentId!==work.department_id||
+    snapshot.operationalObjectId!==work.operational_object_id||snapshot.assetId!==work.asset_id||
+    Number(snapshot.scopeCount||0)!==Number(scope.count)||String(snapshot.scopeChangedAt||"")!==String(scope.changed_at||"")){
+    return "Ажлын хариуцагч, объект эсвэл scope өөрчлөгдсөн тул ХАБЭА зөвшөөрлийг дахин авна уу";
+  }
+  return null;
 }
 
 async function notifyAuthority(client, { organizationId, permission, excludeUserId, title, message, entityId }) {
@@ -144,7 +215,7 @@ router.get("/:id/history", asyncHandler(async(req,res)=>{
   if(!canReadOrder(req.user,order.rows[0]))return deny(res,WORK_ORDER_PERMISSIONS.READ_ALL);
   const inventoryEnabled=(req.user.enabled_modules||[]).includes("inventory");
   const canRequestMaterial=inventoryEnabled&&hasPermission(req.user,WORK_ORDER_PERMISSIONS.MATERIAL_REQUEST)&&canManageScope(req.user,order.rows[0])&&!['completed','cancelled'].includes(order.rows[0].status);
-  const [events,scopeItems,materials,materialOptions]=await Promise.all([getPool().query(`SELECT e.id,e.event_type,e.from_status,e.to_status,e.note,e.detail,e.created_at,
+  const [events,scopeItems,materials,materialOptions,safetyReviews]=await Promise.all([getPool().query(`SELECT e.id,e.event_type,e.from_status,e.to_status,e.note,e.detail,e.created_at,
     e.assignment_history_version,e.assignment_operation,e.assignment_source,
     e.from_assignee_user_id,e.to_assignee_user_id,e.from_assignee_employee_id,e.to_assignee_employee_id,
     e.assignment_reason,
@@ -176,8 +247,15 @@ router.get("/:id/history", asyncHandler(async(req,res)=>{
       WHERE mr.organization_id=$1 AND mr.work_order_id=$2 ORDER BY mr.requested_at,mr.id`,[req.user.organization_id,id.data]),
     canRequestMaterial?getPool().query(`SELECT i.id,i.sku,i.name,i.unit,COALESCE(sum(b.quantity),0)::numeric AS total_quantity
       FROM inventory_items i LEFT JOIN inventory_balances b ON b.organization_id=i.organization_id AND b.item_id=i.id
-      WHERE i.organization_id=$1 AND i.active=true GROUP BY i.id ORDER BY i.name`,[req.user.organization_id]):Promise.resolve({rows:[]})]);
+      WHERE i.organization_id=$1 AND i.active=true GROUP BY i.id ORDER BY i.name`,[req.user.organization_id]):Promise.resolve({rows:[]}),
+    withTenantTransaction(req.user.organization_id,async client=>client.query(`SELECT r.id,r.review_type,r.decision,r.risk_score,r.hazards,r.controls,r.ppe,r.checklist,r.note,r.valid_until,r.created_at,
+      t.name AS template_name,t.version AS template_version,u.full_name AS actor_name
+      FROM work_order_safety_reviews r
+      JOIN organization_work_safety_templates t ON t.organization_id=r.organization_id AND t.id=r.safety_template_id
+      JOIN users u ON u.organization_id=r.organization_id AND u.id=r.actor_user_id
+      WHERE r.organization_id=$1 AND r.work_order_id=$2 ORDER BY r.created_at,r.id`,[req.user.organization_id,id.data]))]);
   res.json({item:order.rows[0],events:events.rows,scopeItems:scopeItems.rows,materials:materials.rows,materialOptions:materialOptions.rows,
+    safetyReviews:safetyReviews.rows,
     materialCapabilities:{canRequest:canRequestMaterial,canApprove:hasPermission(req.user,WORK_ORDER_PERMISSIONS.MATERIAL_APPROVE),canConsume:hasPermission(req.user,WORK_ORDER_PERMISSIONS.MATERIAL_CONSUME)&&canManageScope(req.user,order.rows[0])}});
 }));
 
@@ -333,6 +411,7 @@ router.patch("/:id/assign",asyncHandler(async(req,res)=>{
   const client=await getPool().connect();
   try{
     await client.query("BEGIN");
+    await setTenantContext(client,req.user.organization_id);
     const current=await assignmentState(client,req.user.organization_id,id.data);
     if(!current){await client.query("ROLLBACK");return res.status(404).json({error:"Work order not found"});}
     if(!canAssignOrder(req.user,current)){await client.query("ROLLBACK");return deny(res,WORK_ORDER_PERMISSIONS.ASSIGN);}
@@ -399,24 +478,44 @@ router.post("/:id/workflow-action",asyncHandler(async(req,res)=>{
   const client=await getPool().connect();
   try{
     await client.query("BEGIN");
+    await setTenantContext(client,req.user.organization_id);
+    const commandHash=payloadHash({workOrderId:id.data,action:parsed.data.action,note:parsed.data.note,safetyReview:parsed.data.safetyReview||null});
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",[`${req.user.organization_id}:work-order-workflow:${parsed.data.idempotencyKey}`]);
+    const replay=(await client.query(`SELECT actor_user_id,payload_sha256 FROM work_order_approvals
+      WHERE organization_id=$1 AND idempotency_key=$2`,[req.user.organization_id,parsed.data.idempotencyKey])).rows[0];
+    if(replay){
+      if(replay.actor_user_id!==req.user.id||String(replay.payload_sha256||"").trim()!==commandHash){
+        await client.query("ROLLBACK");return res.status(409).json({error:"IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD"});
+      }
+      const item=(await client.query("SELECT * FROM work_orders WHERE organization_id=$1 AND id=$2",[req.user.organization_id,id.data])).rows[0];
+      await client.query("COMMIT");return res.json({item,replayed:true});
+    }
     const result=await client.query(`SELECT w.*,p.config FROM work_orders w JOIN organization_workflow_policies p
       ON p.organization_id=w.organization_id AND p.id=w.workflow_policy_id AND p.active=true
       WHERE w.organization_id=$1 AND w.id=$2 FOR UPDATE`,[req.user.organization_id,id.data]);
     const current=result.rows[0];
     if(!current){await client.query("ROLLBACK");return res.status(404).json({error:"Батлах урсгалтай ажил олдсонгүй"});}
-    const action=parsed.data.action,rule=WORKFLOW_ACTIONS[action];
+    const action=parsed.data.action,rule=resolveWorkflowAction(action,current.config||{});
     if(!current.assigned_to){await client.query("ROLLBACK");return res.status(409).json({error:"Эхлээд хариуцагч ажилтан онооно уу"});}
     if(!canPerformWorkflowAction({action,stage:current.workflow_stage,permissions:req.user.permissions||[],userId:req.user.id,assignedTo:current.assigned_to,config:current.config||{}})){
       await client.query("ROLLBACK");return res.status(403).json({error:"Энэ шатны үйлдлийг хийх эрх эсвэл дараалал тохирохгүй байна"});
     }
+    const safetyReview=await recordSafetyReview(client,{organizationId:req.user.organization_id,userId:req.user.id,work:current,action,value:parsed.data.safetyReview});
+    if(safetyReview?.error){await client.query("ROLLBACK");return res.status(409).json({error:safetyReview.error,missingChecklist:safetyReview.missingChecklist||[]});}
+    if(action==="submit_completion"){
+      const permitError=await validateActiveStartPermit(client,req.user.organization_id,current);
+      if(permitError){await client.query("ROLLBACK");return res.status(409).json({error:permitError,code:"SAFETY_PERMIT_INVALID"});}
+    }
     const nextStatus=rule.status||current.status;
     if(rule.to==="completed"){const closure=await scopeClosure(client,req.user.organization_id,id.data);if(closure.item_count&&closure.blocking_count){await client.query("ROLLBACK");return res.status(409).json({error:"Шийдэгдээгүй эсвэл хойшлуулсан хэмжээг зөвшөөрөлгүйгээр ажил хаах боломжгүй",outcome:closure});}}
     const updated=await client.query("UPDATE work_orders SET workflow_stage=$1,status=$2,updated_at=now() WHERE organization_id=$3 AND id=$4 RETURNING *",[rule.to,nextStatus,req.user.organization_id,id.data]);
-    const detail={action,fromStage:current.workflow_stage,toStage:rule.to,fromStatus:current.status,toStatus:nextStatus};
-    await client.query(`INSERT INTO work_order_approvals(organization_id,work_order_id,workflow_stage,action_code,decision,actor_user_id,note,detail)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb)`,[req.user.organization_id,id.data,current.workflow_stage,action,rule.decision,req.user.id,parsed.data.note,JSON.stringify(detail)]);
+    const detail={action,fromStage:current.workflow_stage,toStage:rule.to,fromStatus:current.status,toStatus:nextStatus,
+      safetyReviewId:safetyReview?.item?.id||null,riskScore:safetyReview?.item?.risk_score||null,templateVersion:safetyReview?.item?.template_version||null};
+    const actionNote=safetyReview?.item?.note||parsed.data.note;
+    await client.query(`INSERT INTO work_order_approvals(organization_id,work_order_id,workflow_stage,action_code,decision,actor_user_id,note,detail,safety_review_id,idempotency_key,payload_sha256)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11)`,[req.user.organization_id,id.data,current.workflow_stage,action,rule.decision,req.user.id,actionNote,JSON.stringify(detail),safetyReview?.item?.id||null,parsed.data.idempotencyKey,commandHash]);
     await client.query(`INSERT INTO work_order_events(organization_id,work_order_id,actor_user_id,event_type,from_status,to_status,note,detail)
-      VALUES($1,$2,$3,'workflow_action',$4,$5,$6,$7::jsonb)`,[req.user.organization_id,id.data,req.user.id,current.status,nextStatus,parsed.data.note,JSON.stringify(detail)]);
+      VALUES($1,$2,$3,'workflow_action',$4,$5,$6,$7::jsonb)`,[req.user.organization_id,id.data,req.user.id,current.status,nextStatus,actionNote,JSON.stringify(detail)]);
     const nextAuthority={
       awaiting_management_start:{permission:current.config.startApprovalPermission},
       awaiting_safety_completion:{permission:current.config.completionSafetyPermission},
@@ -424,9 +523,10 @@ router.post("/:id/workflow-action",asyncHandler(async(req,res)=>{
     }[rule.to];
     if(nextAuthority)await notifyAuthority(client,{organizationId:req.user.organization_id,...nextAuthority,excludeUserId:req.user.id,title:"Ажлын баталгаажуулалт хүлээгдэж байна",message:current.title,entityId:id.data});
     if(rule.to==="execution")await notifyUser(client,{organizationId:req.user.organization_id,userId:current.assigned_to,type:"work_order_workflow",title:"Ажил гүйцэтгэх шатанд шилжлээ",message:current.title,entityId:id.data});
+    if(rule.decision==="returned")await notifyUser(client,{organizationId:req.user.organization_id,userId:current.assigned_to,type:"work_order_returned",title:"Ажил ХАБЭА эсвэл удирдлагын шалгалтаас буцаагдлаа",message:actionNote||current.title,entityId:id.data});
     if(rule.to==="completed")await notifyUser(client,{organizationId:req.user.organization_id,userId:current.assigned_to,type:"work_completed",title:"Ажил баталгаажиж хаагдлаа",message:current.title,entityId:id.data});
     await writeAudit(req,`work_order.workflow.${action}`,"work_order",id.data,detail,client);
-    await client.query("COMMIT");res.json({item:updated.rows[0]});
+    await client.query("COMMIT");res.json({item:updated.rows[0],replayed:false});
   }catch(error){await client.query("ROLLBACK").catch(()=>{});throw error;}finally{client.release();}
 }));
 

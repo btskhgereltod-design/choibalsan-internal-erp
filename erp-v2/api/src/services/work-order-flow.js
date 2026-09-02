@@ -14,6 +14,10 @@ const WORKFLOW_ACTIONS = Object.freeze({
     from: "awaiting_safety_start", to: "awaiting_management_start", roleKey: "startSafetyRole", permissionKey: "startSafetyPermission",
     decision: "approved", status: null,
   },
+  safety_return_start: {
+    from: "awaiting_safety_start", to: "awaiting_safety_start", roleKey: "startSafetyRole", permissionKey: "startSafetyPermission",
+    decision: "returned", status: "assigned",
+  },
   management_approve_start: {
     from: "awaiting_management_start", to: "execution", roleKey: "startApprovalRole", permissionKey: "startApprovalPermission",
     decision: "approved", status: "in_progress",
@@ -38,7 +42,20 @@ const WORKFLOW_ACTIONS = Object.freeze({
     from: "awaiting_management_completion", to: "execution", roleKey: "completionApprovalRole", permissionKey: "completionApprovalPermission",
     decision: "returned", status: "in_progress",
   },
+  safety_suspend_execution: {
+    from: "execution", to: "awaiting_safety_start", roleKey: "completionSafetyRole", permissionKey: "completionSafetyPermission",
+    decision: "returned", status: "assigned",
+  },
 });
+
+function resolveWorkflowAction(action, config = {}) {
+  const rule = WORKFLOW_ACTIONS[action];
+  if (!rule) return null;
+  if (action === "safety_authorize_start" && config.startManagementRequired === false) {
+    return { ...rule, to: "execution", status: "in_progress" };
+  }
+  return rule;
+}
 
 function canTransition(from, to) {
   return Boolean(TRANSITIONS[from]?.has(to));
@@ -58,4 +75,4 @@ function availableWorkflowActions(context) {
   return Object.keys(WORKFLOW_ACTIONS).filter(action => canPerformWorkflowAction({ ...context, action }));
 }
 
-module.exports = { TRANSITIONS, WORKFLOW_ACTIONS, canTransition, canPerformWorkflowAction, availableWorkflowActions };
+module.exports = { TRANSITIONS, WORKFLOW_ACTIONS, canTransition, canPerformWorkflowAction, availableWorkflowActions, resolveWorkflowAction };

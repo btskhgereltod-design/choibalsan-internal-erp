@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { canTransition, canPerformWorkflowAction, availableWorkflowActions } = require("../src/services/work-order-flow");
+const { canTransition, canPerformWorkflowAction, availableWorkflowActions, resolveWorkflowAction } = require("../src/services/work-order-flow");
 
 test("work order follows the review workflow", () => {
   assert.equal(canTransition("new", "in_progress"), true);
@@ -55,4 +55,17 @@ test("configured permission overrides the legacy role compatibility field",()=>{
 
 test("legacy-only workflow policy fails closed",()=>{
   assert.equal(canPerformWorkflowAction({action:"safety_authorize_start",stage:"awaiting_safety_start",role:"safety",permissions:safetyPermissions,config:{startSafetyRole:"safety"}}),false);
+});
+
+test("tenant policy may make HSE the final start gate without changing the default",()=>{
+  assert.equal(resolveWorkflowAction("safety_authorize_start",policy).to,"awaiting_management_start");
+  assert.deepEqual(resolveWorkflowAction("safety_authorize_start",{...policy,startManagementRequired:false}),{
+    ...resolveWorkflowAction("safety_authorize_start",policy),to:"execution",status:"in_progress",
+  });
+});
+
+test("safety reviewer can return an unsafe request or suspend active execution",()=>{
+  assert.equal(canPerformWorkflowAction({action:"safety_return_start",stage:"awaiting_safety_start",permissions:safetyPermissions,config:policy}),true);
+  assert.equal(canPerformWorkflowAction({action:"safety_suspend_execution",stage:"execution",permissions:safetyPermissions,config:policy}),true);
+  assert.equal(canPerformWorkflowAction({action:"safety_suspend_execution",stage:"execution",permissions:approvalPermissions,config:policy}),false);
 });

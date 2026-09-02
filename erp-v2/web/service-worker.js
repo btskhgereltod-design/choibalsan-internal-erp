@@ -1,14 +1,14 @@
 "use strict";
 
-const CACHE="overva-erp-shell-59";
+const CACHE="overva-erp-shell-60";
 const SHELL=[
   "/",
   "/index.html",
   "/style.css?v=47",
-  "/workflow.css?v=3",
+  "/workflow.css?v=4",
   "/legacy-theme.css?v=24",
   "/employee-access.css?v=26",
-  "/app.js?v=37",
+  "/app.js?v=40",
   "/work-history.css?v=2",
   "/notifications.css",
   "/asset-detail.css",
@@ -46,7 +46,7 @@ const SHELL=[
   "/attendance.css",
   "/attendance.js",
   "/safety.css",
-  "/safety.js?v=2",
+  "/safety.js?v=3",
   "/administration.css?v=33",
   "/hr-operations.css?v=2",
   "/administration.js?v=35",

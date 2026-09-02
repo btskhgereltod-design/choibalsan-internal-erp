@@ -9,7 +9,7 @@
   <meta name="color-scheme" content="light">
   <title>OVERVA ERP</title>
   <link rel="stylesheet" href="/style.css?v=47">
-  <link rel="stylesheet" href="/workflow.css?v=3">
+  <link rel="stylesheet" href="/workflow.css?v=4">
   <link rel="stylesheet" href="/work-history.css?v=2">
   <link rel="stylesheet" href="/notifications.css">
   <link rel="stylesheet" href="/asset-detail.css">
@@ -170,6 +170,25 @@
     <section class="attachment-box"><h3>Хавсралтууд</h3><div class="attachment-upload"><input id="workAttachmentFile" type="file" accept="image/jpeg,image/png,image/webp,application/pdf,text/plain,.docx,.xlsx"><button type="button" class="secondary" id="workAttachmentUpload">Файл нэмэх</button></div><div class="attachment-list" id="workAttachments"></div><small class="attachment-help">Зураг, PDF, TXT, DOCX, XLSX · дээд хэмжээ 10 MB</small></section>
   </div></dialog>
 
+  <dialog id="workSafetyReviewDialog" class="wide-dialog"><form id="workSafetyReviewForm" class="dialog-form safety-review-form">
+    <input name="workOrderId" type="hidden"><input name="action" type="hidden"><input name="templateId" type="hidden"><input name="reviewType" type="hidden"><input name="idempotencyKey" type="hidden">
+    <div class="dialog-head"><div><span class="eyebrow">ХАБЭА — АЖЛЫН ЗӨВШӨӨРӨЛ</span><h2 id="workSafetyReviewTitle">ХАБЭА шалгалт</h2></div><button type="button" class="icon-button" data-close="workSafetyReviewDialog">×</button></div>
+    <div id="workSafetyReviewSummary" class="safety-review-summary"></div>
+    <div class="safety-review-risk" id="workSafetyRiskFields">
+      <label>Магадлал (1–5)<input name="likelihood" type="number" min="1" max="5" value="3"></label>
+      <label>Үр дагавар (1–5)<input name="severity" type="number" min="1" max="5" value="3"></label>
+      <label>Зөвшөөрөл хүчинтэй хүртэл<input name="validUntil" type="datetime-local"></label>
+    </div>
+    <div class="form-grid">
+      <label>Аюул, эрсдэл<textarea name="hazards" rows="3" placeholder="Нэг мөрөнд нэг аюул"></textarea></label>
+      <label>Хамгаалах арга хэмжээ<textarea name="controls" rows="3" placeholder="Нэг мөрөнд нэг арга хэмжээ"></textarea></label>
+    </div>
+    <label>PPE ба хамгаалах хэрэгсэл<input name="ppe" placeholder="Каск, бээлий, хантааз..."></label>
+    <section class="safety-review-checklist"><h3>Шалгах нөхцөл</h3><div id="workSafetyChecklist"></div></section>
+    <label>Шалгалтын дүгнэлт<textarea name="note" rows="3" maxlength="2000" required placeholder="Зөвшөөрсөн эсвэл буцаасан үндэслэл"></textarea></label>
+    <p class="form-error" data-form-error></p><div class="dialog-actions"><button type="button" class="secondary" data-close="workSafetyReviewDialog">Болих</button><button type="submit" class="primary" id="workSafetyReviewSubmit">Шийдвэр хадгалах</button></div>
+  </form></dialog>
+
   <dialog id="userDialog"><form id="userForm" class="dialog-form">
     <div class="dialog-head"><div><span class="eyebrow">Хэрэглэгчийн удирдлага</span><h2>Шинэ хэрэглэгч</h2></div><button type="button" class="icon-button" data-close="userDialog">×</button></div>
     <label>Овог нэр<input name="fullName" placeholder="Бат Эрдэнэ" required maxlength="200"></label>
@@ -228,7 +247,7 @@
     <p class="form-error" data-form-error></p><div class="dialog-actions"><button type="button" class="secondary" data-close="passwordDialog">Болих</button><button type="submit" class="primary">Нууц үг солих</button></div>
   </form></dialog>
   <div class="toast" id="toast" role="status"></div>
-  <script src="/app.js?v=39" defer></script>
+  <script src="/app.js?v=40" defer></script>
   <script src="/employee-access.js?v=30" defer></script>
   <script src="/business-modules.js?v=35" defer></script>
   <script src="/organization-blueprint.js?v=5" defer></script>
@@ -247,7 +266,7 @@
   <script src="/mobile.js?v=2" defer></script>
   <script src="/developer-platform.js" defer></script>
   <script src="/attendance.js" defer></script>
-  <script src="/safety.js?v=2" defer></script>
+  <script src="/safety.js?v=3" defer></script>
   <script src="/administration.js?v=41" defer></script>
   <script src="/legacy-migration-review.js?v=2" defer></script>
   <script src="/industry-profile.js" defer></script>

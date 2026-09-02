@@ -6,6 +6,45 @@ This document answers one question: **what exists in the repository now?** It
 does not claim that every implemented foundation is complete or production-
 validated at enterprise scale.
 
+## Work-order HSE permits and governed field-work closeout
+
+- The repository migration path now reaches `0094`. Documented production
+  remains at `0093`, and the primary local business database remains at `0090`;
+  this capability has not been deployed or written into either environment.
+- Migration `0094` adds tenant-scoped, versioned safety templates and work-type
+  routing plus append-only `work_order_safety_reviews`. Start and completion
+  reviews preserve the selected checklist version, decisions, risk inputs,
+  hazards, controls, PPE, validity, actor and a work-order scope snapshot. The
+  new authorities have server-side tenant RLS, and production runtime grants
+  deny review update, delete and truncate. Workflow actions use tenant-scoped
+  immutable idempotency receipts with exact-payload conflict detection.
+- The canonical Work Order remains the single work authority. Its configurable
+  flow now supports assignment -> HSE start review -> execution -> engineer
+  completion submission -> HSE completion inspection -> chief-engineer final
+  approval -> closed. An HSE return or execution suspension retains review
+  evidence instead of silently rewinding history. Completion submission fails
+  closed when the current start permit is expired or its assignee, object or
+  work scope no longer matches the approved snapshot.
+- The engine and state model contain no universal camera, lighting or
+  Choibalsan rule. Migration `0094` seeds two checklists and seven exact
+  work-type routes only for the existing `choibalsan-hugjil` organization, and
+  configures that tenant so HSE start approval directly authorizes execution.
+  Other organizations receive no copied checklist, route, policy or business
+  data. The schema supports their own versioned templates when onboarding
+  evidence supports them; self-service template administration is not yet an
+  implemented tenant UI and remains governed setup work.
+- The work board represents six conceptual lanes (new/assignment, HSE start,
+  execution, HSE completion, chief approval and closed). The HSE workspace has
+  dedicated start, monitored-execution and completion queues, including
+  structured review and suspension actions.
+- Verification passes the full `400/400` repository suite and JavaScript syntax
+  checks. Clean `0001` to `0094` migration passed on a disposable database. A
+  second disposable rehearsal inserted both Choibalsan and an unrelated future
+  organization before applying the pilot migrations: the resulting template
+  and route counts were `2/7` for Choibalsan and `0/0` for the other tenant;
+  all three new authorities exposed tenant RLS policies. Both rehearsal
+  databases were removed afterward.
+
 ## Confidential disciplinary cases
 
 - Repository migrations and production now reach `0093`. The existing local

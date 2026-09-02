@@ -907,6 +907,31 @@ changing an already deployed checksum. Verification passed 27 focused tests,
 the full 394-test suite, clean `0001` to `0093` migration and the disposable
 Phase 2 PostgreSQL integration; the disposable database was removed afterward.
 
+### D-049 — HSE permits are tenant-configured Work Order evidence
+
+Accepted: 2026-09-02
+
+Field-work start permission and completion inspection extend the canonical
+Work Order rather than creating a Choibalsan-specific work registry. The
+platform owns generic stages, action authority, immutable review evidence,
+tenant isolation and audit. Each organization owns versioned safety templates,
+work-type routes and policy choices; camera, lighting and local checklist terms
+are pilot configuration, not universal OVERVA semantics.
+
+For the Choibalsan pilot, assignment is followed by HSE start review. Approval
+may directly authorize execution because this tenant disables a separate
+management start gate. The responsible engineer submits completion, HSE records
+the final inspection, and the chief engineer remains the independent authority
+that closes the Work Order. Return, suspension and denial remain attributable
+evidence rather than destructive state rewrites.
+
+An approved start review snapshots the assignee, operational object and work
+scope and has an explicit validity limit. Completion fails closed if that
+permit has expired or the governed scope changed. Adding a future organization
+must not copy Choibalsan templates, routes, data or terminology automatically;
+its onboarding evidence may instead instantiate organization-owned templates
+through the same generic capability.
+
 ## Active Hypotheses
 
 ### H-001 — Customer journey
