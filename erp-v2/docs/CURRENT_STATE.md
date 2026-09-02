@@ -8,9 +8,10 @@ validated at enterprise scale.
 
 ## Work-order HSE permits and governed field-work closeout
 
-- The repository migration path now reaches `0094`. Documented production
-  remains at `0093`, and the primary local business database remains at `0090`;
-  this capability has not been deployed or written into either environment.
+- The repository and production migration paths now reach `0094`; the primary
+  local business database remains at `0090`. Production deployment completed
+  through the controlled release recorded in
+  `PRODUCTION_WORK_ORDER_SAFETY_RELEASE_20260902T102759Z.md`.
 - Migration `0094` adds tenant-scoped, versioned safety templates and work-type
   routing plus append-only `work_order_safety_reviews`. Start and completion
   reviews preserve the selected checklist version, decisions, risk inputs,
@@ -55,12 +56,13 @@ validated at enterprise scale.
 
 ## Confidential disciplinary cases
 
-- Repository migrations and production now reach `0093`. The existing local
+- Repository migrations and production now reach `0094`; the existing local
   development business database remains at `0090`. Production was migrated
-  from `0090` through `0093` on 2026-09-02 by the controlled Employee
-  Relations release recorded in
+  from `0090` through `0093` on 2026-09-02 by the controlled Employee Relations
+  release recorded in
   `PRODUCTION_EMPLOYEE_RELATIONS_RELEASE_20260902T063615Z.md`. Clean `0001` to
-  `0093` was also verified on a disposable database and removed afterward.
+  `0093` was also verified on a disposable database and removed afterward;
+  the later `0094` Work Order release did not alter this domain's records.
 - Migration `0093` adds a separately authoritative, always-`restricted`
   `hr_discipline_case` aggregate. It preserves reviewed policy/legal basis,
   notice, explanation or refusal, investigation, finding, recommendation,
