@@ -8,8 +8,9 @@ validated at enterprise scale.
 
 ## Unified operational intake and Work Order coordination
 
-- The repository migration path reaches `0095`; production remains at `0094`
-  until the controlled rollout for this capability completes. Migration `0095`
+- The repository and production migration paths reach `0095`. The controlled
+  rollout and legacy Work Order reconciliation are recorded in
+  `PRODUCTION_UNIFIED_WORK_INTAKE_RELEASE_20260902T135313Z.md`. Migration `0095`
   adds the tenant-scoped, append-only
   `operational_incident_work_orders` coordination link. Existing operational
   incidents remain the source truth for defects, inspection findings and other
@@ -30,14 +31,26 @@ validated at enterprise scale.
   Final accepted completion resolves the linked source incident in the same
   tenant transaction and appends incident evidence; no historical approval or
   safety review is fabricated.
-- Verification passes the full `409/409` repository suite and JavaScript syntax
+- The Choibalsan legacy projection was reconciled from the live read-only source
+  without fabricating approvals or safety reviews. Its 106 Work Orders now show
+  17 chief-engineer decisions, 4 HSE start reviews, 2 executions, 4 HSE
+  completion reviews, 17 chief-engineer acceptances and 62 completed works.
+  Fifteen fleet/facilities/other works were removed from the incorrect lighting
+  route while retaining their original category and Work Order identity. The
+  correction appended exactly one source-checksum-bearing event per Work Order;
+  Work Order approvals stayed at 103 and safety reviews at zero.
+- The chief-engineer operations center treats standard `pending_review` Work
+  Orders without a configured workflow as management decisions too, so its
+  acceptance count agrees with the canonical Work Board instead of omitting a
+  general organizational task.
+- Verification passes the full `411/411` repository suite and JavaScript syntax
   checks. Clean `0001` through `0095` migration and an idempotent rerun passed on
   a disposable local PostgreSQL database. The production migration entrypoint
   also refreshed runtime grants there, and the disposable database was removed.
 
 ## Work-order HSE permits and governed field-work closeout
 
-- The repository and production migration paths now reach `0094`; the primary
+- The repository and production migration paths now reach `0095`; the primary
   local business database remains at `0090`. Production deployment completed
   through the controlled release recorded in
   `PRODUCTION_WORK_ORDER_SAFETY_RELEASE_20260902T102759Z.md`.
@@ -97,7 +110,7 @@ validated at enterprise scale.
 
 ## Confidential disciplinary cases
 
-- Repository migrations and production now reach `0094`; the existing local
+- Repository migrations and production now reach `0095`; the existing local
   development business database remains at `0090`. Production was migrated
   from `0090` through `0093` on 2026-09-02 by the controlled Employee Relations
   release recorded in
