@@ -39,7 +39,8 @@ test("field app returns only work assigned to the signed-in person", () => {
 });
 
 test("specialist workspaces are scoped views of the one canonical work board", () => {
-  assert.match(lighting, /Гэрэлтүүлгийн ажлууд/);
+  assert.match(lighting, /Ажлын гүйцэтгэл/);
+  assert.match(lighting, /Нэгдсэн Ажлын самбараас зөвхөн гэрэлтүүлэгтэй холбоотой/);
   assert.match(camera, /Камерын ажлууд/);
   assert.match(engineering, /Ерөнхий инженерийн удирдлагын хяналт/);
   assert.match(safety, /Ажил эхлүүлэх болон хаах зөвшөөрлийг нэгдсэн Ажлын самбараас шийднэ/);

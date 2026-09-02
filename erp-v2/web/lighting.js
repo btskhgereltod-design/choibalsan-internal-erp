@@ -1,27 +1,377 @@
 "use strict";
-state.lightingWorkspace=null;state.lightingLoading=false;state.lightingTab="overview";
-const lightingLabels={open:"Нээлттэй",in_progress:"Шийдвэрлэж байна",resolved:"Шийдвэрлэсэн",cancelled:"Цуцалсан",new:"Шинэ",assigned:"Хуваарилсан",pending_review:"Хянуулах",completed:"Дууссан",awaiting_safety_start:"ХАБЭА зөвшөөрөл",awaiting_management_start:"Ерөнхий инженер батлах",execution:"Гүйцэтгэл",awaiting_safety_completion:"ХАБЭА хяналт",awaiting_management_completion:"Эцсийн баталгаа"};
-function lightingStatus(value){return lightingLabels[value]||labels[value]||value||"—"}
-function lightingTabs(){return `<div class="lighting-tabs" aria-label="Гэрэлтүүлгийн ажлын талбарын цэс">${[["overview","Нүүр"],["assets","Объект"],["incidents","Гэмтэл"],["work","Гэрэлтүүлгийн ажлууд"],["reports","Тайлан"]].map(([key,name])=>`<button class="${state.lightingTab===key?"active":""}" data-lighting-tab="${key}">${name}</button>`).join("")}</div>`}
-function lightingOverview(d){const s=d.summary;return `<div class="lighting-stat-grid">${stat("Нийт объект",s.assets,`${s.activeAssets} идэвхтэй`,"◇","blue")}${stat("Нээлттэй гэмтэл",s.openIncidents,`${s.affectedLights} гэрэлтүүлэгт нөлөөлсөн`,"!","red")}${stat("Нээлттэй ажил",s.openWork,"Батлах шаттай ажлууд","✓","green")}${stat("Дууссан ажил",s.completedWork,"Стандарт урсгалаар хаагдсан","↗","purple")}</div><div class="content-grid"><section class="panel"><div class="panel-head"><h2>Шийдэх гэмтэл</h2><button data-lighting-tab="incidents">Бүгдийг харах →</button></div>${d.incidents.filter(x=>["open","in_progress"].includes(x.status)).slice(0,6).map(x=>`<div class="lighting-list"><div><strong>${esc(x.title)}</strong><small>${esc(x.asset_name||x.location||"Объект холбоогүй")}</small></div><span class="badge ${esc(x.status)}">${lightingStatus(x.status)}</span></div>`).join("")||empty("Нээлттэй гэмтэл алга","Шинээр илэрсэн гэмтлийг бүртгээд ажлын захиалгатай холбоно.")}</section><section class="panel"><div class="panel-head"><h2>Сүүлийн гэрэлтүүлгийн ажлууд</h2><button data-lighting-tab="work">Бүгдийг харах →</button></div>${d.workOrders.slice(0,6).map(x=>`<button class="lighting-list link" data-history-id="${x.id}"><div><strong>${esc(x.title)}</strong><small>${esc(x.assigned_name||x.department_name||"Хариуцагч оноогоогүй")}</small></div><span class="badge ${esc(x.status)}">${lightingStatus(x.workflow_stage||x.status)}</span></button>`).join("")||empty("Ажил бүртгээгүй","Гэмтэл эсвэл төлөвлөгөөнөөс ажлын захиалга үүсгэнэ.")}</section></div>`}
-function lightingAssets(d){return `<div class="table-panel">${d.assets.length?`<table class="data-table"><thead><tr><th>Код / ашиглалтын объект</th><th>Объектын төрөл</th><th>Байршил</th><th>Гэрлийн тоо</th><th>Төлөв</th></tr></thead><tbody>${d.assets.map(x=>`<tr><td><button class="object-dossier-link" data-object-dossier="${x.id}">${esc(x.name)}</button><small>${esc(x.code)} · Үндсэн хөрөнгийн бүртгэлээс тусдаа</small></td><td>${esc(x.object_type)}</td><td>${esc(x.location||"—")}</td><td>${esc(x.metadata?.lampCount??x.metadata?.headCount??"—")}</td><td><span class="badge ${esc(x.status)}">${lightingStatus(x.status)}</span></td></tr>`).join("")}</tbody></table>`:empty("Ашиглалтын объект алга","Шугам, хэсэг, байгууламжийг объект болгон үүсгээд бүрэлдэхүүн хөрөнгүүдтэй холбоно.")}</div>`}
-function lightingIncidents(d){return `<div class="table-panel">${d.incidents.length?`<table class="data-table"><thead><tr><th>Гэмтэл</th><th>Объект / байршил</th><th>Нөлөөлсөн</th><th>Зассан</th><th>Огноо</th><th>Төлөв</th></tr></thead><tbody>${d.incidents.map(x=>`<tr><td><strong>${esc(x.incident_type)}</strong><small>${esc(x.title)}</small></td><td>${esc(x.asset_name||x.location||"—")}</td><td>${x.affected_quantity}</td><td>${x.resolved_quantity}</td><td>${date(x.reported_at)}</td><td><span class="badge ${esc(x.status)}">${lightingStatus(x.status)}</span></td></tr>`).join("")}</tbody></table>`:empty("Гэмтлийн бүртгэл алга","Объект дээр илэрсэн гэмтлийг энд бүртгэнэ.")}</div>`}
-function lightingOutcome(x){if(!Number(x.measurement_item_count))return `<span class="lighting-outcome unknown">Хэмжилт тодорхойлоогүй</span>`;const planned=Number(x.planned_quantity),done=Number(x.completed_quantity),unresolved=Number(x.unresolved_quantity),deferred=Number(x.deferred_quantity);return `<span class="lighting-outcome"><b>${done}/${planned} гүйцэтгэсэн</b>${unresolved?`<small>${unresolved} шийдэгдээгүй</small>`:""}${deferred?`<small>${deferred} хойшлуулсан</small>`:""}${Number(x.exception_pending)?`<small>${x.exception_pending} үл хамаарах нөхцөл батлуулах</small>`:""}</span>`}
-function lightingWork(d){return `<div class="work-source-note"><span>Эдгээр нь тусдаа урсгал биш. Нэгдсэн Ажлын самбараас зөвхөн гэрэлтүүлэгтэй холбоотой ажил, объект, бодит үр дүнг харуулж байна.</span><button class="secondary" data-go="work-orders">Ажлын самбар нээх →</button></div><div class="table-panel">${d.workOrders.length?`<table class="data-table"><thead><tr><th>Ажил</th><th>Ашиглалтын объект</th><th>Хариуцагч</th><th>Бодит үр дүн</th><th>Одоогийн шат</th></tr></thead><tbody>${d.workOrders.map(x=>`<tr><td><button class="work-link" data-history-id="${x.id}">${esc(x.title)}</button><small>${esc(x.department_name||"—")} · ${date(x.due_at)}</small></td><td>${esc(x.asset_name||x.asset_code||"—")}</td><td>${esc(x.assigned_name||"—")}</td><td>${lightingOutcome(x)}</td><td><span class="badge ${esc(x.status)}">${lightingStatus(x.workflow_stage||x.status)}</span></td></tr>`).join("")}</tbody></table>`:empty("Гэрэлтүүлгийн ажил алга","Гэмтэл, үзлэг эсвэл төлөвлөгөөнөөс хэмжигдэх үр дүнтэй ажил үүсгэнэ.")}</div>`}
-function lightingReports(d){const measured=d.workOrders.filter(x=>Number(x.measurement_item_count)>0),planned=measured.reduce((sum,x)=>sum+Number(x.planned_quantity||0),0),completed=measured.reduce((sum,x)=>sum+Number(x.completed_quantity||0),0),unresolved=measured.reduce((sum,x)=>sum+Number(x.unresolved_quantity||0),0),deferred=measured.reduce((sum,x)=>sum+Number(x.deferred_quantity||0),0),completion=planned?Math.round(completed/planned*100):0;return `<div class="lighting-stat-grid">${stat("Хэмжигдэх ажил",measured.length,"Тоо хэмжээгээр баталгаажих ажил","▥","blue")}${stat("Гүйцэтгэл",`${completion}%`,`${completed}/${planned||0} нэгж гүйцэтгэсэн`,"✓","green")}${stat("Шийдэгдээгүй",unresolved,"Шалтгаан, дараагийн арга хэмжээ шаардлагатай","!","red")}${stat("Хойшлуулсан",deferred,"Батлагдсан үл хамаарах нөхцөлтэй","↗","purple")}</div><section class="panel"><div class="panel-head"><div><h2>Гэрэлтүүлгийн тайлангийн эх өгөгдөл</h2><small>Энэ тайлан зөвхөн гэрэлтүүлгийн объект, гэмтэл, ажлын урсгалаас бүрдэнэ.</small></div></div>${measured.length?lightingWork({...d,workOrders:measured}):empty("Хэмжигдэх үр дүн бүртгээгүй","Ажлыг дурын хувиар биш, төлөвлөсөн / гүйцэтгэсэн / шийдэгдээгүй / хойшлуулсан тоогоор бүртгэнэ.")}</section>`}
-function lightingView(){const d=state.lightingWorkspace;if(state.lightingLoading&&!d)return `${header("ГЭРЭЛТҮҮЛГИЙН ҮЙЛ АЖИЛЛАГАА","Гэрэлтүүлгийн ажлын талбар","Объект, гэмтэл, ажил болон батлах урсгалыг ачаалж байна...")}<div class="unified-loading"><i></i><span>Мэдээлэл ачаалж байна</span></div>`;if(!d)return `${header("ГЭРЭЛТҮҮЛГИЙН ҮЙЛ АЖИЛЛАГАА","Гэрэлтүүлгийн ажлын талбар","Мэдээлэл ачаалагдаагүй байна.",'<button class="secondary" id="lightingRefresh">↻ Дахин ачаалах</button>')}`;if(!d.available)return `${header("ГЭРЭЛТҮҮЛГИЙН ҮЙЛ АЖИЛЛАГАА","Гэрэлтүүлгийн ажлын талбар","Энэ байгууллагад гэрэлтүүлгийн ажлын төрөл тохируулаагүй байна.")}`;const body=state.lightingTab==="assets"?lightingAssets(d):state.lightingTab==="incidents"?lightingIncidents(d):state.lightingTab==="work"?lightingWork(d):state.lightingTab==="reports"?lightingReports(d):lightingOverview(d);return `${header("ГЭРЭЛТҮҮЛГИЙН ҮЙЛ АЖИЛЛАГАА","Гэрэлтүүлгийн ажлын талбар","Объект → гэмтэл → ажил → нотолгоо → ХАБЭА → баталгаажуулалт гэсэн нэг урсгал.",'<button class="secondary" id="lightingRefresh">↻ Шинэчлэх</button>')}${lightingTabs()}${body}`}
-async function loadLighting(force=false){if(state.lightingLoading||state.lightingWorkspace&&!force)return;state.lightingLoading=true;try{state.lightingWorkspace=await api("/api/lighting/workspace")}catch(error){toast(error.message,true)}finally{state.lightingLoading=false;if(state.view==="lighting")render()}}
-function dossierEventName(type){return type==="component_assigned"?"Бүрэлдэхүүн хөрөнгө оноосон":type==="component_removed"?"Бүрэлдэхүүнээс хассан":"Тэмдэглэл нэмсэн"}
-function lightingDossierHtml(d){const o=d.item,active=d.components.filter(x=>!x.removed_at),history=d.components.filter(x=>x.removed_at);
-  const componentRows=active.map(x=>`<tr><td><strong>${esc(x.asset_name)}</strong><small>${esc(x.asset_code)} · ${esc(x.asset_category)}</small></td><td>${esc(x.component_role)}</td><td>${esc(x.quantity)} ${esc(x.unit)}</td><td>${date(x.installed_at)}</td><td>${d.capabilities.canManageComponents?`<button class="secondary dossier-remove" data-remove-component="${x.id}">Холбоос дуусгах</button>`:"—"}</td></tr>`).join("");
-  const allocate=d.capabilities.canManageComponents?`<form id="dossierComponentForm" class="dossier-form"><h3>Хөрөнгөөс бүрэлдэхүүн оноох</h3><div class="dossier-form-grid"><label>Хөрөнгө<select name="assetId" required><option value="">Сонгоно уу</option>${d.assetOptions.filter(a=>Number(a.available_quantity)>0).map(a=>`<option value="${a.id}" data-unit="${esc(a.allocation_unit)}" data-available="${esc(a.available_quantity)}">${esc(a.code)} · ${esc(a.name)} · үлдэгдэл ${esc(a.available_quantity)} ${esc(a.allocation_unit)}</option>`).join("")}</select></label><label>Үүрэг / төрөл<input name="componentRole" required placeholder="Жишээ: шон, кабель, тоолуур"></label><label>Тоо хэмжээ<input name="quantity" type="number" min="0.001" step="0.001" required></label><label>Нэгж<input name="unit" required readonly placeholder="Хөрөнгөөс сонгогдоно"></label><label>Суурилуулсан огноо<input name="installedAt" type="date"></label><label>Тайлбар<input name="note" placeholder="Оноолтын үндэслэл"></label></div><button class="primary">Объектод оноох</button></form>`:"";
-  const events=d.events.map(e=>`<div class="dossier-event"><i></i><div><strong>${dossierEventName(e.event_type)}</strong><small>${esc(e.actor_name||"Систем")} · ${dateTime(e.created_at)}</small>${e.note?`<p>${esc(e.note)}</p>`:""}</div></div>`).join("");
-  return `<div class="dossier-summary"><div><span>Код</span><strong>${esc(o.code)}</strong></div><div><span>Төрөл</span><strong>${esc(o.object_type)}</strong></div><div><span>Байршил</span><strong>${esc(o.location||"—")}</strong></div><div><span>Шугамын урт</span><strong>${o.linear_length_m?`${esc(o.linear_length_m)} м`:"—"}</strong></div></div>
-    <section class="dossier-section"><h3>Бүрэлдэхүүн хөрөнгө</h3><p>Хөрөнгийн мастер бүртгэлийг нүүлгэхгүй. Энд тухайн хөрөнгийн ямар хэсэг, хэдэн нэгж энэ объектод ашиглагдаж байгааг хугацаатай холбоно.</p>${componentRows?`<div class="table-panel"><table class="data-table"><thead><tr><th>Хөрөнгө</th><th>Үүрэг</th><th>Хэмжээ</th><th>Суурилуулсан</th><th>Үйлдэл</th></tr></thead><tbody>${componentRows}</tbody></table></div>`:empty("Бүрэлдэхүүн оноогоогүй","Шон, кабель, тоолуур, гэрлийн толгой зэрэг хөрөнгийг доорх маягтаар холбоно.")}${allocate}${history.length?`<details><summary>Өмнө нь хассан холбоос (${history.length})</summary>${history.map(x=>`<p>${esc(x.asset_name)} · ${esc(x.quantity)} ${esc(x.unit)} · ${date(x.removed_at)}</p>`).join("")}</details>`:""}</section>
-    <div class="dossier-columns"><section class="dossier-section"><h3>Гэмтэл (${d.incidents.length})</h3>${d.incidents.slice(0,10).map(x=>`<button class="dossier-related"><strong>${esc(x.title)}</strong><small>${lightingStatus(x.status)} · ${date(x.reported_at)}</small></button>`).join("")||"<p>Гэмтэл бүртгэгдээгүй.</p>"}</section><section class="dossier-section"><h3>Ажлын түүх (${d.workOrders.length})</h3>${d.workOrders.slice(0,10).map(x=>`<button class="dossier-related" data-object-work="${x.id}"><strong>${esc(x.title)}</strong><small>${lightingStatus(x.workflow_stage||x.status)} · ${date(x.created_at)}</small></button>`).join("")||"<p>Ажил бүртгэгдээгүй.</p>"}</section></div>
-    <section class="dossier-section"><h3>Хувийн хэргийн түүх</h3>${d.capabilities.canCreateNote?`<form id="dossierNoteForm" class="dossier-note-form"><input name="note" required placeholder="Үзлэг, шийдвэр, нөхцөл байдлын тэмдэглэл"><button class="secondary">Тэмдэглэл нэмэх</button></form>`:""}<div class="dossier-events">${events||"<p>Түүхэн тэмдэглэл алга.</p>"}</div></section>`}
-async function openLightingDossier(id){try{const data=await api(`/api/lighting/objects/${id}/dossier`);state.lightingDossier=data;$("#lightingDossierTitle").textContent=`${data.item.code} — ${data.item.name}`;$("#lightingDossierBody").innerHTML=lightingDossierHtml(data);$("#lightingDossierDialog").showModal()}catch(error){toast(error.message,true)}}
-async function refreshLightingDossier(){if(state.lightingDossier)await openLightingDossier(state.lightingDossier.item.id)}
-document.addEventListener("click",async event=>{const tab=event.target.closest("[data-lighting-tab]"),object=event.target.closest("[data-object-dossier]"),remove=event.target.closest("[data-remove-component]"),work=event.target.closest("[data-object-work]");if(tab){state.lightingTab=tab.dataset.lightingTab;render()}if(event.target.closest("#lightingRefresh"))loadLighting(true);if(object)openLightingDossier(object.dataset.objectDossier);if(work){$("#lightingDossierDialog").close();showHistory(work.dataset.objectWork)}if(remove){const note=prompt("Энэ холбоосыг дуусгах шалтгааныг бичнэ үү.");if(!note)return;try{await api(`/api/lighting/objects/${state.lightingDossier.item.id}/components/${remove.dataset.removeComponent}/remove`,{method:"POST",body:JSON.stringify({note})});await refreshLightingDossier();toast("Бүрэлдэхүүний холбоосыг түүхтэй нь дуусгалаа") }catch(error){toast(error.message,true)}}});
-document.addEventListener("change",event=>{if(event.target.matches("#dossierComponentForm select[name=assetId]")){const option=event.target.selectedOptions[0],form=event.target.form;form.elements.unit.value=option?.dataset.unit||"";form.elements.quantity.max=option?.dataset.available||"";}});
-document.addEventListener("submit",async event=>{if(event.target.id==="dossierComponentForm"){event.preventDefault();const value=Object.fromEntries(new FormData(event.target));value.quantity=Number(value.quantity);value.installedAt=value.installedAt||null;try{await api(`/api/lighting/objects/${state.lightingDossier.item.id}/components`,{method:"POST",body:JSON.stringify(value)});await refreshLightingDossier();toast("Хөрөнгийг объектод оноолоо")}catch(error){toast(error.message,true)}}if(event.target.id==="dossierNoteForm"){event.preventDefault();const value=Object.fromEntries(new FormData(event.target));try{await api(`/api/lighting/objects/${state.lightingDossier.item.id}/notes`,{method:"POST",body:JSON.stringify(value)});await refreshLightingDossier();toast("Тэмдэглэлийг хувийн хэрэгт нэмлээ")}catch(error){toast(error.message,true)}}});
+state.lightingWorkspace = null;
+state.lightingLoading = false;
+state.lightingTab = "overview";
+state.lightingAreaFilter = "all";
+const lightingLabels = {
+  open: "Нээлттэй",
+  in_progress: "Шийдвэрлэж байна",
+  resolved: "Шийдвэрлэсэн",
+  cancelled: "Цуцалсан",
+  new: "Шинэ",
+  assigned: "Хуваарилсан",
+  pending_review: "Хянуулах",
+  completed: "Дууссан",
+  awaiting_safety_start: "ХАБЭА зөвшөөрөл",
+  awaiting_management_start: "Ерөнхий инженер батлах",
+  execution: "Гүйцэтгэл",
+  awaiting_safety_completion: "ХАБЭА хяналт",
+  awaiting_management_completion: "Эцсийн баталгаа",
+};
+function lightingStatus(value) {
+  return lightingLabels[value] || labels[value] || value || "—";
+}
+function lightingTabs() {
+  return `<div class="lighting-tabs" aria-label="Гэрэлтүүлгийн ажлын талбарын цэс">${[
+    ["overview", "Нүүр"],
+    ["assets", "Объект ба тоноглол"],
+    ["incidents", "Гэмтэл, үзлэг"],
+    ["work", "Ажлын гүйцэтгэл"],
+    ["operations", "Ашиглалтын хяналт"],
+    ["reports", "Судалгаа, тайлан"],
+  ]
+    .map(
+      ([key, name]) =>
+        `<button class="${state.lightingTab === key ? "active" : ""}" data-lighting-tab="${key}">${name}</button>`,
+    )
+    .join("")}</div>`;
+}
+function lightingAreaMatches(item) {
+  return (
+    state.lightingAreaFilter === "all" ||
+    item.service_area_code === state.lightingAreaFilter
+  );
+}
+function lightingScoped(d) {
+  return {
+    ...d,
+    all: d,
+    assets: (d.assets || []).filter(lightingAreaMatches),
+    fixedAssets: (d.fixedAssets || []).filter(lightingAreaMatches),
+    incidents: (d.incidents || []).filter(lightingAreaMatches),
+    workOrders: (d.workOrders || []).filter(lightingAreaMatches),
+  };
+}
+function lightingAreaMetrics(d, code) {
+  const matches = (item) => code === "all" || item.service_area_code === code;
+  const records = [...(d.assets || []), ...(d.fixedAssets || [])].filter(
+    matches,
+  ).length;
+  const issues = (d.incidents || []).filter(
+    (item) =>
+      matches(item) && ["open", "in_progress"].includes(item.status),
+  ).length;
+  const work = (d.workOrders || []).filter(
+    (item) => matches(item) && !["completed", "cancelled"].includes(item.status),
+  ).length;
+  return { records, issues, work };
+}
+function lightingAreaNavigation(d) {
+  const all = lightingAreaMetrics(d, "all");
+  return `<section class="lighting-area-selector"><div class="lighting-area-heading"><div><span class="eyebrow">ҮЙЛЧИЛГЭЭНИЙ ЧИГЛЭЛ</span><h2>Аль хэсгийн ажлыг харах вэ?</h2></div><button class="lighting-area-all ${state.lightingAreaFilter === "all" ? "active" : ""}" data-lighting-area="all">Бүх чиглэл <b>${all.records}</b></button></div><div class="lighting-area-grid">${(
+    d.serviceAreas || []
+  )
+    .map((area) => {
+      const metric = lightingAreaMetrics(d, area.code);
+      return `<button class="lighting-area-card ${state.lightingAreaFilter === area.code ? "active" : ""}" data-lighting-area="${esc(area.code)}"><span class="lighting-area-icon">${esc(area.icon || "•")}</span><strong>${esc(area.name)}</strong><span class="lighting-area-metrics"><small><b>${metric.records}</b> бүртгэл</small><small><b>${metric.issues}</b> асуудал</small><small><b>${metric.work}</b> идэвхтэй ажил</small></span></button>`;
+    })
+    .join("")}</div></section>`;
+}
+function lightingOverview(d) {
+  const records = d.assets.length + d.fixedAssets.length,
+    openIssues = d.incidents.filter((x) =>
+      ["open", "in_progress"].includes(x.status),
+    ),
+    openWork = d.workOrders.filter(
+      (x) => !["completed", "cancelled"].includes(x.status),
+    ),
+    completedWork = d.workOrders.filter((x) => x.status === "completed");
+  return `<div class="lighting-context-note"><strong>${
+    state.lightingAreaFilter === "all"
+      ? "Гэрэлтүүлгийн нийт ажиллагаа"
+      : esc(
+          (d.all.serviceAreas || []).find(
+            (area) => area.code === state.lightingAreaFilter,
+          )?.name || "Сонгосон чиглэл",
+        )
+  }</strong><span>Доорх бүх мэдээлэл сонгосон чиглэлээр шүүгдсэн.</span></div><div class="lighting-stat-grid">${stat("Ашиглалтын бүртгэл", records, `${d.assets.length} объект · ${d.fixedAssets.length} тоноглол`, "◇", "blue")}${stat("Нээлттэй асуудал", openIssues.length, `${openIssues.reduce((sum, x) => sum + Math.max(0, Number(x.affected_quantity) - Number(x.resolved_quantity)), 0)} нэгжид нөлөөлсөн`, "!", "red")}${stat("Идэвхтэй ажил", openWork.length, "Нэгдсэн ажлын урсгал дахь ажил", "✓", "green")}${stat("Дууссан ажил", completedWork.length, "Баталгаажуулж хаасан ажил", "↗", "purple")}</div><div class="content-grid"><section class="panel"><div class="panel-head"><h2>Шийдэх асуудал</h2><button data-lighting-tab="incidents">Бүгдийг харах →</button></div>${
+    d.incidents
+      .filter((x) => ["open", "in_progress"].includes(x.status))
+      .slice(0, 6)
+      .map(
+        (x) =>
+          `<div class="lighting-list"><div><strong>${esc(x.title)}</strong><small>${esc(x.asset_name || x.location || "Объект холбоогүй")}</small></div><span class="badge ${esc(x.status)}">${lightingStatus(x.status)}</span></div>`,
+      )
+      .join("") ||
+    empty(
+      "Нээлттэй асуудал алга",
+      "Үзлэг эсвэл мэдээллээр илэрсэн асуудал энд харагдана.",
+    )
+  }</section><section class="panel"><div class="panel-head"><h2>Сүүлийн гүйцэтгэл</h2><button data-lighting-tab="work">Бүгдийг харах →</button></div>${
+    d.workOrders
+      .slice(0, 6)
+      .map(
+        (x) =>
+          `<button class="lighting-list link" data-history-id="${x.id}"><div><strong>${esc(x.title)}</strong><small>${esc(x.assigned_name || x.department_name || "Хариуцагч оноогоогүй")}</small></div><span class="badge ${esc(x.status)}">${lightingStatus(x.workflow_stage || x.status)}</span></button>`,
+      )
+      .join("") ||
+    empty(
+      "Ажил бүртгээгүй",
+      "Гэмтэл эсвэл төлөвлөгөөнөөс ажлын захиалга үүсгэнэ.",
+    )
+  }</section></div>`;
+}
+function lightingAssets(d) {
+  const objectTable = d.assets.length
+    ? `<div class="table-panel"><table class="data-table"><thead><tr><th>Код / ашиглалтын объект</th><th>Төрөл</th><th>Байршил</th><th>Гэрэл / толгой</th><th>Төлөв</th></tr></thead><tbody>${d.assets.map((x) => `<tr><td><button class="object-dossier-link" data-object-dossier="${x.id}">${esc(x.name)}</button><small>${esc(x.code)} · ${esc(x.service_area_name || "Чиглэл тодорхойгүй")}</small></td><td>${esc(x.object_type)}</td><td>${esc(x.location || "—")}</td><td>${esc(x.metadata?.lampCount ?? x.metadata?.headCount ?? "—")}</td><td><span class="badge ${esc(x.status)}">${lightingStatus(x.status)}</span></td></tr>`).join("")}</tbody></table></div>`
+    : empty(
+        "Ашиглалтын объект алга",
+        "Энэ чиглэлд шугам, хэсэг эсвэл байгууламжийн бүртгэл алга.",
+      );
+  const equipmentTable = d.fixedAssets.length
+    ? `<div class="table-panel"><table class="data-table"><thead><tr><th>Код / тоноглол</th><th>Ангилал</th><th>Байршил</th><th>Тоо хэмжээ</th><th>Төлөв</th></tr></thead><tbody>${d.fixedAssets.map((x) => `<tr><td><button class="object-dossier-link" data-asset-id="${x.id}">${esc(x.name)}</button><small>${esc(x.code)} · Үндсэн хөрөнгийн бүртгэл</small></td><td>${esc(x.category)}</td><td>${esc(x.location || "—")}</td><td>${esc(x.allocatable_quantity ?? "—")} ${esc(x.allocation_unit || "")}</td><td><span class="badge ${esc(x.status)}">${lightingStatus(x.status)}</span></td></tr>`).join("")}</tbody></table></div>`
+    : empty(
+        "Тоног төхөөрөмж алга",
+        "Энэ чиглэлд шит, самбар эсвэл гэрлэн дохионы хөрөнгө алга.",
+      );
+  return `<div class="lighting-section-stack"><section><div class="lighting-section-title"><h2>Ашиглалтын объектууд</h2><span>Шугам, хэсэг, байршлын үйл ажиллагааны бүртгэл</span></div>${objectTable}</section><section><div class="lighting-section-title"><h2>Тоног төхөөрөмж, үндсэн хөрөнгө</h2><span>Шит, самбар, гэрлэн дохио зэрэг тоологдох хөрөнгө</span></div>${equipmentTable}</section></div>`;
+}
+function lightingIncidents(d) {
+  return `<div class="table-panel">${d.incidents.length ? `<table class="data-table"><thead><tr><th>Гэмтэл</th><th>Объект / байршил</th><th>Нөлөөлсөн</th><th>Зассан</th><th>Огноо</th><th>Төлөв</th></tr></thead><tbody>${d.incidents.map((x) => `<tr><td><strong>${esc(x.incident_type)}</strong><small>${esc(x.title)}</small></td><td>${esc(x.asset_name || x.location || "—")}</td><td>${x.affected_quantity}</td><td>${x.resolved_quantity}</td><td>${date(x.reported_at)}</td><td><span class="badge ${esc(x.status)}">${lightingStatus(x.status)}</span></td></tr>`).join("")}</tbody></table>` : empty("Гэмтлийн бүртгэл алга", "Объект дээр илэрсэн гэмтлийг энд бүртгэнэ.")}</div>`;
+}
+function lightingOutcome(x) {
+  if (!Number(x.measurement_item_count))
+    return `<span class="lighting-outcome unknown">Хэмжилт тодорхойлоогүй</span>`;
+  const planned = Number(x.planned_quantity),
+    done = Number(x.completed_quantity),
+    unresolved = Number(x.unresolved_quantity),
+    deferred = Number(x.deferred_quantity);
+  return `<span class="lighting-outcome"><b>${done}/${planned} гүйцэтгэсэн</b>${unresolved ? `<small>${unresolved} шийдэгдээгүй</small>` : ""}${deferred ? `<small>${deferred} хойшлуулсан</small>` : ""}${Number(x.exception_pending) ? `<small>${x.exception_pending} үл хамаарах нөхцөл батлуулах</small>` : ""}</span>`;
+}
+function lightingWork(d) {
+  return `<div class="work-source-note"><span>Эдгээр нь тусдаа урсгал биш. Нэгдсэн Ажлын самбараас зөвхөн гэрэлтүүлэгтэй холбоотой ажил, объект, бодит үр дүнг харуулж байна.</span><button class="secondary" data-go="work-orders">Ажлын самбар нээх →</button></div><div class="table-panel">${d.workOrders.length ? `<table class="data-table"><thead><tr><th>Ажил</th><th>Ашиглалтын объект</th><th>Хариуцагч</th><th>Бодит үр дүн</th><th>Одоогийн шат</th></tr></thead><tbody>${d.workOrders.map((x) => `<tr><td><button class="work-link" data-history-id="${x.id}">${esc(x.title)}</button><small>${esc(x.department_name || "—")} · ${date(x.due_at)}</small></td><td>${esc(x.asset_name || x.asset_code || "—")}</td><td>${esc(x.assigned_name || "—")}</td><td>${lightingOutcome(x)}</td><td><span class="badge ${esc(x.status)}">${lightingStatus(x.workflow_stage || x.status)}</span></td></tr>`).join("")}</tbody></table>` : empty("Гэрэлтүүлгийн ажил алга", "Гэмтэл, үзлэг эсвэл төлөвлөгөөнөөс хэмжигдэх үр дүнтэй ажил үүсгэнэ.")}</div>`;
+}
+function lightingOperations(d) {
+  const hasMeter = d.assets.filter((x) =>
+      String(x.metadata?.meterNo || "").trim(),
+    ).length,
+    hasGps = d.assets.filter((x) => {
+      const gps = x.metadata?.gps;
+      return Boolean(
+        gps &&
+          (typeof gps === "string"
+            ? gps.trim()
+            : gps.lat || gps.latitude || gps.lng || gps.longitude),
+      );
+    }).length,
+    lights = d.assets.reduce(
+      (sum, x) =>
+        sum + Number(x.metadata?.lampCount ?? x.metadata?.headCount ?? 0),
+      0,
+    );
+  return `<div class="lighting-stat-grid">${stat("Ашиглалтын бүртгэл", d.assets.length, "Объект, шугам, хэсгийн бүртгэл", "◇", "blue")}${stat("Гэрэл / толгой", lights, "Бүртгэлд байгаа тоо хэмжээ", "◉", "green")}${stat("Тоолуурын дугаартай", hasMeter, `${d.assets.length ? Math.round((hasMeter / d.assets.length) * 100) : 0}% бүрдэлт`, "▥", "purple")}${stat("Байршилтай", hasGps, `${d.assets.length ? Math.round((hasGps / d.assets.length) * 100) : 0}% GPS бүрдэлт`, "⌖", "blue")}</div><section class="panel lighting-next-connection"><div class="panel-head"><div><h2>Дараагийн ашиглалтын холболт</h2><small>Хуучин ERP-д байсан боловч OVERVA-д хараахан эрх мэдэлтэй өгөгдөл болоогүй хэсгүүд</small></div></div><div class="lighting-connection-grid"><article><span>⏱</span><div><strong>Асалтын хуваарь</strong><small>Өнөөдрийн хүчинтэй асаах, унтраах цаг ба өөрчлөлтийн түүх</small></div></article><article><span>▥</span><div><strong>Сарын тоолуурын уншилт</strong><small>Цэг бүрийн заалт, хэрэглээ, баталгаажуулалт</small></div></article><article><span>₮</span><div><strong>Цахилгааны төлбөр</strong><small>Нэхэмжлэл, шалгалт, төлөлтийн хяналт</small></div></article></div><p>Эдгээрийг хуучин системээс шууд live уншихгүй. Эх өгөгдөл, хариуцагч, баталгаажуулалтын дүрмийг нь тогтоогоод дараагийн үе шатанд холбоно.</p></section>`;
+}
+function lightingReports(d) {
+  const measured = d.workOrders.filter(
+      (x) => Number(x.measurement_item_count) > 0,
+    ),
+    planned = measured.reduce(
+      (sum, x) => sum + Number(x.planned_quantity || 0),
+      0,
+    ),
+    completed = measured.reduce(
+      (sum, x) => sum + Number(x.completed_quantity || 0),
+      0,
+    ),
+    unresolved = measured.reduce(
+      (sum, x) => sum + Number(x.unresolved_quantity || 0),
+      0,
+    ),
+    deferred = measured.reduce(
+      (sum, x) => sum + Number(x.deferred_quantity || 0),
+      0,
+    ),
+    completion = planned ? Math.round((completed / planned) * 100) : 0;
+  return `<div class="lighting-stat-grid">${stat("Хэмжигдэх ажил", measured.length, "Тоо хэмжээгээр баталгаажих ажил", "▥", "blue")}${stat("Гүйцэтгэл", `${completion}%`, `${completed}/${planned || 0} нэгж гүйцэтгэсэн`, "✓", "green")}${stat("Шийдэгдээгүй", unresolved, "Шалтгаан, дараагийн арга хэмжээ шаардлагатай", "!", "red")}${stat("Хойшлуулсан", deferred, "Батлагдсан үл хамаарах нөхцөлтэй", "↗", "purple")}</div><section class="panel"><div class="panel-head"><div><h2>Гэрэлтүүлгийн тайлангийн эх өгөгдөл</h2><small>Энэ тайлан зөвхөн гэрэлтүүлгийн объект, гэмтэл, ажлын урсгалаас бүрдэнэ.</small></div></div>${measured.length ? lightingWork({ ...d, workOrders: measured }) : empty("Хэмжигдэх үр дүн бүртгээгүй", "Ажлыг дурын хувиар биш, төлөвлөсөн / гүйцэтгэсэн / шийдэгдээгүй / хойшлуулсан тоогоор бүртгэнэ.")}</section>`;
+}
+function lightingView() {
+  const d = state.lightingWorkspace;
+  if (state.lightingLoading && !d)
+    return `${header("ГЭРЭЛТҮҮЛГИЙН ҮЙЛ АЖИЛЛАГАА", "Гэрэлтүүлгийн ажлын талбар", "Объект, гэмтэл, ажил болон батлах урсгалыг ачаалж байна...")}<div class="unified-loading"><i></i><span>Мэдээлэл ачаалж байна</span></div>`;
+  if (!d)
+    return `${header("ГЭРЭЛТҮҮЛГИЙН ҮЙЛ АЖИЛЛАГАА", "Гэрэлтүүлгийн ажлын талбар", "Мэдээлэл ачаалагдаагүй байна.", '<button class="secondary" id="lightingRefresh">↻ Дахин ачаалах</button>')}`;
+  if (!d.available)
+    return `${header("ГЭРЭЛТҮҮЛГИЙН ҮЙЛ АЖИЛЛАГАА", "Гэрэлтүүлгийн ажлын талбар", "Энэ байгууллагад гэрэлтүүлгийн ажлын төрөл тохируулаагүй байна.")}`;
+  const scoped = lightingScoped(d);
+  const scopedBody =
+    state.lightingTab === "assets"
+      ? lightingAssets(scoped)
+      : state.lightingTab === "incidents"
+        ? lightingIncidents(scoped)
+        : state.lightingTab === "work"
+          ? lightingWork(scoped)
+          : state.lightingTab === "operations"
+            ? lightingOperations(scoped)
+            : state.lightingTab === "reports"
+              ? lightingReports(scoped)
+              : lightingOverview(scoped);
+  return `${header("ГЭРЭЛТҮҮЛГИЙН ҮЙЛ АЖИЛЛАГАА", "Гэрэлтүүлгийн ажлын талбар", "Цэлмэг инженер болон хэсгүүдийн объект → асуудал → ажил → нотолгоо → ХАБЭА → баталгаажуулалтын мэргэжлийн харагдац.", '<button class="secondary" id="lightingRefresh">↻ Шинэчлэх</button>')}${lightingTabs()}${lightingAreaNavigation(d)}${scopedBody}`;
+}
+async function loadLighting(force = false) {
+  if (state.lightingLoading || (state.lightingWorkspace && !force)) return;
+  state.lightingLoading = true;
+  try {
+    state.lightingWorkspace = await api("/api/lighting/workspace");
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    state.lightingLoading = false;
+    if (state.view === "lighting") render();
+  }
+}
+function dossierEventName(type) {
+  return type === "component_assigned"
+    ? "Бүрэлдэхүүн хөрөнгө оноосон"
+    : type === "component_removed"
+      ? "Бүрэлдэхүүнээс хассан"
+      : "Тэмдэглэл нэмсэн";
+}
+function lightingDossierHtml(d) {
+  const o = d.item,
+    active = d.components.filter((x) => !x.removed_at),
+    history = d.components.filter((x) => x.removed_at);
+  const componentRows = active
+    .map(
+      (x) =>
+        `<tr><td><strong>${esc(x.asset_name)}</strong><small>${esc(x.asset_code)} · ${esc(x.asset_category)}</small></td><td>${esc(x.component_role)}</td><td>${esc(x.quantity)} ${esc(x.unit)}</td><td>${date(x.installed_at)}</td><td>${d.capabilities.canManageComponents ? `<button class="secondary dossier-remove" data-remove-component="${x.id}">Холбоос дуусгах</button>` : "—"}</td></tr>`,
+    )
+    .join("");
+  const allocate = d.capabilities.canManageComponents
+    ? `<form id="dossierComponentForm" class="dossier-form"><h3>Хөрөнгөөс бүрэлдэхүүн оноох</h3><div class="dossier-form-grid"><label>Хөрөнгө<select name="assetId" required><option value="">Сонгоно уу</option>${d.assetOptions
+        .filter((a) => Number(a.available_quantity) > 0)
+        .map(
+          (a) =>
+            `<option value="${a.id}" data-unit="${esc(a.allocation_unit)}" data-available="${esc(a.available_quantity)}">${esc(a.code)} · ${esc(a.name)} · үлдэгдэл ${esc(a.available_quantity)} ${esc(a.allocation_unit)}</option>`,
+        )
+        .join(
+          "",
+        )}</select></label><label>Үүрэг / төрөл<input name="componentRole" required placeholder="Жишээ: шон, кабель, тоолуур"></label><label>Тоо хэмжээ<input name="quantity" type="number" min="0.001" step="0.001" required></label><label>Нэгж<input name="unit" required readonly placeholder="Хөрөнгөөс сонгогдоно"></label><label>Суурилуулсан огноо<input name="installedAt" type="date"></label><label>Тайлбар<input name="note" placeholder="Оноолтын үндэслэл"></label></div><button class="primary">Объектод оноох</button></form>`
+    : "";
+  const events = d.events
+    .map(
+      (e) =>
+        `<div class="dossier-event"><i></i><div><strong>${dossierEventName(e.event_type)}</strong><small>${esc(e.actor_name || "Систем")} · ${dateTime(e.created_at)}</small>${e.note ? `<p>${esc(e.note)}</p>` : ""}</div></div>`,
+    )
+    .join("");
+  return `<div class="dossier-summary"><div><span>Код</span><strong>${esc(o.code)}</strong></div><div><span>Төрөл</span><strong>${esc(o.object_type)}</strong></div><div><span>Байршил</span><strong>${esc(o.location || "—")}</strong></div><div><span>Шугамын урт</span><strong>${o.linear_length_m ? `${esc(o.linear_length_m)} м` : "—"}</strong></div></div>
+    <section class="dossier-section"><h3>Бүрэлдэхүүн хөрөнгө</h3><p>Хөрөнгийн мастер бүртгэлийг нүүлгэхгүй. Энд тухайн хөрөнгийн ямар хэсэг, хэдэн нэгж энэ объектод ашиглагдаж байгааг хугацаатай холбоно.</p>${componentRows ? `<div class="table-panel"><table class="data-table"><thead><tr><th>Хөрөнгө</th><th>Үүрэг</th><th>Хэмжээ</th><th>Суурилуулсан</th><th>Үйлдэл</th></tr></thead><tbody>${componentRows}</tbody></table></div>` : empty("Бүрэлдэхүүн оноогоогүй", "Шон, кабель, тоолуур, гэрлийн толгой зэрэг хөрөнгийг доорх маягтаар холбоно.")}${allocate}${history.length ? `<details><summary>Өмнө нь хассан холбоос (${history.length})</summary>${history.map((x) => `<p>${esc(x.asset_name)} · ${esc(x.quantity)} ${esc(x.unit)} · ${date(x.removed_at)}</p>`).join("")}</details>` : ""}</section>
+    <div class="dossier-columns"><section class="dossier-section"><h3>Гэмтэл (${d.incidents.length})</h3>${
+      d.incidents
+        .slice(0, 10)
+        .map(
+          (x) =>
+            `<button class="dossier-related"><strong>${esc(x.title)}</strong><small>${lightingStatus(x.status)} · ${date(x.reported_at)}</small></button>`,
+        )
+        .join("") || "<p>Гэмтэл бүртгэгдээгүй.</p>"
+    }</section><section class="dossier-section"><h3>Ажлын түүх (${d.workOrders.length})</h3>${
+      d.workOrders
+        .slice(0, 10)
+        .map(
+          (x) =>
+            `<button class="dossier-related" data-object-work="${x.id}"><strong>${esc(x.title)}</strong><small>${lightingStatus(x.workflow_stage || x.status)} · ${date(x.created_at)}</small></button>`,
+        )
+        .join("") || "<p>Ажил бүртгэгдээгүй.</p>"
+    }</section></div>
+    <section class="dossier-section"><h3>Хувийн хэргийн түүх</h3>${d.capabilities.canCreateNote ? `<form id="dossierNoteForm" class="dossier-note-form"><input name="note" required placeholder="Үзлэг, шийдвэр, нөхцөл байдлын тэмдэглэл"><button class="secondary">Тэмдэглэл нэмэх</button></form>` : ""}<div class="dossier-events">${events || "<p>Түүхэн тэмдэглэл алга.</p>"}</div></section>`;
+}
+async function openLightingDossier(id) {
+  try {
+    const data = await api(`/api/lighting/objects/${id}/dossier`);
+    state.lightingDossier = data;
+    $("#lightingDossierTitle").textContent =
+      `${data.item.code} — ${data.item.name}`;
+    $("#lightingDossierBody").innerHTML = lightingDossierHtml(data);
+    $("#lightingDossierDialog").showModal();
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+async function refreshLightingDossier() {
+  if (state.lightingDossier)
+    await openLightingDossier(state.lightingDossier.item.id);
+}
+document.addEventListener("click", async (event) => {
+  const tab = event.target.closest("[data-lighting-tab]"),
+    area = event.target.closest("[data-lighting-area]"),
+    object = event.target.closest("[data-object-dossier]"),
+    remove = event.target.closest("[data-remove-component]"),
+    work = event.target.closest("[data-object-work]");
+  if (tab) {
+    state.lightingTab = tab.dataset.lightingTab;
+    render();
+  }
+  if (area) {
+    state.lightingAreaFilter = area.dataset.lightingArea;
+    render();
+  }
+  if (event.target.closest("#lightingRefresh")) loadLighting(true);
+  if (object) openLightingDossier(object.dataset.objectDossier);
+  if (work) {
+    $("#lightingDossierDialog").close();
+    showHistory(work.dataset.objectWork);
+  }
+  if (remove) {
+    const note = prompt("Энэ холбоосыг дуусгах шалтгааныг бичнэ үү.");
+    if (!note) return;
+    try {
+      await api(
+        `/api/lighting/objects/${state.lightingDossier.item.id}/components/${remove.dataset.removeComponent}/remove`,
+        { method: "POST", body: JSON.stringify({ note }) },
+      );
+      await refreshLightingDossier();
+      toast("Бүрэлдэхүүний холбоосыг түүхтэй нь дуусгалаа");
+    } catch (error) {
+      toast(error.message, true);
+    }
+  }
+});
+document.addEventListener("change", (event) => {
+  if (event.target.matches("#dossierComponentForm select[name=assetId]")) {
+    const option = event.target.selectedOptions[0],
+      form = event.target.form;
+    form.elements.unit.value = option?.dataset.unit || "";
+    form.elements.quantity.max = option?.dataset.available || "";
+  }
+});
+document.addEventListener("submit", async (event) => {
+  if (event.target.id === "dossierComponentForm") {
+    event.preventDefault();
+    const value = Object.fromEntries(new FormData(event.target));
+    value.quantity = Number(value.quantity);
+    value.installedAt = value.installedAt || null;
+    try {
+      await api(
+        `/api/lighting/objects/${state.lightingDossier.item.id}/components`,
+        { method: "POST", body: JSON.stringify(value) },
+      );
+      await refreshLightingDossier();
+      toast("Хөрөнгийг объектод оноолоо");
+    } catch (error) {
+      toast(error.message, true);
+    }
+  }
+  if (event.target.id === "dossierNoteForm") {
+    event.preventDefault();
+    const value = Object.fromEntries(new FormData(event.target));
+    try {
+      await api(
+        `/api/lighting/objects/${state.lightingDossier.item.id}/notes`,
+        { method: "POST", body: JSON.stringify(value) },
+      );
+      await refreshLightingDossier();
+      toast("Тэмдэглэлийг хувийн хэрэгт нэмлээ");
+    } catch (error) {
+      toast(error.message, true);
+    }
+  }
+});

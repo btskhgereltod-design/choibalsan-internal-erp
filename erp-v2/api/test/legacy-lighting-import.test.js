@@ -22,7 +22,9 @@ test("lighting is an opt-in tenant specialization",()=>{
 
 test("lighting workspace is tenant scoped and uses linked operational records",()=>{
   const route=read("src","routes","lighting.js");
-  assert.match(route,/FROM operational_objects WHERE organization_id=\$1 AND domain='lighting'/);
+  assert.match(route,/withTenantTransaction\(org/);
+  assert.match(route,/FROM operational_objects o/);
+  assert.match(route,/o\.organization_id=\$1 AND o\.domain='lighting'/);
   assert.match(route,/i\.operational_object_id/);
   assert.match(route,/w\.operational_object_id/);
   assert.doesNotMatch(route,/FROM assets WHERE organization_id=\$1 AND category LIKE 'lighting\.%'/);
@@ -81,9 +83,27 @@ test("accounting fixed assets stay separate from operational objects",()=>{
 
 test("lighting UI explains the standard end-to-end flow",()=>{
   const ui=read("..","web","lighting.js");
-  for(const label of ["Нүүр","Объект","Гэмтэл","Гэрэлтүүлгийн ажлууд","Тайлан"])assert.match(ui,new RegExp(label));
-  assert.match(ui,/Объект → гэмтэл → ажил → нотолгоо → ХАБЭА → баталгаажуулалт/);
+  for(const label of ["Нүүр","Объект ба тоноглол","Гэмтэл, үзлэг","Ажлын гүйцэтгэл","Ашиглалтын хяналт","Судалгаа, тайлан"])assert.match(ui,new RegExp(label));
+  assert.match(ui,/объект → асуудал → ажил → нотолгоо → ХАБЭА → баталгаажуулалт/i);
   assert.doesNotMatch(ui,/organizationHomeBar/);
+});
+
+test("lighting workspace reuses tenant service areas without creating a second work engine",()=>{
+  const route=read("src","routes","lighting.js");
+  const ui=read("..","web","lighting.js");
+  const smoke=read("scripts","lighting-workspace-smoke.js");
+  assert.match(route,/FROM organization_work_service_areas/);
+  assert.match(route,/serviceAreas:serviceAreas\.rows/);
+  assert.match(route,/fixedAssets:equipment/);
+  assert.match(ui,/data-lighting-area/);
+  assert.match(ui,/Ашиглалтын бүртгэл/);
+  assert.match(ui,/Нэгдсэн Ажлын самбараас зөвхөн гэрэлтүүлэгтэй холбоотой/);
+  assert.match(ui,/Асалтын хуваарь/);
+  assert.match(ui,/Сарын тоолуурын уншилт/);
+  assert.match(ui,/Цахилгааны төлбөр/);
+  assert.doesNotMatch(ui,/method:\s*["']POST["'].*\/api\/lighting\/workspace/s);
+  assert.match(smoke,/\/api\/lighting\/workspace/);
+  assert.doesNotMatch(smoke,/method:\s*["']POST["']/);
 });
 
 test("lighting is one top-level workspace with scoped internal navigation",()=>{

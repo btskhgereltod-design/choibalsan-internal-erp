@@ -37,6 +37,7 @@
     "smoke:market-identity": "node scripts/market-identity-integration-smoke.js",
     "smoke:safety": "node scripts/safety-smoke.js",
     "smoke:work-intake": "node scripts/work-intake-smoke.js",
+    "smoke:lighting": "node scripts/lighting-workspace-smoke.js",
     "smoke:administration": "node scripts/administration-smoke.js",
     "smoke:builder": "node scripts/builder-smoke.js",
     "smoke:ai-provider": "node scripts/ai-provider-smoke.js",
