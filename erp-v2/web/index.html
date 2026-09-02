@@ -31,9 +31,9 @@
   <link rel="stylesheet" href="/developer-platform.css">
   <link rel="stylesheet" href="/attendance.css">
   <link rel="stylesheet" href="/safety.css">
-  <link rel="stylesheet" href="/administration.css?v=34">
+  <link rel="stylesheet" href="/administration.css?v=35">
   <link rel="stylesheet" href="/legacy-migration-review.css?v=1">
-  <link rel="stylesheet" href="/hr-operations.css?v=2">
+  <link rel="stylesheet" href="/hr-operations.css?v=3">
   <link rel="stylesheet" href="/industry-profile.css">
   <link rel="stylesheet" href="/builder.css">
   <link rel="stylesheet" href="/builder-ai.css">
@@ -94,25 +94,10 @@
         <button class="nav-item hidden" id="builderNav" data-view="builder"><span>✦</span>OVERVA Builder</button>
         <button class="nav-item hidden" id="attendanceNav" data-view="attendance" data-module="attendance"><span>▦</span>Ирцийн бүртгэл</button>
         <button class="nav-item hidden" id="safetyNav" data-view="safety" data-module="safety"><span>⚠</span>ХАБЭА</button>
-        <div class="nav-domain hidden" id="hrNav" data-module="hr" data-domain="hr">
-          <button class="nav-item nav-domain-parent" type="button" data-domain-toggle="hr" aria-expanded="false"><span>♙</span>Хүний нөөц<i>⌄</i></button>
-          <div class="nav-domain-children">
-            <button data-view="hr" data-domain-section="dashboard">Хянах самбар</button><button data-view="hr" data-domain-section="structure">Байгууллагын бүтэц</button><button data-view="hr" data-domain-section="units">Нэгж</button><button data-view="hr" data-domain-section="positions">Албан тушаал</button><button data-view="hr" data-domain-section="employees">Ажилтан</button><button data-view="hr" data-domain-section="appointments">Томилгоо</button><button data-view="hr" data-domain-section="leave">Чөлөө</button><button data-view="hr" data-domain-section="exits">Ажлаас чөлөөлөх / халах</button><button data-view="hr" data-domain-section="documents">Ажилтны баримт бичиг</button><button data-view="hr" data-domain-section="orders">Шийдвэр / тушаал</button>
-            <button class="hidden" data-view="hr" data-domain-section="migration-review" data-legacy-review-nav>Legacy шилжилтийн хяналт</button>
-          </div>
-        </div>
-        <div class="nav-domain hidden" id="recordsNav" data-module="records" data-domain="records">
-          <button class="nav-item nav-domain-parent" type="button" data-domain-toggle="records" aria-expanded="false"><span>▤</span>Бичиг хэрэг<i>⌄</i></button>
-          <div class="nav-domain-children"><button data-view="records" data-domain-section="dashboard">Хянах самбар</button><button data-view="records" data-domain-section="incoming">Ирсэн бичиг</button><button data-view="records" data-domain-section="outgoing">Явсан бичиг</button><button data-view="records" data-domain-section="internal">Дотоод албан бичиг</button><button data-view="records" data-domain-section="processing">Боловсруулалт</button><button data-view="records" data-domain-section="waiting">Хариу хүлээгдэж буй</button><button data-view="records" data-domain-section="overdue">Хугацаа хэтэрсэн</button><button data-view="records" data-domain-section="closed">Хаасан</button></div>
-        </div>
-        <div class="nav-domain hidden" id="complaintsNav" data-module="complaints" data-domain="complaints">
-          <button class="nav-item nav-domain-parent" type="button" data-domain-toggle="complaints" aria-expanded="false"><span>✉</span>Өргөдөл, гомдол<i>⌄</i></button>
-          <div class="nav-domain-children"><button data-view="complaints" data-domain-section="dashboard">Хянах самбар</button><button data-view="complaints" data-domain-section="new">Шинээр ирсэн</button><button data-view="complaints" data-domain-section="assigned">Хуваарилсан</button><button data-view="complaints" data-domain-section="processing">Шийдвэрлэж байгаа</button><button data-view="complaints" data-domain-section="waiting">Хариу хүлээгдэж буй</button><button data-view="complaints" data-domain-section="overdue">Хугацаа хэтэрсэн</button><button data-view="complaints" data-domain-section="responded">Хариу өгсөн</button><button data-view="complaints" data-domain-section="closed">Хаасан</button></div>
-        </div>
-        <div class="nav-domain hidden" id="archiveNav" data-module="archive" data-domain="archive">
-          <button class="nav-item nav-domain-parent" type="button" data-domain-toggle="archive" aria-expanded="false"><span>▣</span>Архив<i>⌄</i></button>
-          <div class="nav-domain-children"><button data-view="archive" data-domain-section="dashboard">Хянах самбар</button><button data-view="archive" data-domain-section="intake">Архивт шилжүүлэх</button><button data-view="archive" data-domain-section="registry">Архивын бүртгэл</button><button data-view="archive" data-domain-section="access">Баримт ашиглуулах</button><button data-view="archive" data-domain-section="retention">Хадгалалтын хугацаа</button><button data-view="archive" data-domain-section="proposals">Устгах санал</button><button data-view="archive" data-domain-section="commission">Комиссын шийдвэр</button><button data-view="archive" data-domain-section="acts">Устгах акт</button><button data-view="archive" data-domain-section="disposed">Устгасан баримт</button></div>
-        </div>
+        <button class="nav-item hidden" id="hrNav" data-view="hr" data-module="hr"><span>♙</span>Хүний нөөц</button>
+        <button class="nav-item hidden" id="recordsNav" data-view="records" data-module="records"><span>▤</span>Бичиг хэрэг</button>
+        <button class="nav-item hidden" id="complaintsNav" data-view="complaints" data-module="complaints"><span>✉</span>Өргөдөл, гомдол</button>
+        <button class="nav-item hidden" id="archiveNav" data-view="archive" data-module="archive"><span>▣</span>Архив</button>
         <button class="nav-item hidden" id="inventoryNav" data-view="inventory" data-module="inventory"><span>▦</span>Няравын ажлын талбар</button>
         <button class="nav-item hidden" id="maintenanceNav" data-view="maintenance" data-module="maintenance"><span>↻</span>Төлөвлөгөөт засвар</button>
         <button class="nav-item hidden" id="procurementNav" data-view="procurement" data-module="procurement"><span>₮</span>Худалдан авалт</button>
@@ -263,8 +248,8 @@
   <script src="/developer-platform.js" defer></script>
   <script src="/attendance.js" defer></script>
   <script src="/safety.js?v=2" defer></script>
-  <script src="/administration.js?v=39" defer></script>
-  <script src="/legacy-migration-review.js?v=1" defer></script>
+  <script src="/administration.js?v=41" defer></script>
+  <script src="/legacy-migration-review.js?v=2" defer></script>
   <script src="/industry-profile.js" defer></script>
   <script src="/builder.js" defer></script>
   <script src="/lighting.js?v=5" defer></script>

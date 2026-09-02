@@ -1,16 +1,114 @@
 # OVERVA Current State
 
-Last updated: 2026-09-01
+Last updated: 2026-09-02
 
 This document answers one question: **what exists in the repository now?** It
 does not claim that every implemented foundation is complete or production-
 validated at enterprise scale.
 
+## Confidential disciplinary cases
+
+- Repository migrations now reach `0093`. The existing local development
+  business database remains at `0090`, documented production remains `0080`,
+  and neither was connected to, migrated or written. Clean `0001` to `0093`
+  was verified on a disposable database and removed afterward.
+- Migration `0093` adds a separately authoritative, always-`restricted`
+  `hr_discipline_case` aggregate. It preserves reviewed policy/legal basis,
+  notice, explanation or refusal, investigation, finding, recommendation,
+  independent decision, acknowledgement, effective period, expiry/early
+  removal and dispute evidence without inventing history for existing people.
+- Complaints handoff acceptance and discipline creation are atomic: acceptance
+  records the new case identity and an append-only handoff event in the same
+  transaction. Decline is reason-required, versioned, exact-payload idempotent
+  and audited. A handoff remains a request, never a finding.
+- Confidential list/detail access, intake, investigation, recommendation,
+  decision and post-decision administration are separate backend permissions.
+  Sensitive command reasons remain in restricted discipline events; shared
+  workflow and general audit coordination receive only a redacted command
+  label and case identity.
+  A snapshotted four-eyes rule blocks the creator, investigator or recommender
+  from deciding when required. The Article 123 deadline is calculated
+  server-side from the violation/last-continuing date, discovery date, ordinary
+  six-month or full-property-liability one-year occurrence limit, one-month
+  discovery limit and evidenced suspension periods. The calculation and rule
+  version are preserved with the case. Sanction expiry is calculated one year
+  from the server decision date; early removal requires canonical evidence.
+  One `(Employee, violation identity)` guard fails closed and no Visio-specific
+  tenant deadline or approver is hard-coded.
+- Users without confidential discipline read authority receive no real case
+  count or list. Canonical documents linked to discipline are also filtered
+  from document list, version, upload, lifecycle and download paths unless the
+  same confidential permission is present. Restricted document classification
+  separately requires its document permission.
+- Human Resources exposes the restricted queue under its internal employment-
+  relations tabs. The full repository suite passes 394/394; clean migration
+  and disposable PostgreSQL integration pass atomic handoff intake, tenant
+  denial, RLS, restricted lifecycle, independent decision, canonical evidence,
+  immutable events, audit and outbox intent.
+
+## Employee transfer and rotation
+
+- Migration `0092` is included in the clean `0001` to `0093` verified path. The
+  local and production boundaries stated above remain unchanged.
+- Migration `0092` adds a separate tenant-scoped `hr_transfer_case` authority
+  for temporary transfer and rotation. It records the source Assignment,
+  reviewed target, legal/policy snapshot, effective dates, consent, workload,
+  proposal and management-decision evidence. Existing employees and
+  Assignments receive no fabricated transfer history.
+- Named commands enforce draft, eligibility, consent, HR review, management
+  review, decision, effective implementation, monitoring and completion. RBAC,
+  expected version, exact-payload idempotency, shared-workflow coordination,
+  audit/outbox intent, canonical document links, RLS and append-only case events
+  are applied server-side.
+- Only the approved `implement` command can change the canonical primary
+  Assignment. It ends the prior effective-dated row, creates one new active row
+  and synchronizes Employee/User projections in the same transaction. A due
+  temporary transfer restores the prior placement by creating another new
+  Assignment rather than reopening or deleting history.
+- Human Resources exposes this under the internal `Хөдөлмөрийн харилцаа` tab;
+  the sidebar remains flat. Focused tests pass, the full repository suite
+  passes 394/394, and the disposable PostgreSQL integration verifies the
+  Assignment change, tenant denial, RLS, immutable events, canonical evidence,
+  audit and outbox intent.
+
+## Complaint resolution and HR assessment handoff
+
+- Complaint migration `0091` is included in the current repository migration
+  path and was reverified through clean `0001` to `0093` migration and the
+  disposable Phase 2 integration. The local and production boundaries stated
+  above remain unchanged.
+- Complaints remains the authoritative case domain. Migration `0091` extends
+  its allowed lifecycle with optional `implementation_monitoring`; named,
+  reason-required commands now cover additional-information requests,
+  implementation monitoring and completion without fabricating history for
+  existing cases.
+- `complaint_hr_handoffs` records an explicit request for HR to assess whether
+  a separate disciplinary case is warranted. It does not create a discipline
+  case. Requests are tenant/RLS scoped, backend permission checked, expected-
+  version guarded, exact-payload idempotent, audited and coordinated through
+  the existing workflow/outbox transaction. Evidence uses canonical
+  `document_links`; lifecycle evidence is append-only in
+  `complaint_hr_handoff_events` and protected by production runtime grants.
+- The tenant UI exposes additional-information, implementation-monitoring and
+  HR-assessment actions inside the Complaints workspace. Handoff detail remains
+  visible in the case dossier; the sidebar remains flat.
+- `EMPLOYEE_RELATIONS_PROCESS_IMPLEMENTATION_PLAN_V1.md` is the staged delivery
+  contract. All three approved local slices are now implemented and verified;
+  production deployment remains outside its approval.
+- Focused employee-relations, statutory-clock and Phase 2 contract tests pass
+  27/27. Clean migration and the
+  disposable Phase 2 PostgreSQL integration pass tenant denial, RLS,
+  idempotency replay/conflict, concurrency, append-only evidence, canonical
+  links, audit and outbox intent, including complaint-to-HR handoff. No
+  production deployment or data write was performed.
+
 ## Legacy migration provenance and review foundation
 
-- Repository and local development schema now reach `0090`; documented
-  production remains `0080` and was not connected to, migrated, written or
-  deployed. Migrations `0087`-`0090` are additive, change no prior migration
+- The legacy-import foundation remains implemented through migration `0090`;
+  the repository now also contains unrelated employee-relations migrations
+  `0091`-`0093`.
+  Documented production remains `0080` and was not connected to, migrated,
+  written or deployed. Migrations `0087`-`0090` are additive, change no prior migration
   checksum and import no domain record. `0088` binds provenance projection
   updates to exact decision evidence. `0089` adds deterministic review cases,
   append-only membership/decisions and immutable batch-command receipts.
@@ -126,7 +224,7 @@ validated at enterprise scale.
   immutable batch receipt and one batch audit; no attendance, inactive-user or
   manual document/attachment review group was decided.
   Clean `0001` to `0090` disposable migration, grouped-review, provenance and
-  canonical-import PostgreSQL integrations, 371/371 repository tests and
+  canonical-import PostgreSQL integrations, 372/372 repository tests and
   JavaScript syntax checks pass. The importer integration verifies dry-run,
   permission/tenant scope, checksum conflict, canonical mapping, replay,
   rollback/file cleanup, immutable evidence and absence of fabricated workflow
@@ -134,18 +232,26 @@ validated at enterprise scale.
 
 ## Choibalsan HR, records, complaints and archive Phase 2
 
-- Phase 2 domain migration `0086` remains the implemented domain baseline;
-  repository/local schema now reach `0090`. Documented
-  production remains `0080` and was not connected to, migrated or written.
+- Phase 2 domain migration `0086` remains the original domain baseline;
+  Complaints is extended by repository migration `0091` and employee transfer
+  by `0092`; confidential discipline is added by `0093`, while the local
+  business database remains at `0090`. Documented production remains `0080`
+  and was not connected to, migrated or written.
   Migration `0086` is additive except for explicit widening of existing leave,
   correspondence and archive state checks. It creates no historical cases or
   events and does not infer any employee number.
-- The tenant shell now has keyboard-accessible, refresh-stable expandable Human
-  Resources, Records, Complaints and Archive navigation. Existing HR registry,
-  structure and document surfaces are reused. Permission filtering affects
-  visibility only; every command is independently authorized by the server.
+- The tenant shell now keeps Human Resources, Records, Complaints and Archive
+  as flat permission-filtered sidebar workspaces. Their refresh-stable internal
+  tabs own domain navigation; status-oriented views such as overdue or waiting
+  remain filters rather than sidebar destinations. Human Resources groups its
+  registry, structure, employment transitions, time/leave, development,
+  reporting and Smart Import surfaces without duplicating the canonical
+  Employee master. Overdue Records and Complaints filters are enforced by the
+  tenant-scoped overview queries. Visibility remains only a client convenience;
+  every command is independently authorized by the server.
 - Authoritative domain aggregates now cover appointment, leave, employment
-  exit, correspondence, complaint and archive records/access/destruction. Their
+  exit, transfer/rotation, confidential discipline, correspondence, complaint
+  and archive records/access/destruction. Their
   state remains in the domain table. Shared workflow stores coordination,
   assignment, decision, comment, immutable transition and notification intent
   evidence in the same transaction.
@@ -168,20 +274,22 @@ validated at enterprise scale.
   item-set hash and separate executor/verifier.
 - Formal evidence uses the `0083` canonical `documents` and append-only
   `document_links` model. Legacy attachment and entity-reference reads remain;
-  no existing reference is deleted or rewritten. Restricted consequential
-  commands require the explicit backend `documents.restricted.read` capability.
+  no existing reference is deleted or rewritten. Restricted document commands
+  require `documents.restricted.read`; restricted discipline detail uses its
+  narrower `hr.discipline.confidential.read` capability.
 - Empty Phase 2 datasets are intentional. Local migration retained 21
   Employees, all 21 null `employee_no` values, and 106 Work Orders, while
   creating zero complaint cases and zero fabricated command receipts.
-- Clean `0001`→`0089`, rerun/no-op and known-`0079` drift checks pass. The full
-  unit/source regression is 362/362, and the disposable PostgreSQL Phase 2
+- Clean `0001` to `0093`, rerun/no-op and known-`0079` drift checks pass. The
+  full unit/source regression is 394/394, and the disposable PostgreSQL Phase 2
   integration passes tenant denial, RLS activation, duplicate replay/conflict,
-  concurrency, assignment, leave, appointment, archive, canonical documents,
+  concurrency, atomic complaint-to-discipline intake, confidential discipline,
+  Assignment transfer, leave, appointment, archive, canonical documents,
   audit/event immutability and pending outbox intent.
 
 ## Shared workflow, tenant context and canonical document foundation
 
-- Repository migrations now reach `0090`; the local development database has
+- Repository migrations now reach `0093`; the local development database has
   been reconciled from its known pre-release `0079` variant through `0090`.
   The last documented production schema remains `0080`. No production
   deployment, connection or data write was performed.
@@ -234,7 +342,7 @@ validated at enterprise scale.
   its assignee. The full harness passes on a disposable `0085` database.
 - Clean `0001` to `0089` and local rerun/no-op migration gates pass; the prior
   known-`0079` drift reconciliation through `0088` remains covered and `0089`
-  is the next additive step. The full unit/source suite passes 362/362. Workflow, delivery,
+  is the next additive step. The full unit/source suite passes 372/372. Workflow, delivery,
   RLS/pool-leak, canonical document, grouped legacy review, broad HTTP, Work Order assignment and
   material integrations pass on disposable databases. A production-migration
   rehearsal also verified that runtime may insert immutable intent/evidence and

@@ -59,6 +59,7 @@ function createApp() {
   app.use("/api/hr/smart-imports", require("./routes/smart-imports"));
   app.use("/api/hr", require("./routes/hr"));
   app.use("/api/hr", require("./routes/hr-workflows"));
+  app.use("/api/hr", require("./routes/hr-discipline"));
   app.use("/api/hr", require("./routes/hr-operations"));
   app.use("/api/legacy-migration", require("./routes/legacy-migration"));
   app.use("/api/records", require("./routes/records"));

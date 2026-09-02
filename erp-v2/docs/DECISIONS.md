@@ -804,6 +804,109 @@ explicit commit flag and environment gate. Runtime isolation is a packaging
 and security boundary; it does not change migration schema, reviewer approval,
 provenance, checksums, canonical mapping rules or domain authority.
 
+### D-045 — Complaints requests HR assessment without creating discipline authority
+
+Accepted: 2026-09-02
+
+Complaints remains the authority for request, complaint and suggestion case
+state. Additional-information requests and optional implementation monitoring
+extend that same aggregate rather than introducing a second complaint model.
+
+When complaint evidence may warrant employee discipline, Complaints creates an
+explicit tenant-scoped handoff request with expected version, exact-payload
+idempotency, canonical evidence links, audit, workflow/outbox coordination and
+append-only handoff history. The request is not a disciplinary finding or case.
+Only HR, under a separate intake permission, may later accept it by atomically
+creating a separately authoritative confidential disciplinary case. Decline or
+cancellation must retain an attributable reason. No existing complaint receives
+synthetic handoff history.
+
+Employee transfer/rotation and discipline remain separate HR employee-relations
+case authorities. Transfer may change canonical Assignment only at an approved
+effective command while preserving the prior effective-dated row; discipline
+may not be reduced to a generic Employee event or shared-workflow state.
+
+### D-046 — Employee transfer owns reviewed effective Assignment change
+
+Accepted: 2026-09-02
+
+Temporary transfer and rotation use one tenant-scoped HR transfer aggregate
+with explicit type, source Assignment, target placement, effective dates,
+consent, reviewed policy snapshot, proposal and management-decision evidence.
+The case is distinct from Employee and Assignment projections and from shared
+workflow coordination.
+
+No draft or review command changes placement. Only an approved effective
+implementation command may end the locked current primary Assignment, create
+one new active effective-dated Assignment and synchronize compatibility
+projections atomically. Temporary completion restores the prior placement by
+creating another Assignment; it never reopens or deletes history. Existing
+employees receive no synthetic transfer cases or events.
+
+Tenant policy and legal references are review evidence captured per case, not
+universal rules inferred from the pilot Visio. Backend permission, version,
+idempotency, canonical-document, audit, RLS and append-only evidence controls
+remain mandatory for every consequential command.
+
+### D-047 — Discipline is a restricted HR case with independent decision authority
+
+Accepted: 2026-09-02
+
+A complaint-to-HR handoff is only an assessment request. HR may accept it only
+by atomically creating a separately authoritative restricted discipline case
+and recording the new identity on immutable handoff evidence. A reasoned
+decline remains versioned, exact-payload idempotent and audited. Manual intake
+uses the same discipline authority.
+
+The discipline case owns notice, explanation or documented refusal,
+investigation, finding, recommendation, decision, acknowledgement, effective
+period, expiry or early removal and dispute evidence. List/detail, intake,
+investigation, recommendation, decision and administration permissions remain
+separate. When the snapshotted tenant policy requires four eyes, the creator,
+investigator and recommender cannot make the final decision.
+
+Restricted command narratives remain only in the discipline event authority.
+Shared workflow, notification intent and general audit evidence receive a
+redacted command label and case identity rather than the sensitive reason.
+
+The case snapshots its reviewed policy/version, legal basis and decision due
+date. Those inputs are evidence, not rules inferred from the pilot Visio. One
+tenant/Employee/violation identity prevents a second authoritative case for the
+same violation. Existing employees and handoffs receive no synthetic cases or
+events; shared workflow remains coordination evidence only.
+
+### D-048 — Statutory discipline clocks are computed and restricted existence is confidential
+
+Accepted: 2026-09-02
+
+The verified Article 123 clock is server authority rather than a user-selected
+deadline. For an ordinary case, the service computes six calendar months from
+the violation or last continuing date and one calendar month from discovery,
+then uses the earlier limit. Full-property-liability cases replace only the
+occurrence limit with one calendar year. Evidenced medical, annual or personal
+leave and competent investigation periods suspend both clocks; overlapping
+periods are merged so time is not counted twice. The rule version, inputs,
+suspensions and both calculated limits are snapshotted on the restricted case.
+
+A sanction may not be imposed after the computed deadline. Its expiry is one
+calendar year from the server decision date, and early removal requires a
+canonical written/electronic decision. Tenant policy remains separately
+versioned evidence and cannot override the statutory maximum.
+
+Discipline existence is itself restricted. Without
+`hr.discipline.confidential.read`, APIs expose no real list or aggregate count.
+Canonical documents linked to a discipline case are hidden across document
+listing, version metadata, version upload, lifecycle mutation and file download
+unless that confidential permission is present; document classification rules
+still apply independently.
+
+Migration `0093` was still repository-only: documented production remained at
+`0080` and the primary local business database at `0090`. The new columns and
+checks therefore extend `0093` without rewriting any applied business data or
+changing an already deployed checksum. Verification passed 27 focused tests,
+the full 394-test suite, clean `0001` to `0093` migration and the disposable
+Phase 2 PostgreSQL integration; the disposable database was removed afterward.
+
 ## Active Hypotheses
 
 ### H-001 — Customer journey

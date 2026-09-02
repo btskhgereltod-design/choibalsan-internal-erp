@@ -25,6 +25,14 @@ const DEFINITIONS={
     table:"hr_employment_exit_cases",eventTable:null,foreignKey:null,
     workflowType:"hr_employment_exit",subjectType:"hr_employment_exit_case",stateColumn:"status",assigneeColumn:null,
   },
+  transfer:{
+    table:"hr_transfer_cases",eventTable:"hr_transfer_case_events",foreignKey:"transfer_case_id",
+    workflowType:"hr_transfer",subjectType:"hr_transfer_case",stateColumn:"status",assigneeColumn:null,
+  },
+  discipline:{
+    table:"hr_discipline_cases",eventTable:"hr_discipline_case_events",foreignKey:"discipline_case_id",
+    workflowType:"hr_discipline",subjectType:"hr_discipline_case",stateColumn:"status",assigneeColumn:null,
+  },
   leave:{
     table:"hr_leave_requests",eventTable:"hr_leave_events",foreignKey:"leave_request_id",
     workflowType:"hr_leave",subjectType:"hr_leave_request",stateColumn:"status",assigneeColumn:"assigned_user_id",
@@ -58,8 +66,10 @@ function authorizeAny(req,permissions){
   if(!(permissions||[]).some(permission=>granted.has(permission)))fail("DOMAIN_FORBIDDEN",403,{permissions});
   if(!granted.has("workflow.coordinate"))fail("WORKFLOW_FORBIDDEN",403,{permissions:["workflow.coordinate"]});
 }
-function authorizeRestricted(req,record){
-  if(record?.confidentiality==="restricted"&&!(req.user.permissions||[]).includes("documents.restricted.read"))fail("RESTRICTED_DOCUMENT_FORBIDDEN",403);
+function authorizeRestricted(req,record,domain){
+  if(record?.confidentiality!=="restricted")return;
+  const required=domain==="discipline"?"hr.discipline.confidential.read":"documents.restricted.read";
+  if(!(req.user.permissions||[]).includes(required))fail("RESTRICTED_DOCUMENT_FORBIDDEN",403);
 }
 function canonicalPayload(payload){return payloadHash(payload)}
 async function lock(client,scope){await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",[scope])}
@@ -85,7 +95,7 @@ async function insertDomainEvent(client,def,{organizationId,id,version,eventType
   [organizationId,id,version,eventType,fromState,toState,actorUserId,String(reason||""),JSON.stringify(detail),requestId]);
 }
 
-async function createAggregate({req,domain,initialState,idempotencyKey,payload,permissions,insert,documentIds=[]}){
+async function createAggregate({req,domain,initialState,idempotencyKey,payload,permissions,insert,documentIds=[],after=null}){
   authorizeAny(req,permissions);
   const def=definition(domain),org=req.user.organization_id,actor=req.user.id,requestId=key(idempotencyKey),hash=canonicalPayload(payload);
   return withTenantTransaction(org,async client=>{
@@ -103,6 +113,7 @@ async function createAggregate({req,domain,initialState,idempotencyKey,payload,p
     for(const documentId of documentIds.filter(Boolean)){
       await recordDocumentLink({req,documentId:uuid(documentId,"document_id"),entityType:def.subjectType,entityId:id,source:"domain",requiredPermissions:[],client});
     }
+    if(after)await after(client,{item:updated,requestId,actorUserId:actor,organizationId:org});
     await writeAudit(req,`${domain}.created`,def.subjectType,id,{version:0,state:initialState,requestId},client);
     return {item:updated,replayed:false};
   });
@@ -124,10 +135,12 @@ async function storeCommandReceipt(client,def,{organizationId,id,command,request
 }
 
 async function transitionAggregate({req,domain,id,expectedVersion,command,toState,allowedFrom,permissions,
-  reason="",comment="",decision=null,stepCode="",idempotencyKey,detail={},set={},precondition=null,after=null,documentIds=[]}){
+  reason="",comment="",decision=null,stepCode="",idempotencyKey,detail={},set={},precondition=null,after=null,documentIds=[],coordinationReason=null}){
   authorizeAny(req,permissions);
   const def=definition(domain),org=req.user.organization_id,actor=req.user.id,entityId=uuid(id),version=expected(expectedVersion),requestId=key(idempotencyKey);
+  const safeCoordinationReason=coordinationReason===null?reason:String(coordinationReason);
   const input={domain,id:entityId,expectedVersion:version,command,toState,reason,comment,decision,stepCode,detail,set};
+  if(coordinationReason!==null)input.coordinationReason=safeCoordinationReason;
   const hash=canonicalPayload(input);
   return withTenantTransaction(org,async client=>{
     await lock(client,`domain-command:${org}:${domain}:${entityId}:${requestId}`);
@@ -136,13 +149,13 @@ async function transitionAggregate({req,domain,id,expectedVersion,command,toStat
     const found=await client.query(`SELECT * FROM ${def.table} WHERE organization_id=$1 AND id=$2 FOR UPDATE`,[org,entityId]);
     if(!found.rowCount)fail("DOMAIN_RECORD_NOT_FOUND",404);
     const current=found.rows[0],fromState=current[def.stateColumn];
-    authorizeRestricted(req,current);
+    authorizeRestricted(req,current,domain);
     if(Number(current.version)!==version)fail("DOMAIN_VERSION_CONFLICT",409,{expectedVersion:version,actualVersion:Number(current.version)});
     if(!allowedFrom.includes(fromState))fail("INVALID_DOMAIN_TRANSITION",409,{fromState,command,toState});
     if(precondition)await precondition(client,current);
     const coordinated=await transitionWorkflowCase({
       req,caseId:current.workflow_case_id,expectedVersion:version,transitionName:command,toState,
-      domainFromState:fromState,domainToState:toState,decision,stepCode,reason,comment,detail:{...detail,domain},
+      domainFromState:fromState,domainToState:toState,decision,stepCode,reason:safeCoordinationReason,comment,detail:{...detail,domain},
       idempotencyKey:requestId,requiredPermissions:["workflow.coordinate"],client,
     });
     const allowedColumns={
@@ -150,6 +163,8 @@ async function transitionAggregate({req,domain,id,expectedVersion,command,toStat
       correspondence:new Set(["resolution","response_document_id","management_resolution","closed_at","due_date","assigned_unit_id"]),
       appointment:new Set(["effective_date","order_document_id","employee_id"]),
       exit:new Set(["order_document_id"]),leave:new Set(["decision_note","decided_by","decided_at"]),
+      transfer:new Set(["consent_status","consent_document_id","workload_assessment","proposal_document_id","decision_document_id","acknowledgement_document_id","implemented_assignment_id","implemented_at","completed_at"]),
+      discipline:new Set(["investigator_user_id","notice_document_id","notice_at","explanation_status","explanation_document_id","explanation_at","investigation_summary","finding","recommendation","recommended_action_code","recommendation_document_id","recommendation_by","recommendation_at","decision_outcome","sanction_code","decision_reason","decision_document_id","decision_by","decision_at","effective_from","sanction_expires_on","acknowledgement_status","acknowledgement_document_id","acknowledged_at","removed_at","removal_reason","removal_document_id","dispute_status","dispute_reference","dispute_document_id","dispute_resolution","closed_at"]),
       archive:new Set(["legal_hold_checked_at","location","box_no","shelf_no"]),
       archive_access:new Set(["decided_by","decided_at","issued_by","issued_at","returned_to","returned_at","due_back_at","condition_note"]),
       archive_destruction:new Set(["external_approval_reference"]),
@@ -163,7 +178,7 @@ async function transitionAggregate({req,domain,id,expectedVersion,command,toStat
     await insertDomainEvent(client,def,{organizationId:org,id:entityId,version:Number(updated.version),eventType:command,fromState,toState,actorUserId:actor,reason,detail:{...detail,payloadSha256:hash},requestId});
     for(const documentId of documentIds.filter(Boolean))await recordDocumentLink({req,documentId:uuid(documentId,"document_id"),entityType:def.subjectType,entityId:entityId,source:"domain",requiredPermissions:[],client});
     if(after)await after(client,{current,updated,requestId,actorUserId:actor,organizationId:org});
-    await writeAudit(req,`${domain}.${command}`,def.subjectType,entityId,{version:Number(updated.version),previousState:fromState,resultingState:toState,reason,requestId},client);
+    await writeAudit(req,`${domain}.${command}`,def.subjectType,entityId,{version:Number(updated.version),previousState:fromState,resultingState:toState,reason:safeCoordinationReason,requestId},client);
     const result={item:updated,replayed:false};
     await storeCommandReceipt(client,def,{organizationId:org,id:entityId,command,requestId,hash,actorUserId:actor,result});
     return result;
@@ -180,7 +195,7 @@ async function assignAggregate({req,domain,id,expectedVersion,assigneeUserId,ass
     const command="assign";
     const replay=await findCommandReplay(client,def,org,entityId,command,requestId,hash);if(replay)return replay;
     const found=await client.query(`SELECT * FROM ${def.table} WHERE organization_id=$1 AND id=$2 FOR UPDATE`,[org,entityId]);
-    if(!found.rowCount)fail("DOMAIN_RECORD_NOT_FOUND",404);const current=found.rows[0];authorizeRestricted(req,current);
+    if(!found.rowCount)fail("DOMAIN_RECORD_NOT_FOUND",404);const current=found.rows[0];authorizeRestricted(req,current,domain);
     if(Number(current.version)!==version)fail("DOMAIN_VERSION_CONFLICT",409,{actualVersion:Number(current.version)});
     const coordinated=await assignWorkflowCase({req,caseId:current.workflow_case_id,expectedVersion:version,assigneeUserId:assignee,reason,idempotencyKey:requestId,requiredPermissions:["workflow.coordinate"],client});
     let nextState=current[def.stateColumn];

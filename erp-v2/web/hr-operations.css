@@ -1,11 +1,15 @@
 .hr-workspace-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 4;
   display: flex;
   align-items: center;
   gap: 8px;
   overflow-x: auto;
-  padding: 0 0 14px;
-  margin: 0 0 16px;
+  padding: 14px 34px;
+  margin: 0 -34px 12px;
   min-height: 43px;
+  background: #f4f7fb;
   border-bottom: 1px solid #dbe4f0;
   scrollbar-width: thin;
 }
@@ -28,6 +32,14 @@
   color: #fff;
   box-shadow: 0 6px 16px rgba(39,110,233,.2);
 }
+.hr-workspace-subtabs { display: flex; align-items: center; gap: 7px; overflow-x: auto; margin: 0 0 16px; padding: 0 0 5px; scrollbar-width: thin; }
+.hr-workspace-subtabs button { flex: 0 0 auto; border: 1px solid #d7e0eb; border-radius: 999px; background: #fff; color: #53637a; padding: 8px 11px; font-size: 12px; font-weight: 700; cursor: pointer; }
+.hr-workspace-subtabs button:hover,.hr-workspace-subtabs button.active { border-color: #9dbcf2; background: #edf4ff; color: #205fce; }
+.hr-quick-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 10px; padding: 18px; }
+.hr-quick-grid button { padding: 16px; border: 1px solid #dbe4f0; border-radius: 12px; background: #fff; color: #34445c; text-align: left; }
+.hr-quick-grid button:hover { border-color: #9dbcf2; background: #f6f9ff; }
+.hr-quick-grid strong,.hr-quick-grid span { display: block; }
+.hr-quick-grid span { margin-top: 5px; color: #77869a; font-size: 12px; }
 .hr-edit.danger { color: #c0392b; border-color: #f2c8c3; }
 .hr-tag.pending { background: #fff5dd; color: #996000; }
 .hr-tag.approved,.hr-tag.completed,.hr-tag.closed { background: #e8f9ef; color: #11854c; }
@@ -44,3 +56,5 @@
 .hr-checklist>span { display: block; color: #77869a; font-size: 12px; margin-bottom: 14px; }
 .hr-checklist label { display: block; padding: 9px 0; border-top: 1px solid #edf1f6; font-weight: 650; }
 .hr-checklist input { margin-right: 8px; }
+@media(max-width:900px){.hr-quick-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:720px){.hr-workspace-tabs{margin:0 -14px 12px;padding:10px 14px}.hr-quick-grid{grid-template-columns:1fr}}

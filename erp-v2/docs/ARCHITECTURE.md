@@ -1,6 +1,6 @@
 # OVERVA Architecture
 
-Last reviewed: 2026-09-01
+Last reviewed: 2026-09-02
 
 This is a current map and a stable default, not a permanent restriction. For
 production operations, see `../PRODUCTION_DEPLOYMENT.md`. For data rules, see
@@ -58,6 +58,56 @@ writes attributable audit evidence, records an exact-payload idempotency
 receipt, and creates notification intent. Those writes share one PostgreSQL
 transaction. `workflow_cases.coordination_state` is never the authoritative HR,
 correspondence, complaint or archive state.
+
+Complaint resolution may request additional information, deliver an approved
+response and optionally remain open for implementation monitoring. A
+`complaint_hr_handoff` is an explicit, versioned and auditable request for HR
+assessment. It remains Complaints-owned coordination evidence and never creates
+or implies a disciplinary case. A later HR intake command may accept it only by
+atomically creating a separately authoritative confidential discipline case;
+decline or cancellation must preserve attributable evidence.
+
+Employee transfer/rotation is a separate HR authority implemented by migration
+`0092`. Its source and target placements reference canonical Assignments,
+Departments and Positions; consent, proposal and decision evidence reference
+canonical Documents. Only an approved, effective `implement` command ends the
+current primary Assignment and creates a new active effective-dated row in the
+same tenant transaction. Temporary completion restores the prior placement as
+another new row, never by reopening or deleting history. Shared workflow state
+coordinates review but is not placement authority.
+
+Disciplinary case authority is implemented separately by migration `0093` and
+is always restricted. Complaint handoff acceptance and new-case creation share
+one tenant transaction, but the handoff remains Complaints-owned request
+evidence and never becomes a finding. HR discipline owns notice, explanation,
+investigation, finding, recommendation, independent decision,
+acknowledgement, effective period, expiry/removal and dispute state.
+
+Discipline list/detail, intake, investigation, recommendation, decision and
+administration use distinct backend permissions. Per-case policy snapshots
+carry the reviewed tenant policy and four-eyes requirement. The statutory
+Article 123 clock is server-computed as the earlier applicable occurrence and
+discovery deadline, including evidenced suspension periods, and preserves its
+versioned calculation snapshot. Sanction expiry is one calendar year from the
+server decision date; early removal requires canonical written/electronic
+evidence. No tenant-specific deadline or approver is inferred from the pilot
+Visio. A tenant/Employee/violation identity guard prevents duplicate
+authoritative cases, while append-only events, audit, canonical Documents,
+RLS, expected versions and exact-payload idempotency preserve evidence.
+Discipline may not be represented as a generic Employee event or as
+shared-workflow authority.
+
+Sensitive discipline reasons remain in the restricted discipline event stream.
+Shared workflow, outbox and general audit evidence receive only an opaque
+command label, state/version and case identity; they do not receive the
+restricted narrative.
+
+Users without `hr.discipline.confidential.read` receive no real discipline
+list, count or search facts. Canonical documents linked to a discipline case
+remain hidden from document lists, version metadata, mutation and file download
+unless that same confidential permission is present, even when the user can
+otherwise manage documents. Restricted document classification additionally
+requires `documents.restricted.read`.
 
 Formal evidence is referenced through canonical `documents` plus append-only
 `document_links`. Existing attachment arrays, legacy document entity columns,

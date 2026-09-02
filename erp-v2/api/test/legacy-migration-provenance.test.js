@@ -51,9 +51,9 @@ test("canonical decision payload hashing is stable and conflict-sensitive",()=>{
 });
 
 test("review UI shows grouped evidence, deterministic recommendation, batch review and no import action",()=>{
-  const ui=read("../web/legacy-migration-review.js"),html=read("../web/index.html");
+  const ui=read("../web/legacy-migration-review.js"),administration=read("../web/administration.js"),html=read("../web/index.html");
   for(const marker of ["Grouped review queue","source мөрийн дэлгэрэнгүй","Recommendation","Reviewer note","Decision history","NO IMPORT","APPROVE_RECOMMENDATION","SEND_MANUAL_REVIEW"])assert.match(ui,new RegExp(marker));
-  assert.match(html,/data-legacy-review-nav/);assert.match(html,/legacy-migration-review\.js\?v=1/);
+  assert.match(administration,/data-legacy-review-nav/);assert.match(html,/legacy-migration-review\.js\?v=2/);
   assert.doesNotMatch(ui,/legacy-migration[^`"']*\/import|data-legacy-import|data-legacy-commit/i);
 });
 
