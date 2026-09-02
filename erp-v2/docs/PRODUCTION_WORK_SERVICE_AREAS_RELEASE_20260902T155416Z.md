@@ -94,3 +94,28 @@ versions. These equal the immediate pre-migration values.
 
 The backup passed SHA-256 verification, PostgreSQL custom-dump listing, and
 uploads archive listing. Every mirrored file was independently hash-verified.
+
+## Work Board navigation hierarchy follow-up
+
+User-review commit `48f90b1923fa5725ced3fc51a168c4c0333baf69` is also
+live. The broad source controls **Бүгд**, **Гэрэлтүүлэг**, **Камер**, and
+**Бусад** now have a larger click target, label and count badge so they remain
+visually above the smaller service-area row. The redundant **Миний хариуцсан**
+and **+ Шууд шинэ ажил** controls were removed from the Work Board header. The
+underlying governed direct-create capability remains available for a future
+reviewed placement and for intake conversion; no API authority was weakened.
+
+- Follow-up artifact ID: `20260902T161650Z`
+- Final Web image:
+  `sha256:d06d76ca38f04b4e720c37c0ac1fef1b962b8406f46c3e62282d7fe61a4a08f1`
+- Rollback Web image:
+  `sha256:37e19caeaeb7cc4b458d16a351604ed038bacbfc3a4a0d818b3696bc18c15777`
+- Rollback archive SHA-256:
+  `28AF04562D641E0FFE251FDFBFC8D10EA532C321825A59C140039D8350DAFC79`
+- Off-device rollback directory:
+  `D:\OVERVA\release-artifacts\20260902T161650Z`
+
+The full `418/418` suite and candidate static contracts passed. Production now
+serves `app.js?v=47` and `workflow.css?v=8`; external App and API returned HTTP
+`200`, and every production service remained healthy. This was a Web-only
+release with no migration or production business-data write.
