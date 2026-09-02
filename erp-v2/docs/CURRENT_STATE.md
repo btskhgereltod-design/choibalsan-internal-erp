@@ -46,7 +46,10 @@ validated at enterprise scale.
   disclosure. Existing Work Order history and structured safety-review dialogs
   remain the only decision path; risk, incident, briefing, training evidence
   and route records are grouped under a separate internal records tab. This
-  browser refinement is repository-verified but is not yet production-deployed.
+  browser refinement is production-deployed through the web-only controlled
+  release recorded in
+  `PRODUCTION_HSE_ROLE_WORKSPACE_RELEASE_20260902T112355Z.md`; API image, schema
+  `0094` and production business data were not changed by that release.
 - Migration `0094` also extends the existing notification type constraint
   without removing any previously accepted value. It admits the
   `work_order_workflow` and `work_order_returned` notifications emitted by the
