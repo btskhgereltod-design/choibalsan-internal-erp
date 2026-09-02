@@ -932,6 +932,30 @@ must not copy Choibalsan templates, routes, data or terminology automatically;
 its onboarding evidence may instead instantiate organization-owned templates
 through the same generic capability.
 
+### D-050 — Operational intake and execution keep separate truths
+
+Accepted: 2026-09-02
+
+An operational defect, inspection finding, complaint-derived need or other
+reported condition remains an `operational_incident` until it is resolved. A
+Work Order remains the canonical authority for assignment, execution, safety
+review and management acceptance. The two are connected by an explicit,
+tenant-scoped, append-only link; neither record is copied into a competing
+generic work registry.
+
+Organization-wide triage authority decides whether an intake item becomes work,
+selects its configurable work type and responsible unit, and assigns an owner.
+Only then may a configured safety workflow begin. Possible same-object work is
+shown as a duplicate warning, while a direct active link is a hard duplicate
+stop. Closing the final active linked work may resolve its source condition in
+the same transaction, with attributable incident evidence.
+
+The Choibalsan pilot assigns this triage and final-acceptance responsibility to
+its chief engineer through existing Work Order permissions. That local role
+mapping is not a universal OVERVA job-title rule. Lighting, camera, HSE, fleet,
+facilities and future sources may feed the same generic intake boundary without
+becoming mandatory modules or sharing another tenant's configuration.
+
 ## Active Hypotheses
 
 ### H-001 — Customer journey

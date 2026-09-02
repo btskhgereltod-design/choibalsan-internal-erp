@@ -6,6 +6,35 @@ This document answers one question: **what exists in the repository now?** It
 does not claim that every implemented foundation is complete or production-
 validated at enterprise scale.
 
+## Unified operational intake and Work Order coordination
+
+- The repository migration path reaches `0095`; production remains at `0094`
+  until the controlled rollout for this capability completes. Migration `0095`
+  adds the tenant-scoped, append-only
+  `operational_incident_work_orders` coordination link. Existing operational
+  incidents remain the source truth for defects, inspection findings and other
+  needs, while the canonical Work Order remains execution and approval truth.
+- The Work Board now presents seven understandable stages: issue/need intake,
+  chief-engineer decision, HSE start authorization, execution, HSE completion
+  inspection, chief-engineer acceptance and recently completed work. The
+  separate closed view retains the full completed/cancelled history.
+- Intake is permission-gated to organization-wide Work Order readers who can
+  create work. It combines generic incident domains rather than hard-coding
+  lighting or camera as universal product rules, shows possible same-object
+  active work as a duplicate warning, and prevents one incident from creating a
+  second active linked Work Order.
+- A routed Work Order without an assignee stays in the chief-engineer decision
+  stage. Assignment moves it to HSE start review and notifies the configured
+  safety authority; this removes the false HSE backlog caused by treating every
+  imported unassigned item as already submitted for safety authorization.
+  Final accepted completion resolves the linked source incident in the same
+  tenant transaction and appends incident evidence; no historical approval or
+  safety review is fabricated.
+- Verification passes the full `409/409` repository suite and JavaScript syntax
+  checks. Clean `0001` through `0095` migration and an idempotent rerun passed on
+  a disposable local PostgreSQL database. The production migration entrypoint
+  also refreshed runtime grants there, and the disposable database was removed.
+
 ## Work-order HSE permits and governed field-work closeout
 
 - The repository and production migration paths now reach `0094`; the primary
