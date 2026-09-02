@@ -6,6 +6,38 @@ This document answers one question: **what exists in the repository now?** It
 does not claim that every implemented foundation is complete or production-
 validated at enterprise scale.
 
+## Lighting operations workspace
+
+- The Choibalsan lighting workspace is now a role-focused projection of the
+  same canonical operational objects, incidents, fixed assets, service areas,
+  and Work Orders used elsewhere in OVERVA. It does not create a second work
+  engine. The internal views are **Нүүр**, **Объект ба тоноглол**, **Гэмтэл,
+  үзлэг**, **Ажлын гүйцэтгэл**, **Ашиглалтын хяналт**, and **Судалгаа,
+  тайлан**. Selecting one of the tenant-configured five lighting areas filters
+  every view consistently.
+- The workspace no longer presents the old mixed **Нийт объект** total as one
+  comparable measure. Each area separately exposes operational/fixed-asset
+  record count, open issue count, and active canonical Work Order count. The
+  current production projection is road `117/36/12`, ger-area `191/108/4`,
+  tower `143/60/0`, panel `295/0/0`, and traffic-signal `12/0/1` for
+  record/open-issue/active-work respectively. Two open issues and ten active
+  lighting works remain explicitly unclassified because retained evidence is
+  insufficient; the UI does not guess their area.
+- Operational objects remain separate from accounting fixed assets. Road,
+  ger-area and tower operating records open the existing object dossier;
+  panel/board and traffic-signal equipment remain linked to the fixed-asset
+  master. **Ажлын гүйцэтгэл** links back to the organization-wide Work Board
+  and preserves its HSE and chief-engineer workflow.
+- The current canonical records expose object, light/head, meter-number and GPS
+  completeness. Legacy on/off schedules, monthly meter readings and electricity
+  billing are identified as the next governed integration, not represented as
+  live OVERVA authority yet. The legacy application is not queried live by the
+  new workspace.
+- Implementation commit `d2f947c` is live on production API/Web at unchanged
+  schema `0098`; the controlled no-migration release is recorded in
+  `PRODUCTION_LIGHTING_WORKSPACE_RELEASE_20260902T165603Z.md`. The full
+  repository suite passes `419/419` tests.
+
 ## Purpose-aware work routing and team backlog
 
 - Repository migration `0097` adds tenant-owned work service areas as a
