@@ -1,6 +1,6 @@
 # OVERVA Current State
 
-Last updated: 2026-09-02
+Last updated: 2026-09-03
 
 This document answers one question: **what exists in the repository now?** It
 does not claim that every implemented foundation is complete or production-
@@ -21,8 +21,10 @@ validated at enterprise scale.
   totals. The full repository suite passes `418/418`; a production-clone
   rehearsal preserved business invariants, seeded five Choibalsan areas and
   zero other-tenant areas, and left two source-ambiguous open lighting records
-  visibly unclassified. Current production remains at `0096` until the
-  controlled `0097` rollout is completed.
+  visibly unclassified. The controlled rollout of implementation commit
+  `804659b` plus tenant-RLS read follow-up `e7cc947` is live at production
+  schema `0097` and recorded in
+  `PRODUCTION_WORK_SERVICE_AREAS_RELEASE_20260902T155416Z.md`.
 - The controlled API/Web rollout of commit `57f6c4f` is live at schema `0096`
   and recorded in
   `PRODUCTION_WORK_BOARD_SOURCE_VIEWS_RELEASE_20260902T150131Z.md`. Production
