@@ -68,6 +68,7 @@ test("unified board exposes intake, exception decision, team backlog, governed c
 
 test("lighting service areas are tenant configuration and filter the same canonical flow",()=>{
   const migration=read("migrations/0097_work_service_areas.sql");
+  const laneTitles=read("migrations/0098_work_service_area_lane_titles.sql");
   const route=read("src/routes/work-orders.js");
   const app=read("../web/app.js"),html=read("../web/index.html"),css=read("../web/workflow.css");
   assert.match(migration,/CREATE TABLE organization_work_service_areas/);
@@ -82,6 +83,12 @@ test("lighting service areas are tenant configuration and filter the same canoni
   assert.match(route,/serviceAreaId: z\.string\(\)\.uuid\(\)/);
   assert.match(route,/incident\?\.service_area_id/);
   assert.match(route,/area\.domain AS service_area_domain/);
+  assert.match(route,/intake_lane_title,team_lane_title/);
+  assert.match(laneTitles,/WHERE organization\.id=area\.organization_id[\s\S]*organization\.slug='choibalsan-hugjil'/);
+  assert.match(laneTitles,/Авто замын гэрлийн асуудал, хэрэгцээ/);
+  assert.match(laneTitles,/Гэрлэн дохионы хэсгийн ажил/);
+  assert.match(app,/selectedArea\.intake_lane_title/);
+  assert.match(app,/selectedArea\.team_lane_title/);
   assert.match(route,/router\.get\("\/options"[\s\S]*withTenantTransaction\(req\.user\.organization_id,client=>Promise\.all/);
   assert.match(route,/router\.get\("\/"[\s\S]*withTenantTransaction\(req\.user\.organization_id,client=>client\.query/);
   assert.match(app,/data-work-area-filter/);

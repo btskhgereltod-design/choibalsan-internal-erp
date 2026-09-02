@@ -208,7 +208,7 @@ router.get("/options", asyncHandler(async(req,res)=>{
     LEFT JOIN departments d ON d.organization_id=r.organization_id AND d.id=r.organization_unit_id
     LEFT JOIN organization_workflow_policies p ON p.organization_id=r.organization_id AND p.id=r.workflow_policy_id AND p.active=true
     WHERE wt.organization_id=$1 AND wt.active=true ORDER BY wt.category,wt.name`,[req.user.organization_id]),
-  client.query(`SELECT id,domain,code,name,icon,sort_order
+  client.query(`SELECT id,domain,code,name,icon,sort_order,intake_lane_title,team_lane_title
     FROM organization_work_service_areas
     WHERE organization_id=$1 AND active=true ORDER BY domain,sort_order,name`,[req.user.organization_id])]));
   res.json({items:result.rows,serviceAreas:serviceAreas.rows});
