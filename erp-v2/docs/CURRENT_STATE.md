@@ -8,10 +8,12 @@ validated at enterprise scale.
 
 ## Confidential disciplinary cases
 
-- Repository migrations now reach `0093`. The existing local development
-  business database remains at `0090`, documented production remains `0080`,
-  and neither was connected to, migrated or written. Clean `0001` to `0093`
-  was verified on a disposable database and removed afterward.
+- Repository migrations and production now reach `0093`. The existing local
+  development business database remains at `0090`. Production was migrated
+  from `0090` through `0093` on 2026-09-02 by the controlled Employee
+  Relations release recorded in
+  `PRODUCTION_EMPLOYEE_RELATIONS_RELEASE_20260902T063615Z.md`. Clean `0001` to
+  `0093` was also verified on a disposable database and removed afterward.
 - Migration `0093` adds a separately authoritative, always-`restricted`
   `hr_discipline_case` aggregate. It preserves reviewed policy/legal basis,
   notice, explanation or refusal, investigation, finding, recommendation,
@@ -235,8 +237,10 @@ validated at enterprise scale.
 - Phase 2 domain migration `0086` remains the original domain baseline;
   Complaints is extended by repository migration `0091` and employee transfer
   by `0092`; confidential discipline is added by `0093`, while the local
-  business database remains at `0090`. Documented production remains `0080`
-  and was not connected to, migrated or written.
+  business database remains at `0090`. Production is at `0093`; the controlled
+  rollout preserved all measured HR, attendance, Assignment, Work Order,
+  complaint and document counts/fingerprints and created no inferred Employee
+  Relations case or event.
   Migration `0086` is additive except for explicit widening of existing leave,
   correspondence and archive state checks. It creates no historical cases or
   events and does not infer any employee number.
@@ -291,8 +295,8 @@ validated at enterprise scale.
 
 - Repository migrations now reach `0093`; the local development database has
   been reconciled from its known pre-release `0079` variant through `0090`.
-  The last documented production schema remains `0080`. No production
-  deployment, connection or data write was performed.
+  Production reached `0093` on 2026-09-02 through the verified additive
+  `0091`-`0093` release; API and Web run the reviewed `68a7b59` artifact.
 - Migration history remains evidentiary: the known local `0079` checksum is not
   rewritten. A narrowly matched compatibility rule permits the forward repair,
   and `0081` restores the canonical assignment identity guard and parent-delete
