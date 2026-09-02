@@ -36,6 +36,7 @@
     "smoke:platform-status": "node scripts/platform-status-smoke.js",
     "smoke:market-identity": "node scripts/market-identity-integration-smoke.js",
     "smoke:safety": "node scripts/safety-smoke.js",
+    "smoke:work-intake": "node scripts/work-intake-smoke.js",
     "smoke:administration": "node scripts/administration-smoke.js",
     "smoke:builder": "node scripts/builder-smoke.js",
     "smoke:ai-provider": "node scripts/ai-provider-smoke.js",
@@ -50,6 +51,7 @@
     "repair:legacy-assets-encoding": "node scripts/repair-legacy-assets-encoding.js",
     "repair:legacy-lighting-encoding": "node scripts/repair-legacy-lighting-encoding.js",
     "repair:legacy-camera-safety-encoding": "node scripts/repair-legacy-camera-safety-encoding.js",
+    "reconcile:legacy-work-flow": "node scripts/reconcile-legacy-work-order-flow.js",
     "test": "node --test",
     "check": "node --check src/server.js && node --check src/app.js && node --check scripts/start.js"
   },
