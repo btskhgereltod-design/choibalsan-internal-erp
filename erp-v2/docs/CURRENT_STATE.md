@@ -8,6 +8,12 @@ validated at enterprise scale.
 
 ## Purpose-aware work routing and team backlog
 
+- The controlled API/Web rollout of commit `57f6c4f` is live at schema `0096`
+  and recorded in
+  `PRODUCTION_WORK_BOARD_SOURCE_VIEWS_RELEASE_20260902T150131Z.md`. Production
+  role smoke proves the chief engineer sees all `236` current intake items,
+  while the electric and camera engineers see only their own routed department
+  queues (`206` lighting and `30` camera); an ordinary worker receives zero.
 - The repository and production migration paths reach `0096`. The controlled
   rollout of commit `1a49a1f` is recorded in
   `PRODUCTION_WORK_ROUTING_RELEASE_20260902T143412Z.md`. Migration `0096` keeps one canonical
