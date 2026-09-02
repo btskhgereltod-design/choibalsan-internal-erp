@@ -8,8 +8,9 @@ validated at enterprise scale.
 
 ## Purpose-aware work routing and team backlog
 
-- The repository migration path reaches `0096`; production remains on `0095`
-  until the controlled rollout completes. Migration `0096` keeps one canonical
+- The repository and production migration paths reach `0096`. The controlled
+  rollout of commit `1a49a1f` is recorded in
+  `PRODUCTION_WORK_ROUTING_RELEASE_20260902T143412Z.md`. Migration `0096` keeps one canonical
   Work Order engine while separating `operational_stream` (core service or
   internal operation), `assignment_kind` (normal, special or emergency), and
   the existing safety/approval workflow. These dimensions must not be inferred
@@ -39,7 +40,8 @@ validated at enterprise scale.
   and 9 exception items without changing status, workflow stage or history.
   Runtime grants, RLS (`2` Choibalsan routes, `0` other-tenant routes), all four
   checks and an idempotent `0096` rerun passed. The full repository suite passes
-  `416/416` tests.
+  `416/416` tests. Production authenticated smoke returned the same `26`
+  assigned, `9` team-backlog, `9` exception and `62` closed projection.
 
 ## Unified operational intake and Work Order coordination
 
