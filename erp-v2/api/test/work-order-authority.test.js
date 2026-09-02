@@ -6,6 +6,7 @@ const {
   WORK_ORDER_PERMISSIONS: P,
   canReadOrder,
   canAssignOrder,
+  canClaimOrder,
   canProgressOrder,
   canManageScope,
   availableStatusTransitions,
@@ -41,6 +42,16 @@ test("coordinator is limited to its unit and assigned execution",()=>{
   const assignee=user("worker-a","department-a",[P.PROGRESS,P.SCOPE_MANAGE]);
   assert.equal(canProgressOrder(assignee,order),true);
   assert.deepEqual(availableStatusTransitions(assignee,order),["pending_review","cancelled"]);
+});
+
+test("eligible coordinator can claim only a normal routed team backlog item",()=>{
+  const coordinator=user("coordinator-a","department-a",[P.ASSIGN,P.PROGRESS]);
+  const backlog={...order,status:"new",assigned_to:null,work_type_id:"type-a",operational_stream:"core_service",assignment_kind:"normal"};
+  assert.equal(canClaimOrder(coordinator,backlog),true);
+  assert.equal(canClaimOrder(coordinator,{...backlog,department_id:"department-b"}),false);
+  assert.equal(canClaimOrder(coordinator,{...backlog,assignment_kind:"special"}),false);
+  assert.equal(canClaimOrder(coordinator,{...backlog,operational_stream:null}),false);
+  assert.equal(canClaimOrder(coordinator,{...backlog,assigned_to:"worker-b"}),false);
 });
 
 test("safety reviewer can read all without assignment authority",()=>{

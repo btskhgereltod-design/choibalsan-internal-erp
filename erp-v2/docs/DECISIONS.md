@@ -956,6 +956,32 @@ mapping is not a universal OVERVA job-title rule. Lighting, camera, HSE, fleet,
 facilities and future sources may feed the same generic intake boundary without
 becoming mandatory modules or sharing another tenant's configuration.
 
+### D-051 — Routine work is pulled by the responsible team; management handles exceptions
+
+Accepted: 2026-09-02
+
+OVERVA keeps one canonical Work Order engine and models three independent
+questions explicitly: why work exists (`core_service` or
+`internal_operation`), whether the assignment is normal, special or emergency,
+and which governed safety/approval workflow applies. A purpose label must not
+grant authority or silently select a safety decision.
+
+An organization may configure deterministic intake-domain to Work-Type
+suggestions. The suggestion inherits that tenant's reviewed department and
+workflow route but remains advisory until an authorized person creates the Work
+Order. A normal, fully routed and unassigned item becomes visible to its
+responsible team. A same-department user with explicit assignment and progress
+permissions may claim it through an idempotent, audited, append-only assignment
+command. A claim starts any configured HSE gate; it does not bypass it.
+
+Missing routing, special assignments and emergencies stay in a management
+exception queue. The chief engineer oversees internal operational flow and
+retains independent final acceptance, but routine dispatch is not forced
+through that person. Choibalsan's lighting and camera mappings are tenant-owned
+pilot configuration and are not universal OVERVA rules. Fleet, facilities,
+general administration and future domains use the same engine only after their
+own reviewed configuration.
+
 ## Active Hypotheses
 
 ### H-001 — Customer journey

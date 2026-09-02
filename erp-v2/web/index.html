@@ -148,7 +148,8 @@
     <label>Ажлын төрөл ба хариуцах нэгж<select name="workTypeId" id="workOrderType"><option value="">Ердийн ажлын захиалга</option></select><small class="field-help">Ажлын төрлөөс хариуцах тасаг, зөвшөөрөл болон хяналтын урсгал автоматаар сонгогдоно.</small></label>
     <label>Холбогдох хөрөнгө<select name="assetId" id="workOrderAsset"><option value="">Хөрөнгө сонгохгүй</option></select></label>
     <label>Хариуцагч ажилтан<select name="assignedTo" id="workOrderAssignee"><option value="">Дараа хуваарилах</option></select></label>
-    <div class="form-grid"><label>Ангилал<select name="category"><option>Засвар үйлчилгээ</option><option>Үзлэг шалгалт</option><option>Суурилуулалт</option><option>Бусад</option></select></label><label>Яаралтай эсэх<select name="priority"><option value="normal">Хэвийн</option><option value="high">Өндөр</option><option value="emergency">Яаралтай</option><option value="low">Бага</option></select></label></div>
+    <div class="form-grid"><label>Ажлын зорилго<select name="operationalStream"><option value="">Төрлөөс автоматаар</option><option value="core_service">Үндсэн үйлчилгээ</option><option value="internal_operation">Дотоод үйл ажиллагаа</option></select></label><label>Үүргийн шинж<select name="assignmentKind"><option value="normal">Ердийн</option><option value="special">Тусгай үүрэг</option><option value="emergency">Яаралтай үүрэг</option></select></label></div>
+    <div class="form-grid"><label>Ангилал<select name="category"><option>Засвар үйлчилгээ</option><option>Үзлэг шалгалт</option><option>Суурилуулалт</option><option>Бусад</option></select></label><label>Эрэмбэ<select name="priority"><option value="normal">Хэвийн</option><option value="high">Өндөр</option><option value="emergency">Яаралтай</option><option value="low">Бага</option></select></label></div>
     <label>Дуусгах хугацаа<input name="dueAt" type="datetime-local"></label>
     <label>Тайлбар<textarea name="description" rows="4" maxlength="5000" placeholder="Гүйцэтгэх ажлын дэлгэрэнгүй..."></textarea></label>
     <p class="form-error" data-form-error></p><div class="dialog-actions"><button type="button" class="secondary" data-close="workOrderDialog">Болих</button><button type="submit" class="primary">Үүсгэх</button></div>
@@ -249,7 +250,7 @@
     <p class="form-error" data-form-error></p><div class="dialog-actions"><button type="button" class="secondary" data-close="passwordDialog">Болих</button><button type="submit" class="primary">Нууц үг солих</button></div>
   </form></dialog>
   <div class="toast" id="toast" role="status"></div>
-  <script src="/app.js?v=41" defer></script>
+  <script src="/app.js?v=42" defer></script>
   <script src="/employee-access.js?v=30" defer></script>
   <script src="/business-modules.js?v=35" defer></script>
   <script src="/organization-blueprint.js?v=5" defer></script>

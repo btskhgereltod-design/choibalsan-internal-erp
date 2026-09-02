@@ -41,7 +41,7 @@ test("assignment starts governed safety only after the chief engineer has chosen
   assert.match(route,/startSafetyPermission/);
 });
 
-test("unified board exposes intake, chief decision, governed checks, acceptance and done",()=>{
+test("unified board exposes intake, exception decision, team backlog, governed checks, acceptance and done",()=>{
   const app=read("../web/app.js"),html=read("../web/index.html"),css=read("../web/workflow.css");
   for(const title of ["Асуудал ба хэрэгцээ","Ерөнхий инженерийн шийдвэр","ХАБЭА эхлэх зөвшөөрөл",
     "Гүйцэтгэж буй","ХАБЭА дуусгалтын шалгалт","Ерөнхий инженерийн хүлээн авалт","Дууссан"]){
@@ -51,7 +51,9 @@ test("unified board exposes intake, chief decision, governed checks, acceptance 
   assert.match(app,/data-intake-id/);
   assert.match(app,/related_open_work_count/);
   assert.match(html,/name="incidentId"/);
-  assert.match(css,/repeat\(7/);
+  assert.match(app,/Багийн хийх ажлууд/);
+  assert.match(app,/data-claim-work/);
+  assert.match(css,/repeat\(8/);
 });
 
 test("final acceptance resolves its linked source without inventing approval history",()=>{

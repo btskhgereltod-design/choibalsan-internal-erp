@@ -37,6 +37,19 @@ function canAssignOrder(user, order) {
     || order.department_id === user.department_id;
 }
 
+function canClaimOrder(user, order) {
+  if (!hasPermission(user, WORK_ORDER_PERMISSIONS.ASSIGN)
+    || !hasPermission(user, WORK_ORDER_PERMISSIONS.PROGRESS)) return false;
+  return Boolean(order
+    && order.assigned_to == null
+    && order.status === "new"
+    && order.department_id != null
+    && order.department_id === user.department_id
+    && order.work_type_id != null
+    && order.operational_stream != null
+    && order.assignment_kind === "normal");
+}
+
 function canProgressOrder(user, order) {
   if (!hasPermission(user, WORK_ORDER_PERMISSIONS.PROGRESS)) return false;
   return hasPermission(user, WORK_ORDER_PERMISSIONS.WORKFLOW_APPROVE)
@@ -62,6 +75,7 @@ module.exports = {
   hasPermission,
   canReadOrder,
   canAssignOrder,
+  canClaimOrder,
   canProgressOrder,
   canManageScope,
   availableStatusTransitions,

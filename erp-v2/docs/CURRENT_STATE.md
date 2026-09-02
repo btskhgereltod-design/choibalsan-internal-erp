@@ -6,6 +6,41 @@ This document answers one question: **what exists in the repository now?** It
 does not claim that every implemented foundation is complete or production-
 validated at enterprise scale.
 
+## Purpose-aware work routing and team backlog
+
+- The repository migration path reaches `0096`; production remains on `0095`
+  until the controlled rollout completes. Migration `0096` keeps one canonical
+  Work Order engine while separating `operational_stream` (core service or
+  internal operation), `assignment_kind` (normal, special or emergency), and
+  the existing safety/approval workflow. These dimensions must not be inferred
+  from one another.
+- Tenant-owned `organization_work_intake_routes` provide deterministic intake
+  suggestions. A suggestion selects an active Work Type and thereby its
+  configured department and workflow, but never creates or assigns work by
+  itself. Choibalsan receives exactly two reviewed pilot mappings: lighting and
+  camera repair. Other organizations receive none.
+- A normal, classified and routed unassigned Work Order appears in the
+  responsible team's backlog. An active user in that department with both
+  assignment and progress authority may claim it for themselves. Claiming is a
+  row-locked, idempotent canonical assignment with an append-only
+  `self_claim` event and audit evidence. If the Work Type has a governed safety
+  route, the claim then opens HSE start review; it never bypasses HSE.
+- Unclassified, special and emergency work remains in the chief engineer's
+  exception queue. The chief engineer retains oversight and final acceptance,
+  but does not become the mandatory manual dispatcher for every routine item.
+  The Work Board therefore presents eight stages: issue/need intake, exception
+  decision, team backlog, HSE start, execution, HSE completion, chief-engineer
+  acceptance and completed history.
+- The production-clone rehearsal preserved the `4/25/25/63/1715/106/768/103/
+  0/31/32` organization, user, employee, assignment, attendance, Work Order,
+  event, approval, safety-review, document and version invariants. It classified
+  91 Choibalsan works as core service and the 15 previously reviewed unrelated
+  legacy works as internal operations, yielding 9 claimable team-backlog items
+  and 9 exception items without changing status, workflow stage or history.
+  Runtime grants, RLS (`2` Choibalsan routes, `0` other-tenant routes), all four
+  checks and an idempotent `0096` rerun passed. The full repository suite passes
+  `416/416` tests.
+
 ## Unified operational intake and Work Order coordination
 
 - The repository and production migration paths reach `0095`. The controlled
@@ -15,10 +50,9 @@ validated at enterprise scale.
   `operational_incident_work_orders` coordination link. Existing operational
   incidents remain the source truth for defects, inspection findings and other
   needs, while the canonical Work Order remains execution and approval truth.
-- The Work Board now presents seven understandable stages: issue/need intake,
-  chief-engineer decision, HSE start authorization, execution, HSE completion
-  inspection, chief-engineer acceptance and recently completed work. The
-  separate closed view retains the full completed/cancelled history.
+- The Work Board foundation introduced seven understandable stages. Migration
+  `0096` extends it with the team-backlog stage described above; the separate
+  closed view retains the full completed/cancelled history.
 - Intake is permission-gated to organization-wide Work Order readers who can
   create work. It combines generic incident domains rather than hard-coding
   lighting or camera as universal product rules, shows possible same-object

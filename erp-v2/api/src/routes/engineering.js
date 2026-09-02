@@ -31,7 +31,7 @@ router.get("/overview", requirePermissions(WORK_ORDER_PERMISSIONS.READ_ALL), asy
   const {year,month}=parsed.data,params=[req.user.organization_id,year,month];
   const [orders,review]=await Promise.all([
     getPool().query(`SELECT w.id,w.asset_id,w.operational_object_id,w.work_type_id,w.department_id,w.workflow_policy_id,
-      w.workflow_stage,w.title,w.description,w.category,w.priority,w.status,w.assigned_to,w.created_by,w.due_at,w.created_at,w.updated_at,
+      w.workflow_stage,w.operational_stream,w.assignment_kind,w.title,w.description,w.category,w.priority,w.status,w.assigned_to,w.created_by,w.due_at,w.created_at,w.updated_at,
       COALESCE(oo.code,a.code) asset_code,COALESCE(oo.name,a.name) asset_name,
       wt.name work_type_name,d.name department_name,p.name workflow_name,p.config workflow_config,
       assignee.full_name assigned_name,creator.full_name created_by_name,

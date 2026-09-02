@@ -384,6 +384,24 @@ writer is version-1 capable and the old image is retired. Migration and full
 integration tests that create immutable evidence run only against disposable
 `overva_test_*` or `overva_rehearsal_*` databases.
 
+Work routing uses separate, explicit dimensions on the same canonical Work
+Order. `operational_stream` states why the work exists (`core_service` or
+`internal_operation`); `assignment_kind` states whether its assignment context
+is normal, special, or emergency; the existing workflow policy independently
+controls safety and approval gates. Tenant-owned intake routes may suggest an
+active Work Type from an incident domain, which in turn supplies the configured
+department and workflow. Suggestions never create or assign work automatically.
+
+A normal unassigned Work Order enters a team backlog only when Work Type,
+department, and operational stream are all known. A user may claim it only with
+both assignment and progress permissions and a matching department. The claim
+row-locks the Work Order, uses a tenant/work-order idempotency key, changes the
+current assignment snapshot, and appends a versioned `self_claim` assignment
+event plus audit evidence atomically. A configured safety workflow begins after
+the claim and cannot be skipped. Missing routing, special assignments, and
+emergencies remain explicit management exceptions; final acceptance remains an
+independent management decision.
+
 Automation sources may supply a stable tenant-scoped delivery key. Repeating
 the same key and exact payload returns the original event without rerunning
 rules, creating another Work Order, or queuing another webhook. Reusing the key
