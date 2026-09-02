@@ -17,6 +17,10 @@ validated at enterprise scale.
   User-review follow-up `af40d14` is also live: the post-intake lane is named
   **Ажил болгосон**, and fresh Web cache identities serve the segmented source
   filters instead of the browser's stale unstyled buttons.
+  Follow-up `09ab08c` then aligns that wording with department ownership: the
+  focused lighting flow is **Гэрэлтүүлгийн тасагт ирсэн → Гэрэлтүүлгийн
+  тасгийн ажил**, intake acceptance is **Тасгийн ажилд авах**, and each intake
+  badge exposes its road, ger-area, tower, traffic-signal, or other source area.
 - The repository and production migration paths reach `0096`. The controlled
   rollout of commit `1a49a1f` is recorded in
   `PRODUCTION_WORK_ROUTING_RELEASE_20260902T143412Z.md`. Migration `0096` keeps one canonical

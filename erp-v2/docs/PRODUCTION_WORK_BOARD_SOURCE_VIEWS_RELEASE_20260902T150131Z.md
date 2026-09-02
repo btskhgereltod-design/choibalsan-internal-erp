@@ -38,6 +38,24 @@ filter styling under fresh cache identities `app.js?v=44` and
 - Follow-up off-device rollback directory:
   `D:\OVERVA\release-artifacts\20260902T150906Z`
 
+The department-ownership wording follow-up commit
+`09ab08c242818ddfb59b577edddcf85c1b2b693c` is live. In a focused lighting
+view the first two lanes now read **Гэрэлтүүлгийн тасагт ирсэн** and
+**Гэрэлтүүлгийн тасгийн ажил**; accepting an intake item says
+**Тасгийн ажилд авах**. Intake badges expose the source's actual service area,
+including road, ger-area, tower, and traffic-signal lighting, instead of only
+the broad lighting domain.
+
+- Department-view artifact ID: `20260902T152310Z`
+- Final Web image:
+  `sha256:96b49a66dc56c7ca424b6dc27bdc452a8ab6e2a7b85213d99739d532ea68f34b`
+- Department-view rollback Web image:
+  `sha256:68c4faa439c8c55075f709b9fad481cbce1d897208882195d230b548a6ad87d3`
+- Department-view rollback archive SHA-256:
+  `E3AB77F778BA587A0928E0397F3B3DB465F62EC1709F0BE9EB5935681A2828CC`
+- Department-view off-device rollback directory:
+  `D:\OVERVA\release-artifacts\20260902T152310Z`
+
 Only API and Web were recreated with `--no-build --no-deps`. DB, Caddy, public
 site, backup scheduler, and monitor were not restarted. The schema remained
 `0096`, so the preserved application images are rollback-compatible.
@@ -46,7 +64,7 @@ site, backup scheduler, and monitor were not restarted. The schema remained
 
 - Full repository suite: `417/417` passed.
 - Candidate API JavaScript syntax and Web image contracts passed before
-  cutover; the final Web contains `app.js?v=44` and `workflow.css?v=6`.
+  cutover; the final Web contains `app.js?v=45` and `workflow.css?v=6`.
 - Production session/report/CSV smoke passed with 25 modules and 91
   permissions; ordinary-user report access remained HTTP `403`.
 - Authenticated role-scoped intake smoke returned:
