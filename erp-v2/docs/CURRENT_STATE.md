@@ -27,7 +27,10 @@ validated at enterprise scale.
   `PRODUCTION_WORK_SERVICE_AREAS_RELEASE_20260902T155416Z.md`. User-review
   follow-up `48f90b1` enlarges the broad source controls above the smaller
   lighting-area row and removes the redundant **Миний хариуцсан** and direct
-  create controls from the Work Board header; it is live as a Web-only release.
+  create controls from the Work Board header. Configured-title follow-up
+  `05ec981` is live at schema `0098`: each service area may own its intake and
+  team-lane wording, while broad department and canonical downstream workflow
+  titles remain stable.
 - The controlled API/Web rollout of commit `57f6c4f` is live at schema `0096`
   and recorded in
   `PRODUCTION_WORK_BOARD_SOURCE_VIEWS_RELEASE_20260902T150131Z.md`. Production

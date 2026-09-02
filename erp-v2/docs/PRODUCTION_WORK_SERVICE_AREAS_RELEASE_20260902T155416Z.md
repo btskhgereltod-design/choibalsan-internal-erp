@@ -119,3 +119,54 @@ The full `418/418` suite and candidate static contracts passed. Production now
 serves `app.js?v=47` and `workflow.css?v=8`; external App and API returned HTTP
 `200`, and every production service remained healthy. This was a Web-only
 release with no migration or production business-data write.
+
+## Configured lane-title follow-up
+
+Commit `05ec981` is live at production schema `0098`. Service-area records now
+own optional intake and team-lane titles, so selecting a specific area can
+explain that area's **асуудал, хэрэгцээ → хэсгийн ажил** flow without hard-coding
+Choibalsan terminology as a universal product rule. **Бүгд** retains the broad
+department titles; HSE, execution, acceptance, and completed remain canonical
+workflow stages.
+
+- Release artifact ID: `20260902T162749Z`
+- API image:
+  `sha256:d9dbf6482e3fbabd5685fd6c99be48afa6f0d4ba2b11febda65ec74941d8c6e8`
+- Web image:
+  `sha256:292cd24f16652633a62f23aa996ed32b789c9bf727d4fb340682fa1b29f9b0c0`
+- Migration image:
+  `sha256:6939ad24a3fa4049a6a8122764791dcd75b7daa9bc431c92153a3b3ff8c4bd7e`
+- Migration SHA-256:
+  `61DF7F38E4415E27267BEAD5C6103B74F44D47A139C4F4FC95B10BF119F72A87`
+- Rollback API image:
+  `sha256:cdea349a38b66763cc1ff30aa642b8f90eeff499b8ad0fbe60b35c13f0ca2e09`
+- Rollback Web image:
+  `sha256:d06d76ca38f04b4e720c37c0ac1fef1b962b8406f46c3e62282d7fe61a4a08f1`
+- API rollback archive SHA-256:
+  `5AB2AAAD00E85658AA1C887C185BC553226684C3070054894D14C09C015F59BA`
+- Web rollback archive SHA-256:
+  `777DA1FA013185EE2E9E5E9F3D5A3832A110D1A7F88A5E615DC79AF1DBD73C6F`
+- Off-device rollback directory:
+  `D:\OVERVA\release-artifacts\20260902T162749Z`
+
+The production-clone rehearsal applied both title checks, updated exactly five
+Choibalsan records, updated zero other-tenant records, and preserved every
+business invariant. Production authenticated smoke returned all five reviewed
+title pairs exactly. The full `418/418` suite, session/report/CSV smoke, intake
+authority smoke, public App/API checks, cache contracts `app.js?v=48` and
+`workflow.css?v=9`, long-transaction check, and lock-wait check passed. Every
+production service remained healthy, and the disposable rehearsal database was
+removed.
+
+- Pre-deploy backup: `overva-20260902T162822Z`
+- Database SHA-256:
+  `F77F7139D207AF60FBC205A0D6EE0CE372BE60D201E44D6DB73BC06E2118E634`
+- Uploads SHA-256:
+  `6772796C7F1845BCA700012D688DDFEDF5AC9DDA88B413358C48729DF6E4E0AE`
+- Metadata SHA-256:
+  `77B11F368C3C18121DE0D81DFB258214C31F0096D5A69E6531DF1CA10E15FAB5`
+- Off-device backup directory:
+  `D:\OVERVA\backups-production\overva-20260902T162822Z`
+
+The backup passed checksum, PostgreSQL custom-dump, uploads archive, and
+independent off-device mirror verification.
