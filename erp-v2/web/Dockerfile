@@ -46,6 +46,8 @@ COPY attendance.css /usr/share/nginx/html/attendance.css
 COPY attendance.js /usr/share/nginx/html/attendance.js
 COPY safety.css /usr/share/nginx/html/safety.css
 COPY safety.js /usr/share/nginx/html/safety.js
+COPY safety-workspace.css /usr/share/nginx/html/safety-workspace.css
+COPY safety-workspace.js /usr/share/nginx/html/safety-workspace.js
 COPY administration.css /usr/share/nginx/html/administration.css
 COPY hr-operations.css /usr/share/nginx/html/hr-operations.css
 COPY administration.js /usr/share/nginx/html/administration.js

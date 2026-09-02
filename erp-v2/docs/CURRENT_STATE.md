@@ -38,12 +38,21 @@ validated at enterprise scale.
   execution, HSE completion, chief approval and closed). The HSE workspace has
   dedicated start, monitored-execution and completion queues, including
   structured review and suspension actions.
+- The repository web client now presents those queues as a role-focused
+  **Миний ХАБЭА ажлын талбар** instead of rendering three long lanes at once.
+  It defaults to the start/completion decisions requiring HSE action, gives
+  completion inspection explicit priority, and provides real count-bearing
+  tabs, work/type/assignee search, due-date filters and bounded progressive
+  disclosure. Existing Work Order history and structured safety-review dialogs
+  remain the only decision path; risk, incident, briefing, training evidence
+  and route records are grouped under a separate internal records tab. This
+  browser refinement is repository-verified but is not yet production-deployed.
 - Migration `0094` also extends the existing notification type constraint
   without removing any previously accepted value. It admits the
   `work_order_workflow` and `work_order_returned` notifications emitted by the
   governed Work Order flow, so creation and return actions remain transactional
   instead of failing with PostgreSQL `23514`.
-- Verification passes the full `402/402` repository suite and JavaScript syntax
+- Verification passes the full `404/404` repository suite and JavaScript syntax
   checks. Clean `0001` to `0094` migration passed on a disposable database. A
   second disposable rehearsal inserted both Choibalsan and an unrelated future
   organization before applying the pilot migrations: the resulting template
