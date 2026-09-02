@@ -82,6 +82,8 @@ test("lighting service areas are tenant configuration and filter the same canoni
   assert.match(route,/serviceAreaId: z\.string\(\)\.uuid\(\)/);
   assert.match(route,/incident\?\.service_area_id/);
   assert.match(route,/area\.domain AS service_area_domain/);
+  assert.match(route,/router\.get\("\/options"[\s\S]*withTenantTransaction\(req\.user\.organization_id,client=>Promise\.all/);
+  assert.match(route,/router\.get\("\/"[\s\S]*withTenantTransaction\(req\.user\.organization_id,client=>client\.query/);
   assert.match(app,/data-work-area-filter/);
   assert.match(app,/esc\(area\.name\)/);
   assert.match(app,/workAreaMatches/);

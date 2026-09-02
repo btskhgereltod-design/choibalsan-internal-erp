@@ -201,16 +201,16 @@ function requireInventory(req,res) {
 router.use(authenticate, requireModule("work-orders"));
 
 router.get("/options", asyncHandler(async(req,res)=>{
-  const [result,serviceAreas]=await Promise.all([getPool().query(`SELECT wt.id,wt.code,wt.name,wt.category,wt.operational_stream,r.organization_unit_id AS department_id,
+  const [result,serviceAreas]=await withTenantTransaction(req.user.organization_id,client=>Promise.all([client.query(`SELECT wt.id,wt.code,wt.name,wt.category,wt.operational_stream,r.organization_unit_id AS department_id,
     d.name AS department_name,r.workflow_policy_id,p.name AS workflow_name
     FROM organization_work_types wt
     LEFT JOIN organization_work_type_routes r ON r.organization_id=wt.organization_id AND r.work_type_id=wt.id AND r.active=true
     LEFT JOIN departments d ON d.organization_id=r.organization_id AND d.id=r.organization_unit_id
     LEFT JOIN organization_workflow_policies p ON p.organization_id=r.organization_id AND p.id=r.workflow_policy_id AND p.active=true
     WHERE wt.organization_id=$1 AND wt.active=true ORDER BY wt.category,wt.name`,[req.user.organization_id]),
-  getPool().query(`SELECT id,domain,code,name,icon,sort_order
+  client.query(`SELECT id,domain,code,name,icon,sort_order
     FROM organization_work_service_areas
-    WHERE organization_id=$1 AND active=true ORDER BY domain,sort_order,name`,[req.user.organization_id])]);
+    WHERE organization_id=$1 AND active=true ORDER BY domain,sort_order,name`,[req.user.organization_id])]));
   res.json({items:result.rows,serviceAreas:serviceAreas.rows});
 }));
 
@@ -275,7 +275,7 @@ function routingState(item){
 }
 
 router.get("/", asyncHandler(async(req,res)=>{
-  const result=await getPool().query(`SELECT w.id,w.asset_id,w.operational_object_id,w.work_type_id,w.department_id,w.workflow_policy_id,w.workflow_stage,
+  const result=await withTenantTransaction(req.user.organization_id,client=>client.query(`SELECT w.id,w.asset_id,w.operational_object_id,w.work_type_id,w.department_id,w.workflow_policy_id,w.workflow_stage,
     w.operational_stream,w.assignment_kind,w.service_area_id,w.title,w.description,w.category,w.priority,w.status,w.assigned_to,w.created_by,w.due_at,w.created_at,w.updated_at,
     area.domain AS service_area_domain,area.code AS service_area_code,area.name AS service_area_name,area.icon AS service_area_icon,
     COALESCE(oo.code,a.code) AS asset_code,COALESCE(oo.name,a.name) AS asset_name,
@@ -294,7 +294,7 @@ router.get("/", asyncHandler(async(req,res)=>{
     LEFT JOIN users assignee ON assignee.organization_id=w.organization_id AND assignee.id=w.assigned_to
     LEFT JOIN users creator ON creator.organization_id=w.organization_id AND creator.id=w.created_by
     WHERE w.organization_id=$1 AND ($2::boolean OR w.department_id IS NULL OR w.department_id=$3 OR w.assigned_to=$4 OR w.created_by=$4)
-    ORDER BY w.created_at DESC LIMIT 500`,[req.user.organization_id,hasPermission(req.user,WORK_ORDER_PERMISSIONS.READ_ALL),req.user.department_id||null,req.user.id]);
+    ORDER BY w.created_at DESC LIMIT 500`,[req.user.organization_id,hasPermission(req.user,WORK_ORDER_PERMISSIONS.READ_ALL),req.user.department_id||null,req.user.id]));
   res.json({items:result.rows.map(item=>({...item,
     can_assign:canAssignOrder(req.user,item)&&!["completed","cancelled"].includes(item.status),
     can_claim:canClaimOrder(req.user,item),routing_state:routingState(item),
