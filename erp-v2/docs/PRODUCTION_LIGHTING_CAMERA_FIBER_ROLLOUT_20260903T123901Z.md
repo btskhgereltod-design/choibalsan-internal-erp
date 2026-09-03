@@ -147,3 +147,13 @@ A separately reviewed production reconciliation must first:
 
 Until then, production stays on the restored application images at schema
 `0105`. This rollout is not marked successful.
+
+## Later resolution
+
+The required fingerprinted reconciliation was subsequently implemented,
+rehearsed on this rollout's fresh backup, explicitly approved as a separate
+production business-data write, applied with append-only evidence and followed
+by a successful frozen application cutover. This stopped attempt remains an
+accurate historical record; see
+`PRODUCTION_LIGHTING_CAMERA_FIBER_ROLLOUT_20260903T131503Z.md` for the successful
+release.

@@ -1,11 +1,12 @@
 # Production lighting provenance reconciliation preview — 2026-09-03
 
-Status: **READY — AWAITING FINAL PRODUCTION BUSINESS-DATA GO**
+Status: **COMPLETED — PRODUCTION RECONCILIATION AND CUTOVER PASSED**
 
-This record closes the data-quality blocker from rollout
-`20260903T123901Z`. It does not claim that the production correction or the
-candidate application cutover has happened. Production remains on the restored
-prior API/Web images at schema `0105`.
+This record prepared the data-quality remediation for stopped rollout
+`20260903T123901Z`. The user later gave the separate explicit production
+business-data GO. The reconciliation and frozen application cutover completed
+successfully; final evidence is recorded in
+`PRODUCTION_LIGHTING_CAMERA_FIBER_ROLLOUT_20260903T131503Z.md`.
 
 ## Frozen identity
 
