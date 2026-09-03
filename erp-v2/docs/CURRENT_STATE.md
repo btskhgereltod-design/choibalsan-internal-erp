@@ -11,10 +11,15 @@ validated at enterprise scale.
 - Implementation commit `b29365d` freezes migrations `0099`-`0105` and the
   repository UI/API for the first
   reversible lighting and camera demo slice. It is running only on the local
-  demo database `overva_rehearsal_lighting_demo` and port `4200`; it has not been migrated or deployed
-  to production and has not written production business data. Production was
-  rechecked read-only and remains at schema `0098` and implementation commit
-  `d2f947c`.
+  demo database `overva_rehearsal_lighting_demo` and port `4200`. A controlled
+  production attempt applied the additive schema through `0105`, then rolled
+  API/Web back to the prior `d2f947c` application images after authenticated
+  verification found all 117 imported production `sl_points.code` values had
+  already been reduced to literal `??-*`. The strict classifier therefore
+  refused to guess the 36 road-lighting rows. Production currently has schema
+  `0105`, the reviewed new permission/reference configuration and inactive
+  `panel-board` setting, but zero new technical profile, camera GPS, canonical
+  network or recovery-staging business rows. The candidate UI/API is not live.
 - The lighting-specific tab is named **Гэрэлтүүлгийн объектын бүртгэл**. Its
   projection restores the legacy engineer-facing pole, head and replacement-
   pole quantities without equating the functional object with an accounting
@@ -253,8 +258,14 @@ validated at enterprise scale.
   rollback health check have now passed. The frozen rollout and rollback gate
   is recorded in
   `PRODUCTION_LIGHTING_CAMERA_FIBER_RELEASE_CANDIDATE_20260903T121824Z.md`.
-  Status remains **HOLD**: production promotion still requires an explicit GO,
-  fresh verified/off-device backup and maintenance-window cutoff checks.
+  The first production GO completed backup, migration and cutover, but the
+  authenticated lighting smoke triggered the stop condition above. Prior
+  API/Web images were restored healthy; the attempt and verified backup are
+  recorded in
+  `PRODUCTION_LIGHTING_CAMERA_FIBER_ROLLOUT_20260903T123901Z.md`. Status remains
+  **HOLD** until a separately approved, audited production provenance
+  reconciliation is implemented and rehearsed; the demo-only reconciler must
+  not be run on production.
 
 ## Lighting operations workspace
 

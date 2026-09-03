@@ -1,6 +1,6 @@
 # Lighting, camera and fiber production release candidate — 2026-09-03
 
-Status: **HOLD — technically ready, not authorized for production rollout**
+Status: **SUPERSEDED — rollout stopped and application rolled back**
 
 Implementation commit `b29365d498c3c767259784f1cc70c95666b17e40`
 contains the reviewed lighting and camera object masters, governed quick fault
@@ -187,3 +187,13 @@ decision now is **HOLD**. Keep the demo available for final visual/UAT review.
 Move to production only after the explicit GO gate above; do not bundle any
 schedule, meter-reading, billing, CAD/PTZ import or legacy-data promotion into
 this rollout.
+
+## Rollout outcome
+
+Production GO was later given for this exact candidate. Backup and migration
+passed, but the authenticated lighting smoke exposed destroyed `??-*` legacy
+code prefixes in production and returned road `0` / unclassified `117`.
+Candidate API/Web were rolled back; schema `0105` remains. See
+`PRODUCTION_LIGHTING_CAMERA_FIBER_ROLLOUT_20260903T123901Z.md` for the complete
+evidence and the new reconciliation gate. This candidate must not be retried
+unchanged.
