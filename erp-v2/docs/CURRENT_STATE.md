@@ -20,6 +20,21 @@ validated at enterprise scale.
   `0105`, the reviewed new permission/reference configuration and inactive
   `panel-board` setting, but zero new technical profile, camera GPS, canonical
   network or recovery-staging business rows. The candidate UI/API is not live.
+- Remediation commit `aee0306` adds a production-safe, default-read-only
+  reconciliation for the destroyed legacy lighting prefixes and makes the
+  workspace prefer recovered, reviewed provenance metadata over the corrupted
+  immutable import snapshot. The command is locked to schema/database,
+  organization, source system, exact reviewed counts and a SHA-256 source
+  fingerprint. Apply additionally requires explicit write, exact-fingerprint
+  and production-write flags plus an active attributed user holding
+  `operational-objects.update`. A fresh production-backup clone rehearsal
+  changed exactly 117 target objects, appended 117 object events and one tenant
+  audit, preserved the source-snapshot hash, left every core business count and
+  all non-target object hashes unchanged, and replayed with zero changes. The
+  exact production READ ONLY preview also passed with fingerprint
+  `3aa26b79d73511673a18b5a6499d307cebc89b9f8a5e89677f2cc50cf2aa8061`.
+  Production business data is still unchanged and the restored prior API/Web
+  images remain live pending a separate final production reconciliation GO.
 - The lighting-specific tab is named **Гэрэлтүүлгийн объектын бүртгэл**. Its
   projection restores the legacy engineer-facing pole, head and replacement-
   pole quantities without equating the functional object with an accounting

@@ -1174,6 +1174,34 @@ must run against `overva_rehearsal_lighting_demo`, where the reviewed `ГТ-*`
 evidence is present. This decision changes neither production schema nor
 production business data.
 
+### D-061 — Recovered legacy identity is an audited master correction, not a source rewrite
+
+Accepted: 2026-09-03
+
+When an immutable legacy import snapshot has lost an identity-bearing code but
+the reviewed read-only source still contains it, OVERVA may correct the current
+Operational Object projection only through a fingerprinted, tenant-scoped and
+attributed reconciliation. The immutable `source_import_records` row is never
+rewritten. The recovered code, source identity and reconciliation fingerprint
+are stored as current master metadata; an object event is appended for every
+changed object and one tenant audit receipt records the exact batch.
+
+The Choibalsan lighting correction is deliberately closed-world: exactly 117
+`sl_points` rows, the six reviewed prefix families and the known 36 road / 12
+traffic-signal-copy / 69 unresolved split must match by source ID and name.
+`ГТ` becomes the road-lighting projection, `ГД` remains an excluded compatibility
+copy of canonical traffic-signal Assets, and every unsupported family remains
+unclassified for human review. The command defaults to a read-only transaction;
+production apply requires database, schema, organization, source, actor,
+fingerprint and explicit production-write gates. Exact replay is a no-op, while
+a prior receipt with changed target state fails closed.
+
+This is a bounded repair of imported identity evidence, not a universal rule
+that legacy codes outrank canonical data. A reviewed canonical technical
+specification continues to own operational quantities. Application rollback
+may leave this additive provenance correction in place; reversing valid object
+events or audit evidence by deletion is forbidden.
+
 ## Active Hypotheses
 
 ### H-001 — Customer journey
