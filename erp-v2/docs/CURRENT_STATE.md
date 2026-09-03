@@ -6,9 +6,10 @@ This document answers one question: **what exists in the repository now?** It
 does not claim that every implemented foundation is complete or production-
 validated at enterprise scale.
 
-## Lighting and camera object/fault repository demo (not production)
+## Lighting and camera object/fault release candidate (not production)
 
-- Draft migrations `0099`-`0105` and the repository UI/API now contain the first
+- Implementation commit `b29365d` freezes migrations `0099`-`0105` and the
+  repository UI/API for the first
   reversible lighting and camera demo slice. It is running only on the local
   demo database `overva_rehearsal_lighting_demo` and port `4200`; it has not been migrated or deployed
   to production and has not written production business data. Production was
@@ -247,8 +248,13 @@ validated at enterprise scale.
   36 road objects, 1,747 poles, 2,582 heads, 69 unclassified objects, 12
   canonical traffic signals and zero visible `ГД-*` copies. Production stayed
   at `0098`.
-  Production promotion still requires a separate explicit request and rollout
-  gate.
+  A clean migration rehearsal, production-snapshot `0098` to `0105` rehearsal,
+  exact candidate-image release check, full `457/457` suite and old-image
+  rollback health check have now passed. The frozen rollout and rollback gate
+  is recorded in
+  `PRODUCTION_LIGHTING_CAMERA_FIBER_RELEASE_CANDIDATE_20260903T121824Z.md`.
+  Status remains **HOLD**: production promotion still requires an explicit GO,
+  fresh verified/off-device backup and maintenance-window cutoff checks.
 
 ## Lighting operations workspace
 
