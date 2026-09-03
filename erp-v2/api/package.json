@@ -58,6 +58,7 @@
     "repair:legacy-lighting-encoding": "node scripts/repair-legacy-lighting-encoding.js",
     "repair:legacy-camera-safety-encoding": "node scripts/repair-legacy-camera-safety-encoding.js",
     "reconcile:legacy-work-flow": "node scripts/reconcile-legacy-work-order-flow.js",
+    "reconcile:lighting-provenance": "node scripts/reconcile-legacy-lighting-provenance.js",
     "test": "node --test",
     "check": "node --check src/server.js && node --check src/app.js && node --check scripts/start.js"
   },

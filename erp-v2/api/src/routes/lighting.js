@@ -82,8 +82,8 @@ function uploadObjectMedia(req,res,next){mediaUpload.single("file")(req,res,erro
 
 const legacyLightingClassificationSql=`CASE
   WHEN o.source_table='sl_points' AND COALESCE(
-    NULLIF(source.source_snapshot->>'code',''),
-    NULLIF(o.metadata->>'legacyCode','')
+    NULLIF(o.metadata->>'legacyCode',''),
+    NULLIF(source.source_snapshot->>'code','')
   ) LIKE 'ГТ-%' THEN 'road-lighting'
   WHEN o.source_table='sl_ger_inventory' AND source.source_snapshot->>'category' IN(
     'Гэр хороолол','Гэр хорооллын гэрэл','??? ????????'
@@ -563,7 +563,7 @@ router.get("/workspace",asyncHandler(async(req,res)=>{
       WHERE organization_id=$1 AND domain='lighting' AND active=true
       ORDER BY sort_order,name`,[org]);
     const objects=await client.query(`SELECT o.id,o.code,o.name,o.object_type,o.domain,o.status,o.location,o.linear_length_m,o.metadata,o.updated_at,
-      COALESCE(NULLIF(source.source_snapshot->>'code',''),NULLIF(o.metadata->>'legacyCode',''),o.code) AS display_code,
+      COALESCE(NULLIF(o.metadata->>'legacyCode',''),NULLIF(source.source_snapshot->>'code',''),o.code) AS display_code,
       CASE WHEN spec.id IS NOT NULL THEN spec.pole_count::text
         WHEN classified.code='tower-lighting' THEN '1'
         WHEN classified.code='ger-area-lighting' THEN source.source_snapshot->>'total_count'
@@ -580,8 +580,8 @@ router.get("/workspace",asyncHandler(async(req,res)=>{
       CASE
         WHEN spec.id IS NOT NULL THEN 'canonical'
         WHEN o.source_table='sl_points' AND COALESCE(
-          NULLIF(source.source_snapshot->>'code',''),
-          NULLIF(o.metadata->>'legacyCode','')
+          NULLIF(o.metadata->>'legacyCode',''),
+          NULLIF(source.source_snapshot->>'code','')
         ) LIKE 'ГТ-%' THEN 'legacy_candidate'
         WHEN o.source_table='sl_points' THEN 'unclassified'
         WHEN o.source_system IS NULL THEN 'canonical'
@@ -607,8 +607,8 @@ router.get("/workspace",asyncHandler(async(req,res)=>{
         -- returned below. Keep them for provenance, but never double-list or count them.
         AND NOT (
           o.source_table='sl_points' AND COALESCE(
-            NULLIF(source.source_snapshot->>'code',''),
-            NULLIF(o.metadata->>'legacyCode','')
+            NULLIF(o.metadata->>'legacyCode',''),
+            NULLIF(source.source_snapshot->>'code','')
           ) LIKE chr(1043)||chr(1044)||'-%'
         )
       ORDER BY o.name LIMIT 1000`,[org]);
