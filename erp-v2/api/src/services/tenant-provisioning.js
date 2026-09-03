@@ -1,6 +1,8 @@
 "use strict";
 
 const bcrypt = require("bcryptjs");
+const {setTenantContext}=require("../db");
+const {ensureLightingIncidentConfiguration,ensureCameraIncidentConfiguration}=require("./lighting-configuration");
 
 async function provisionTenant(client, input) {
   const passwordHash = await bcrypt.hash(input.adminPassword, 12);
@@ -92,6 +94,14 @@ async function provisionTenant(client, input) {
      ON CONFLICT DO NOTHING`,
     [organization.id, owner.rows[0].id]
   );
+  if(enabledModules.includes("lighting-operations")){
+    await setTenantContext(client,organization.id);
+    await ensureLightingIncidentConfiguration(client,organization.id);
+  }
+  if(enabledModules.includes("camera-operations")){
+    await setTenantContext(client,organization.id);
+    await ensureCameraIncidentConfiguration(client,organization.id);
+  }
 
   return {
     organization,

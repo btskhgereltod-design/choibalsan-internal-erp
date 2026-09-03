@@ -1,5 +1,7 @@
 "use strict";
 
+const {ensureLightingIncidentConfiguration,ensureCameraIncidentConfiguration}=require("./lighting-configuration");
+
 function unique(values) {
   return [...new Set((values || []).filter(Boolean))];
 }
@@ -96,6 +98,8 @@ async function applyConfiguration(client, organizationId, userId, configuration)
        AND NOT (om.module_code=ANY($2::text[]))`,
     [organizationId, enabled, userId]
   );
+  if(enabled.includes("lighting-operations"))await ensureLightingIncidentConfiguration(client,organizationId);
+  if(enabled.includes("camera-operations"))await ensureCameraIncidentConfiguration(client,organizationId);
 
   await client.query("UPDATE organization_industry_profiles SET primary_profile=false WHERE organization_id=$1", [organizationId]);
   await client.query(

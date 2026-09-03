@@ -47,7 +47,8 @@ test("lighting UI opens one understandable object dossier",()=>{
   const shell=read("..","web","index.html");
   assert.match(ui,/data-object-dossier/);
   assert.match(ui,/Бүрэлдэхүүн хөрөнгө/);
-  assert.match(ui,/Хувийн хэргийн түүх/);
+  assert.match(ui,/Өөрчлөлтийн audit түүх/);
+  assert.doesNotMatch(ui.slice(ui.indexOf("function lightingDossierHtml"),ui.indexOf("async function openLightingDossier")),/d\.incidents|d\.workOrders/);
   assert.match(ui,/Хөрөнгийн мастер бүртгэлийг нүүлгэхгүй/);
   assert.match(shell,/lightingDossierDialog/);
 });

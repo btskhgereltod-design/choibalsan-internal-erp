@@ -57,6 +57,8 @@ COPY builder.css /usr/share/nginx/html/builder.css
 COPY builder-ai.css /usr/share/nginx/html/builder-ai.css
 COPY builder.js /usr/share/nginx/html/builder.js
 COPY lighting.js /usr/share/nginx/html/lighting.js
+COPY camera-network.css /usr/share/nginx/html/camera-network.css
+COPY camera-network.js /usr/share/nginx/html/camera-network.js
 COPY camera.js /usr/share/nginx/html/camera.js
 COPY engineering.css /usr/share/nginx/html/engineering.css
 COPY engineering.js /usr/share/nginx/html/engineering.js

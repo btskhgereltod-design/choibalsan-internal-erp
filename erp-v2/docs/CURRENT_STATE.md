@@ -6,6 +6,250 @@ This document answers one question: **what exists in the repository now?** It
 does not claim that every implemented foundation is complete or production-
 validated at enterprise scale.
 
+## Lighting and camera object/fault repository demo (not production)
+
+- Draft migrations `0099`-`0105` and the repository UI/API now contain the first
+  reversible lighting and camera demo slice. It is running only on the local
+  demo database `overva_rehearsal_lighting_demo` and port `4200`; it has not been migrated or deployed
+  to production and has not written production business data. Production was
+  rechecked read-only and remains at schema `0098` and implementation commit
+  `d2f947c`.
+- The lighting-specific tab is named **Гэрэлтүүлгийн объектын бүртгэл**. Its
+  projection restores the legacy engineer-facing pole, head and replacement-
+  pole quantities without equating the functional object with an accounting
+  Asset. Known `ГТ-*` source rows map to the road-lighting candidate view;
+  69 genuinely unresolved mixed `sl_points` rows fail closed into
+  **Ангилал тодорхойгүй** instead of being presented as road-lighting truth.
+  The remaining 12 `ГД-*` rows are preserved compatibility evidence for the
+  same 12 canonical traffic-signal Assets, so the registry excludes those
+  copies and presents each traffic signal only once.
+- A user review exposed and corrected a demo transport/granularity defect: the
+  local seed provenance omitted the legacy `code`, so all 117 `sl_points` rows
+  initially appeared unclassified while the 36 road fault rows were labelled
+  only as generic "issues". The demo-only evidence reconciler is hard-gated to
+  `overva_rehearsal_lighting_demo`, requires the reviewed legacy baseline
+  `117 points / 36 ГТ objects / 1,747 poles / 2,582 total heads / 43 replacement
+  poles`, preserves `source_import_records`, and appends object events plus one
+  tenant audit record. Runtime projection now accepts the preserved source code
+  or the reconciled `metadata.legacyCode` and still fails closed otherwise.
+- Area cards are now tab-aware. **Гэрэлтүүлгийн объектын бүртгэл** is a
+  master-data-only surface: its heading asks for an object classification and
+  its cards show only object/equipment counts. Fault and active-work measures
+  appear only on their relevant operational tabs. The object dossier likewise
+  contains base information, fixed-asset/component allocation, lifecycle
+  actions and append-only change history; it no longer returns or renders fault
+  and Work Order lists. Eleven road rows labelled open by the legacy snapshot
+  have zero remaining damage and are not presented as active faults. Legacy
+  `lamp_count`, `head_count` and `total_heads` are represented as
+  distinct `poleCount`, `headCountPerPole` and `totalHeadCount` facts instead of
+  collapsing different grains into one count. The separate legacy
+  `sl_ger_inventory.total_count` field is now interpreted by category: a tower
+  row is one mast with `total_count` lamp heads, while a ger-area row has
+  `total_count` poles and heads under the source system's one-head-per-pole
+  convention. A reviewed canonical technical snapshot always overrides this
+  compatibility projection; immutable source snapshots were not rewritten.
+  When a selected class contains only fixed equipment, the UI suppresses the
+  irrelevant empty operational-object section. Selecting **Гэрлэн дохио** now
+  opens one **Гэрлэн дохионы бүртгэл** section with the 12 canonical records
+  instead of claiming that the selected class has no registration.
+- **Гэмтэл бүртгэл** keeps the legacy screen's useful one-row number-entry
+  simplicity while retaining governed OVERVA writes. Each row shows total poles,
+  total lamp heads and lamp type; the engineer chooses a bounded incident type,
+  changes the new quantity with visible minus/plus controls, and sees projected
+  availability immediately. Head faults use total heads as their denominator,
+  pole faults use total poles, and occurrence-based faults show no false
+  availability percentage. Optional notes stay hidden until requested. Only
+  visible filtered drafts enter the explicit atomic batch submission. The API
+  derives tenant and actor from authentication, validates same-tenant objects
+  and tenant-owned types, and rejects a head/pole quantity above the known
+  master total after including unresolved faults. It retains exact-payload
+  idempotency, append-only incident events and tenant audit evidence. Zero is
+  deliberately not a resolve/cancel command; accepted Work Order completion
+  remains ordinary repair authority.
+- Migration `0099` introduces incident versions, tenant-owned operational
+  incident type reference data, separate report/correct/cancel permissions and
+  append-only command receipts with tenant RLS. Only `report_batch` is wired in
+  this first slice; correction and cancellation commands remain planned.
+- Migration `0100` adds optimistic object versions and separate tenant-scoped
+  `operational-objects.update` / `operational-objects.retire` permissions.
+  Name, location and linear length edits append object events and tenant audit
+  evidence. The apparent delete action is deliberately a retirement: it never
+  hard-deletes master data, requires a reason and current version, and refuses
+  objects that still have active children, component allocations, unresolved
+  incidents or unfinished Work Orders. Retired objects disappear from the
+  active registry while their history and relationships remain intact.
+- Migration `0101` adds the editable technical master beneath each operational
+  object as immutable full snapshots protected by tenant RLS. A snapshot keeps
+  pole count, line length, normalized lamp groups (`lamp type + wattage + head
+  count`), and ordered supply points with panel reference, meter number, paired
+  latitude/longitude and location notes. Total head count is derived from the
+  groups instead of being entered as a conflicting second fact. Panel and meter
+  Asset references are accepted only when that same-tenant Asset is already an
+  active component of the object. Saving requires the current object version,
+  advances both the specification and object versions, and appends object-event
+  plus tenant-audit evidence; prior technical snapshots cannot be rewritten.
+- Location schemes and general photos are object master evidence, not anonymous
+  attachment rows. The object API accepts only JPEG, PNG or WebP up to 15 MB and
+  records the file as a canonical Document, immutable Document Version with
+  SHA-256 checksum, typed `location_scheme` / `site_photo` Document Link,
+  lifecycle event, object event and tenant audit. Authorized object readers may
+  preview or download the current version; a separate domain permission governs
+  upload. No legacy object values were silently promoted into this new master.
+- Migration `0102` extends the same immutable technical-master authority to
+  camera objects without copying lighting terminology. A camera specification
+  contains ordered pole/point records with paired GPS coordinates and normalized
+  device groups containing camera type, manufacturer, model, quantity,
+  resolution, lens, PTZ/night-vision capability, connectivity and power facts.
+  Object-level camera totals are derived from device quantities. The existing
+  110 camera objects and their aggregate 302-camera legacy baseline remain
+  source evidence only. The preserved import evidence contains four paired raw
+  coordinate rows and 35 partial-coordinate rows, but no reviewer has created a
+  canonical point, device or GPS fact from them; the restricted read-only
+  re-export continues to exclude private coordinates.
+  The camera registry keeps separate object/point/camera/GPS totals and one
+  bordered master table with an explicit open/edit action. Unlike lighting, it
+  no longer shows a second object-category card section: the current pilot work
+  is more naturally navigated by one compact **Байршил ба ажиллагаа** section.
+  Operational KPI cards remain on the overview tab instead of being mixed into
+  the object registry.
+- Migration `0103` extends the existing governed operational-incident ledger to
+  the camera workspace instead of creating a camera-only fault store. The
+  tenant owns six bounded camera incident types. Device-unavailable, image-
+  quality and physical-damage quantities use `камер`; power, network and
+  inspection findings use `тохиолдол` and therefore do not invent a camera
+  denominator. The **Гэмтэл** tab now mirrors the reviewed lighting interaction:
+  each filtered object row shows pole/point, total camera and GPS counts, the
+  unresolved quantity for the selected type's unit, a minus/number/plus local
+  draft, projected availability for camera-counted types, optional notes and
+  one explicit batch save. The API rechecks permission, tenant-owned object and
+  type, retired state, duplicate target, future time and known camera capacity;
+  accepted rows append the canonical incident, incident event, exact-payload
+  receipt and tenant audit. Camera reporter/supervisor roles are separate from
+  lighting roles while the permission vocabulary is shared and domain-neutral.
+  New tenant provisioning, Builder application and later camera-module
+  activation all install the same camera reference/role configuration.
+- A read-only comparison with the legacy camera registry confirmed that its
+  useful nested navigation is a second dimension, not another object category:
+  110 source points split into groups `3=1`, `5=1`, `7=15`, `8=9`, `9=21`,
+  `98/Авто зам=43`, and `99/Аж ахуйн нэгж=20`. The camera workspace now projects
+  those preserved source groups in the primary camera navigator, adds
+  code/name/location search, and then filters the same object, incident and Work
+  Order views by operating state. The six rows whose legacy `sub_category` was
+  empty all have explicit `bag_no=9`, and their names and locations independently
+  identify the ninth bag, so they are included in that source group without a
+  category guess. A future row without a supported group remains visibly
+  **Ангилал тодорхойгүй** inside this same navigator. Open canonical incidents produce **Засвар
+  шаардлагатай**; no open incident produces **Хэвийн**; legacy **Татан буулгах /
+  Нүүлгэх** values are isolated as **Шийдвэр хүлээж буй** instead of being
+  written into master lifecycle state. The demo distribution is 20 attention,
+  10 decision-pending and 80 normal objects. This projection adds no schema,
+  migration or business-data write; a future canonical geographic/service-zone
+  reference requires reviewed tenant configuration rather than inferred bag
+  text.
+- The unified Work Board now reuses that same immutable camera source-group
+  projection. Selecting **Камер** opens a second **Камерын байршлын бүлэг** row
+  with `3`, `5`, `7`, `8`, `9`, `Авто зам` and `Аж ахуйн нэгж` filters; counts
+  describe open intake incidents rather than object inventory. The selected
+  group filters both incident intake and existing camera Work Orders, and each
+  card carries the location-group badge. Authenticated demo verification found
+  30 open camera incident rows (`7=5`, `98/Авто зам=21`, `99/Аж ахуйн нэгж=4`)
+  and six active camera Work Orders. Five work rows retain a source group;
+  one citizen-request Work Order has no linked operational object and therefore
+  remains explicitly **Байршил тодорхойгүй** instead of being guessed from its
+  title. No new work authority, table or business-data write was introduced.
+- Choibalsan's `panel-board` service-area row is retained for history but made
+  inactive in the demo. It is no longer shown as a peer lighting-object card or
+  duplicated as fixed-asset rows in that registry; panels and meters remain
+  valid Asset components and supply-point references inside their parent
+  lighting objects. This demo configuration has not changed the production
+  five-area projection.
+- Fiber-optic cable remains intentionally outside the lighting and camera-device
+  technical profiles. Demo migration `0104` implements it as a separate
+  tenant-scoped network-route authority: a stable route points to an immutable
+  GeoJSON `LineString` revision containing reviewed core count, display color,
+  server-derived length and note; typed network nodes represent splice, closure,
+  ODF, cross, splitter or other GPS points and may link to two reviewed routes.
+  Route/node lifecycle is version-guarded and archives instead of hard-deleting;
+  immutable revisions, links and events are protected by database triggers and
+  every accepted command writes tenant audit evidence. Separate read/manage
+  permissions and camera-network viewer/editor roles prevent the GIS surface
+  from inheriting authority from a label alone.
+- The camera workspace now contains a separate **Шилэн кабель** demo tab. It
+  retains the useful legacy interactions—GIS/full-screen mode, satellite/street
+  base maps, route draw/save/cancel, `4/6/8/12/24/48/96 core` color layers,
+  route search, splice/ODF/box point placement, camera-layer toggle and GPS
+  assignment—without copying the legacy implementation's GET-time table
+  creation or direct DELETE behavior. The reviewed map-first revision gives the
+  canvas at least 680 pixels of working height, expands it to the full viewport,
+  docks layer and selected-object palettes at the sides, and keeps select,
+  route, node, camera-GPS, undo, search, fit and maximize tools in a compact
+  CAD-style toolbar. The redundant title/action header has been removed; refresh
+  is also on the map toolbar, while add-cable and GIS actions use the existing
+  route and maximize tools. A coordinate/zoom status bar remains visible while drawing.
+  Full-view toggling preserves unfinished form values, route vertices and a
+  selected point. Read-only tile sampling at the current Choibalsan center found
+  real Esri imagery through zoom 17, while zoom 18 and 19 both returned the same
+  small **Map data not yet available** placeholder. The satellite layer therefore
+  overzooms zoom 17 instead of requesting those unsupported deeper tiles, while a resize observer invalidates the Leaflet
+  canvas after layout/full-view changes to prevent blank or offset tiles. The
+  map overlays camera points but does
+  not reclassify cable as a camera device or fixed Asset. The current 110 legacy
+  camera objects have no canonical point specifications, so they appear as
+  explicit **profile хянаагүй** GPS targets. Selecting one and saving reviewed
+  coordinates creates that object's first immutable camera specification with
+  one point and the preserved aggregate camera count marked as technically
+  unreviewed; later GPS changes create a new complete specification version
+  rather than updating history. No canonical route, node or camera GPS row was
+  seeded by this implementation.
+- No PTZ/PTS, CAD, KML/KMZ or tabular file containing the stated approximately
+  1,000 camera points was found in the available workspace or legacy
+  `asset_files` registry. Read-only SQLite inspection did find `23` legacy fiber
+  routes with `184` LineString vertices. Every stored longitude contains the
+  same `5,726,520` offset. Subtracting that offset puts all vertices within the
+  Choibalsan review bounds (`114.513596..114.573627`,
+  `48.064613..48.110261`), and the recomputed distance of every route matches
+  its stored metre length exactly.
+- Demo migration `0105` therefore adds a separate tenant-scoped, append-only
+  recovery staging authority for import batches, candidates and human review
+  decisions. The demo contains one idempotently fingerprinted batch with the 23
+  routes and 184 normalized preview vertices. These appear as a dashed
+  **Legacy сэргээх preview** map layer and a table that compares source versus
+  recomputed length; all start as **Хяналт хүлээж буй**. Confirm/needs-correction
+  decisions append review and tenant audit evidence. There is deliberately no
+  staging-to-canonical promotion command yet, and the malformed source geometry
+  remains intact beside the normalized preview.
+- `LIGHTING_OPERATIONS_DISCOVERY_AND_DEMO_CONTRACT_V1.md` records the read-only
+  legacy/canonical reconciliation and the later schedule -> meter reading ->
+  electricity invoice plan. JavaScript syntax checks and the full repository
+  suite pass `457/457`. Clean `0001` through `0103` migration passed on a
+  disposable database with RLS active on all three technical-profile tables. A
+  separate disposable API smoke round-tripped 200 poles, two wattage groups with
+  400 derived heads, 5 supply points with meter/panel/GPS data and one canonical
+  scheme image; it rejected a stale write and verified two object events, two
+  audit entries and the document link before removing the test container and
+  database. A separate disposable camera API smoke saved two points, three
+  normalized device groups and four derived cameras, rejected a stale write,
+  and verified object-event and audit evidence before cleanup. The earlier
+  lifecycle smoke also proved versioned edit, retirement
+  and removal from the active registry. Authenticated rehearsal proved
+  eight tenant reference types, exact-payload replay, changed-payload conflict,
+  cross-tenant object rejection, and exactly one incident/event/receipt/audit
+  for one accepted row. A second disposable camera-incident rehearsal proved
+  six tenant types, exact replay and changed-payload conflict, camera-capacity
+  rejection, occurrence-based capture without a false capacity, cross-tenant
+  rejection, and matching incident/event/receipt/audit evidence.
+  The fiber workspace static contract adds seven focused tests, and authenticated
+  demo smoke confirms `110` selectable camera-point review targets, `0` silently
+  created GPS points, `23` staged recovery routes, `184` normalized preview
+  vertices, both scoped capabilities, and healthy API/Web. The port
+  `4200` demo is now at schema `0105` on
+  `overva_rehearsal_lighting_demo`; authenticated regression smoke confirms
+  36 road objects, 1,747 poles, 2,582 heads, 69 unclassified objects, 12
+  canonical traffic signals and zero visible `ГД-*` copies. Production stayed
+  at `0098`.
+  Production promotion still requires a separate explicit request and rollout
+  gate.
+
 ## Lighting operations workspace
 
 - The Choibalsan lighting workspace is now a role-focused projection of the

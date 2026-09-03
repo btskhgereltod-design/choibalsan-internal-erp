@@ -54,6 +54,16 @@ test("legacy import is idempotent, provenance preserving and progress safe",()=>
   assert.match(importer,/--dry-run/);
   assert.match(importer,/Legacy manual progress preserved only in provenance/);
   assert.match(importer,/legacyAssetTable/);
+  assert.match(importer,/legacyPointType/);
+  assert.match(importer,/startsWith\("ГТ-"\)/);
+  assert.match(importer,/legacy_unclassified/);
+  assert.match(importer,/legacyCode:clean\(row\.code\)\|\|null/);
+  assert.match(importer,/legacyInventoryQuantities/);
+  assert.match(importer,/area==="tower-lighting"/);
+  assert.match(importer,/poleCount:1,headCountPerPole:total,totalHeadCount:total/);
+  assert.match(importer,/area==="ger-area-lighting"/);
+  assert.match(importer,/poleCount:total,headCountPerPole:total>0\?1:null,totalHeadCount:total/);
+  assert.match(importer,/status=affected===resolved\?"resolved":faultStatus\(row\.status\)/);
   assert.match(importer,/INSERT INTO operational_objects/);
   assert.doesNotMatch(importer,/progress\) VALUES/);
   assert.match(importer,/includes\("дуус"\)/);
@@ -67,6 +77,24 @@ test("legacy lighting encoding repair is scoped, auditable and preserves provena
   assert.match(repair,/INSERT INTO asset_events/);
   assert.match(repair,/--dry-run/);
   assert.doesNotMatch(repair,/UPDATE source_import_records/);
+  assert.match(repair,/legacyInventoryQuantities/);
+  assert.match(repair,/area==="tower-lighting"/);
+});
+
+test("demo lighting semantics reconciliation is exact, append-evidenced and non-production",()=>{
+  const reconcile=read("scripts","reconcile-lighting-demo-evidence.js");
+  assert.match(reconcile,/database!=="overva_rehearsal_lighting_demo"/);
+  assert.match(reconcile,/road\.length!==36/);
+  assert.match(reconcile,/roadTotals\.poles!==1747/);
+  assert.match(reconcile,/roadTotals\.heads!==2582/);
+  assert.match(reconcile,/roadTotals\.replacements!==43/);
+  assert.match(reconcile,/INSERT INTO operational_object_events/);
+  assert.match(reconcile,/'corrected'/);
+  assert.match(reconcile,/version=version\+1/);
+  assert.match(reconcile,/immutableProvenancePreserved:true/);
+  assert.match(reconcile,/totalHeadCount:row\.total_heads/);
+  assert.match(reconcile,/status=affected===resolved\?"resolved":faultStatus\(row\.status\)/);
+  assert.doesNotMatch(reconcile,/UPDATE source_import_records/);
 });
 
 test("accounting fixed assets stay separate from operational objects",()=>{
@@ -83,7 +111,7 @@ test("accounting fixed assets stay separate from operational objects",()=>{
 
 test("lighting UI explains the standard end-to-end flow",()=>{
   const ui=read("..","web","lighting.js");
-  for(const label of ["Нүүр","Объект ба тоноглол","Гэмтэл, үзлэг","Ажлын гүйцэтгэл","Ашиглалтын хяналт","Судалгаа, тайлан"])assert.match(ui,new RegExp(label));
+  for(const label of ["Нүүр","Гэрэлтүүлгийн объектын бүртгэл","Гэмтэл бүртгэл","Ажлын гүйцэтгэл","Ашиглалтын хяналт","Судалгаа, тайлан"])assert.match(ui,new RegExp(label));
   assert.match(ui,/объект → асуудал → ажил → нотолгоо → ХАБЭА → баталгаажуулалт/i);
   assert.doesNotMatch(ui,/organizationHomeBar/);
 });
@@ -104,6 +132,17 @@ test("lighting workspace reuses tenant service areas without creating a second w
   assert.doesNotMatch(ui,/method:\s*["']POST["'].*\/api\/lighting\/workspace/s);
   assert.match(smoke,/\/api\/lighting\/workspace/);
   assert.doesNotMatch(smoke,/method:\s*["']POST["']/);
+});
+
+test("lighting workspace keeps legacy traffic-signal copies out of the object registry",()=>{
+  const route=read("src","routes","lighting.js");
+  const ui=read("..","web","lighting.js");
+  assert.match(route,/Legacy GD rows are compatibility copies/);
+  assert.match(route,/o\.source_table='sl_points'[\s\S]*LIKE chr\(1043\)\|\|chr\(1044\)\|\|'-%'/);
+  assert.match(route,/a\.category='[^']+'/);
+  assert.match(ui,/state\.lightingAreaFilter==="traffic-signal"\?"Гэрлэн дохионы бүртгэл"/);
+  assert.match(ui,/if\(!d\.assets\.length&&!d\.fixedAssets\.length\)return empty/);
+  assert.doesNotMatch(ui,/Ашиглалтын объект алга/);
 });
 
 test("lighting is one top-level workspace with scoped internal navigation",()=>{

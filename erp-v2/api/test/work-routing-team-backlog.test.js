@@ -42,13 +42,20 @@ test("team claim is visible while exception and safety remain separate dimension
 });
 
 test("department tabs filter presentation without becoming workflow stages",()=>{
-  const app=read("../web/app.js"),html=read("../web/index.html");
+  const app=read("../web/app.js"),html=read("../web/index.html"),route=read("src/routes/work-orders.js"),
+    cameraSmoke=read("scripts/work-board-camera-group-demo-smoke.js");
   assert.match(app,/function intakeFilterDomain/);
   assert.match(app,/function workFilterDomain/);
   assert.match(app,/work_type_code/);
   assert.match(app,/work-orders\.exception\.decide/);
   assert.match(app,/workIntakeCapabilities\.scope==="organization"/);
-  assert.match(html,/app\.js\?v=48/);
+  assert.match(route,/cameraGroups:cameraGroups\.rows/);
+  assert.match(route,/camera_source_group_code/);
+  assert.match(app,/Камерын байршлын бүлэг/);
+  assert.match(app,/cameraGroupLabel/);
+  assert.match(cameraSmoke,/cameraOpenIncidents:cameraIncidents\.length/);
+  assert.match(cameraSmoke,/Unexpected camera groups/);
+  assert.match(html,/app\.js\?v=50/);
   assert.match(html,/workflow\.css\?v=9/);
   assert.doesNotMatch(app,/Миний хариуцсан/);
   assert.doesNotMatch(app,/Шууд шинэ ажил/);

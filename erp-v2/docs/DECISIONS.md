@@ -1005,6 +1005,175 @@ inventory-location and asset totals; the new Work Board counts only current
 queue items and states that distinction. No other organization receives these
 names or records automatically.
 
+### D-053 — Operational-object technical facts are versioned master data
+
+Accepted: 2026-09-03
+
+An Operational Object may own a tenant-scoped current technical specification,
+but every edit creates an immutable full version instead of overwriting prior
+facts. Pole count and line length are independent values. Lamp heads are stored
+as normalized `type + wattage + count` groups and any total is derived. Supply
+points are ordered child facts containing panel and meter references, paired GPS
+coordinates and a location description. An Asset identifier is valid there only
+when the Asset is actively allocated to that object; plain legacy labels may be
+kept as references until the Asset master has been reviewed.
+
+Object location schemes and site photos use the canonical document authority:
+Document, immutable Document Version with checksum, and typed Document Link.
+They do not use a new domain-specific blob or the deletable compatibility
+attachment store. Technical and media writes require explicit domain
+permissions, server-derived tenant context, object lifecycle/version checks,
+and append both domain event and audit evidence. Legacy aggregate fields remain
+visible only as a baseline until a human saves the first canonical version; no
+automatic migration is implied by this decision.
+
+### D-054 — Equipment components, camera points and network routes keep separate grains
+
+Accepted: 2026-09-03
+
+Choibalsan's panel/board lighting service area is inactive in the rehearsal
+configuration because the reviewed object registry already represents panels
+and meters as components or supply-point references inside a parent lighting
+object. Its row and historical relationships are retained; reactivation is the
+rollback. This replaces only the panel/board presentation portion of D-052 and
+does not rewrite the remaining service-area or Work Order model.
+
+A camera Operational Object owns ordered physical pole/points, each with paired
+coordinates, and normalized camera-device groups containing quantity and
+technical facts. Object camera totals are derived from those groups. Existing
+legacy aggregate counts remain visible as source evidence until a human saves
+the first version; they are not expanded into invented individual devices.
+
+Fiber-optic cable and its route geometry form a separate network-route object,
+not a lighting component category or camera device row. A CAD/GIS import must
+preserve file checksum, source format and coordinate-reference-system evidence,
+stage exact/suggested/unresolved object-name matches, and require review before
+canonical writes. Proximity or fuzzy names alone may never silently assign the
+approximately 1,000 source points.
+
+### D-055 — Fault quantity and availability use the component's own grain
+
+Accepted: 2026-09-03
+
+A lighting fault quantity must retain the unit defined by the tenant-owned
+incident type. A lamp or fixture fault is counted against the object's total
+lamp heads; a pole fault is counted against total poles. Cable, feed, panel,
+traffic-signal and inspection occurrences have no invented pole/head
+denominator. Availability is a derived view of known master quantity minus
+unresolved and locally drafted quantity; it is not stored as another fact.
+
+The quick-entry surface may preserve the reviewed legacy screen's useful direct
+number interaction, but a changed number remains a local draft until an
+explicit submit. The server rechecks tenant, permission, reference type and
+known object capacity, then writes the existing idempotent batch, append-only
+incident event and audit evidence. Zero never means repair, cancellation or
+resolution. Imported open lighting counts that lack a historical unit are
+treated as a lamp-head baseline in this compatibility projection only; their
+stored source evidence is not rewritten or promoted to a new incident type.
+
+### D-056 — Legacy inventory counts are interpreted by lighting category
+
+Accepted: 2026-09-03
+
+The legacy `sl_ger_inventory.total_count` column does not have one universal
+grain. User review and the legacy registry implementation agree that a
+`Цамхаг` row represents one physical mast and `total_count` represents the lamp
+heads mounted on it. A `Гэр хороолол` row uses `total_count` for both poles and
+heads under its one-head-per-pole convention. The prior generic import treated
+the tower head count as poles and therefore exposed false master quantities.
+
+OVERVA applies this rule only as a category-aware compatibility projection and
+in future legacy import/encoding-repair metadata. The retained source snapshot
+remains immutable. Saving a reviewed canonical technical specification replaces
+the compatibility quantities for that object and is never inferred merely from
+the legacy row. Fault-capacity validation uses the same projection, so a tower
+head fault is bounded by `total_count` while a tower pole fault is bounded by
+one. This correction requires no schema or business-data migration; rollback is
+the API/import projection only.
+
+### D-057 — Camera faults reuse operational incidents at camera quantity grain
+
+Accepted: 2026-09-03
+
+The camera workspace uses the existing tenant-scoped Operational Incident,
+Incident Event, exact-payload receipt and audit authorities. It does not own a
+parallel camera-fault table. Incident types remain tenant-owned reference data
+under the `camera` domain. Device unavailable, image-quality and physical-
+damage types use the `камер` unit and are bounded by the object's reviewed total
+camera count; power, network and inspection types use `тохиолдол` and have no
+invented camera denominator.
+
+The engineer-facing screen may use the same direct minus/number/plus interaction
+as lighting, but all changes remain local drafts until explicit batch submit.
+The server derives tenant and actor, verifies the camera workspace permission,
+object domain/status, active reference type, duplicate target, timestamp and
+known capacity before writing. Accepted rows append incident, event, receipt
+and audit evidence atomically. Zero does not resolve an existing fault; repair
+and acceptance remain in the canonical Work Order authority. Camera reporter
+and supervisor roles are distinct from lighting roles, while their operational-
+incident permission codes are intentionally shared and domain-neutral.
+
+### D-058 — Camera category, location group and operating state stay separate
+
+Accepted: 2026-09-03
+
+The camera workspace has three independent navigation dimensions. Object
+category describes what kind of site it is; a tenant-owned geographic or
+service group describes where it belongs; operating state describes what needs
+attention now. A Choibalsan legacy `bag_no` is preserved source evidence and may
+be projected read-only for review, search and filtering. It is not silently
+promoted into the object category, organization structure or the existing Work
+Order service-area authority. A later canonical zone master requires an
+explicit reviewed mapping and tenant-scoped reference lifecycle.
+
+Operating state is derived from canonical facts: unresolved Operational
+Incidents mean **Засвар шаардлагатай**, while absence of them means **Хэвийн**.
+The legacy condition field is not copied as a writable master attribute because
+it mixes repair need with disposition. `Татан буулгах` and `Нүүлгэх` remain
+source-labelled **Шийдвэр хүлээж буй** evidence until an authorized, versioned
+Operational Object lifecycle action records the human decision and audit trail.
+File and work counts must likewise come from canonical Document Links and Work
+Orders rather than mutable legacy counters. The first demo implementation is a
+projection only and requires no schema or business-data mutation.
+
+### D-059 — Camera navigation uses location and operation, not category cards
+
+Accepted: 2026-09-03
+
+D-058's separation of category, geographic group and operating state remains a
+data boundary, but the camera engineer does not need all three dimensions as
+large primary controls. The camera workspace therefore removes the object-
+category card section and uses one compact **Байршил ба ажиллагаа** navigator:
+group/search first, then current operating state. Legacy object category remains
+provenance and may support later analysis without duplicating the engineer's
+daily navigation.
+
+The six current camera rows with no legacy `sub_category` are not genuinely
+location-unclassified. Each has explicit `bag_no=9`, and its name and location
+also identify the ninth bag, so the source group projection includes them in
+`9-р баг` without a guessed write or source mutation. A row without a supported
+group must fail closed into **Ангилал тодорхойгүй** within the same navigator.
+This UI/projection correction does not create a migration, rewrite provenance,
+or change production data.
+
+### D-060 — Legacy traffic-signal copies stay as provenance, not registry rows
+
+Accepted: 2026-09-03
+
+Choibalsan's 117 legacy `sl_points` records contain 36 reviewed `ГТ-*` road-
+lighting objects and 12 `ГД-*` intersection rows that describe the same traffic
+signals already held as 12 canonical Assets. The `ГД-*` operational rows are
+retained as immutable import provenance, but the lighting object registry must
+exclude them so that traffic signals are shown and counted once through the
+canonical Asset authority. No source record is deleted or rewritten.
+
+This leaves 69 genuinely unresolved `ГЧ`, `НЭ`, `ЯЗ` and `НГ` rows in
+**Ангилал тодорхойгүй**. Their classification requires explicit tenant review;
+the runtime must not infer it from an unsupported prefix. The local demo API
+must run against `overva_rehearsal_lighting_demo`, where the reviewed `ГТ-*`
+evidence is present. This decision changes neither production schema nor
+production business data.
+
 ## Active Hypotheses
 
 ### H-001 — Customer journey

@@ -433,15 +433,67 @@ line, facility, zone, or system is an Operational Object and may reference
 multiple Assets through dated, quantified component allocations. Allocation
 does not move, clone, or retire the Asset master record. Ending an allocation
 sets its removal date; it does not delete history. The Operational Object
-dossier presents its hierarchy, active and historical components, incidents,
-Work Orders, and attributable append-only notes/events as one operational view.
-This supports divisible components such as cable as well as discrete equipment,
-without inferring physical quantities from lamp counts or other legacy fields.
-Each Asset master declares its allocatable quantity and unit. Allocation locks
-that Asset row, totals all active tenant-scoped object allocations, enforces the
-same unit, and rejects any request above the remaining quantity. Reducing the
-master quantity below an already allocated amount or changing its unit while
-active allocations exist is also rejected.
+dossier is a master-data surface: it presents identity, hierarchy, active and
+historical components, versioned technical specifications, canonical object
+media, lifecycle actions and attributable append-only notes/events. Incidents
+and Work Orders remain linked to the same object but are operated from their
+dedicated fault and execution surfaces, so an engineer does not mistake the
+object registry for an active-work queue.
+
+An editable technical specification creates a new immutable full snapshot.
+Pole count and line length remain distinct facts; lamp heads are normalized by
+lamp type and wattage and their displayed total is derived. Ordered supply
+points own panel/meter references, paired latitude/longitude and location notes.
+Where a panel or meter is a fixed Asset, the specification may reference it only
+through an active same-object component allocation. Location schemes and site
+photos reuse canonical Documents, Document Versions and typed Document Links;
+they do not create a parallel upload authority. This supports divisible
+components such as cable as well as discrete equipment, without inferring
+physical quantities from lamp counts or other legacy fields. Each Asset master
+declares its allocatable quantity and unit. Allocation locks that Asset row,
+totals all active tenant-scoped object allocations, enforces the same unit, and
+rejects any request above the remaining quantity. Reducing the master quantity
+below an already allocated amount or changing its unit while active allocations
+exist is also rejected.
+
+Camera objects reuse the same versioned Operational Object specification
+authority but own a camera-specific child structure: ordered physical
+pole/points carry paired coordinates, while normalized device groups carry
+camera model, quantity and technical capabilities. Display totals are derived
+from device quantities and are not a second editable fact. A legacy aggregate
+camera count or malformed single-coordinate value remains provenance until a
+reviewer creates a canonical specification.
+
+Camera object category, geographic/service group and operating state are
+independent data dimensions, but every dimension need not become a primary UI
+filter. The camera pilot navigates by geographic/service group and operating
+state; legacy object category stays source evidence and is not shown as a
+duplicating card layer. A tenant-specific legacy `bag_no` may be projected from
+immutable source provenance for review and navigation, but it is not promoted
+to organization structure or work-service-area reference data without an
+approved mapping. A missing or unsupported group fails closed as unclassified
+instead of being inferred from an unrelated category. Repair attention is derived from unresolved
+canonical incidents. Legacy move/disposal labels remain decision-pending source
+evidence until the governed Operational Object lifecycle records an attributable
+action; they cannot directly rewrite master status.
+
+Lighting and camera fault intake share the canonical Operational Incident,
+Incident Event and idempotent command-receipt authorities. Each tenant owns the
+bounded incident-type reference rows for each domain, including the quantity
+unit. Capacity validation follows that unit: lighting heads and poles use their
+own master totals, camera-device faults use the total camera count, and an
+occurrence has no invented equipment denominator. Workspace-specific reporter
+and supervisor roles grant the shared operational permission vocabulary; module
+and workspace middleware still bound which domain surface the user can reach.
+Zero is only an empty draft and never a repair, cancellation or resolution.
+
+Lighting supply equipment, camera devices and fiber routes are separate grains.
+A panel or meter may be an Asset component referenced by a lighting supply
+point without becoming a peer lighting Operational Object. Fiber-optic cable is
+modeled as a separate network-route object with its own geometry and lifecycle,
+not as a lamp component or camera specification row. CAD/GIS point imports must
+be staged with source checksum and coordinate-reference metadata; exact,
+suggested and unresolved name matches are reviewed before any canonical write.
 
 ## AI and Configuration Flow
 

@@ -4,7 +4,7 @@ const express = require("express");
 const { rateLimit } = require("express-rate-limit");
 const { z } = require("zod");
 const { loadConfig } = require("../config");
-const { getPool } = require("../db");
+const { getPool, setTenantContext } = require("../db");
 const { authenticate, requirePermissions } = require("../middleware/auth");
 const { writeAudit } = require("../services/audit");
 const { buildPlan, applyConfiguration } = require("../services/builder-engine");
@@ -223,6 +223,7 @@ router.post("/projects/:id/plan", asyncHandler(async (req, res) => {
   const org = req.user.organization_id, client = await getPool().connect();
   try {
     await client.query("BEGIN");
+    await setTenantContext(client,org);
     const project = await client.query("SELECT id FROM builder_projects WHERE organization_id=$1 AND id=$2 FOR UPDATE", [org, id.data]);
     if (!project.rowCount) { await client.query("ROLLBACK"); return res.status(404).json({ error: "Builder төсөл олдсонгүй" }); }
     const catalog = await loadCatalog(client);
@@ -248,6 +249,7 @@ async function applyBuild(req, res, buildId) {
   const org = req.user.organization_id, client = await getPool().connect();
   try {
     await client.query("BEGIN");
+    await setTenantContext(client,org);
     const result = await client.query(`SELECT * FROM builder_builds WHERE organization_id=$1 AND id=$2 FOR UPDATE`, [org, buildId]);
     if (!result.rowCount) { await client.query("ROLLBACK"); return res.status(404).json({ error: "Builder хувилбар олдсонгүй" }); }
     const build = result.rows[0];

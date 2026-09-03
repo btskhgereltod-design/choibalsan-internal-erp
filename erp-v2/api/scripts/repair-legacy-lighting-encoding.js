@@ -9,6 +9,13 @@ const slug=process.env.IMPORT_ORG_SLUG||"choibalsan-hugjil";
 const clean=value=>String(value??"").trim();
 const readable=(value,fallback="")=>{const text=clean(value);if(!text.includes("?"))return text||fallback;return text.replace(/\?+/g," ").replace(/\s+/g," ").trim()||fallback};
 const integer=value=>Number.isInteger(Number(value))?Number(value):0;
+const serviceAreaCode=value=>({"Гэр хороолол":"ger-area-lighting","Гэр хорооллын гэрэл":"ger-area-lighting","Цамхаг":"tower-lighting","Цамхагийн гэрэл":"tower-lighting"})[clean(value)]||null;
+const legacyInventoryQuantities=row=>{
+  const total=integer(row.total_count),area=serviceAreaCode(row.category);
+  if(area==="tower-lighting")return {poleCount:1,headCountPerPole:total,totalHeadCount:total,lampCount:1,headCount:total};
+  if(area==="ger-area-lighting")return {poleCount:total,headCountPerPole:total>0?1:null,totalHeadCount:total,lampCount:total,headCount:total};
+  return {lampCount:row.lamp_count??row.total_count??0,headCount:row.head_count??row.total_heads??0};
+};
 const statusAsset=value=>{const text=clean(value).toLowerCase();return text.includes("inactive")||text.includes("идэвхгүй")?"inactive":"active"};
 const faultStatus=value=>{const text=clean(value).toLowerCase();return text.includes("дуус")||text.includes("хааг")?"resolved":text.includes("явц")?"in_progress":"open"};
 const read=()=>new Promise((resolve,reject)=>{let body="";process.stdin.setEncoding("utf8");process.stdin.on("data",chunk=>{body+=chunk});process.stdin.on("end",()=>{try{resolve(JSON.parse(base64Input?Buffer.from(body.trim(),"base64").toString("utf8"):body))}catch(error){reject(new Error(`Invalid JSON: ${error.message}`))}});process.stdin.on("error",reject)});
@@ -26,7 +33,8 @@ async function main(){
 
     for(const [table,prefix,category,rows,nameField] of [["sl_points","SLP","lighting.meter-point",data.points,"name"],["sl_ger_inventory","SLI","lighting.fixture-group",data.inventory,"location_name"]]){
       for(const row of rows||[]){
-        const metadata={legacyId:row.id,legacyAssetId:row.asset_id??null,bagNo:row.bag_no??null,meterNo:row.meter_no??null,lightType:row.light_type??null,lampCount:row.lamp_count??row.total_count??0,headCount:row.head_count??row.total_heads??0,wattagePerLamp:row.wattage_per_lamp??null,gps:{lat:row.gps_lat??null,lng:row.gps_lng??null},notes:row.notes??""};
+        const quantities=table==="sl_ger_inventory"?legacyInventoryQuantities(row):{lampCount:row.lamp_count??row.total_count??0,headCount:row.head_count??row.total_heads??0};
+        const metadata={legacyId:row.id,legacyAssetId:row.asset_id??null,bagNo:row.bag_no??null,meterNo:row.meter_no??null,lightType:row.light_type??null,...quantities,wattagePerLamp:row.wattage_per_lamp??null,gps:{lat:row.gps_lat??null,lng:row.gps_lng??null},notes:row.notes??""};
         const repairedAssets=await client.query(`UPDATE assets SET name=$3,category=$4,status=$5,location=$6,notes=$7,
           metadata=metadata||$8::jsonb,updated_at=now()
           WHERE organization_id=$1 AND code=$2
@@ -44,11 +52,11 @@ async function main(){
 
     for(const row of data.faults||[]){
       const category=readable(row.category,"Гэмтэл"),location=readable(row.location_name,"Байршил");
-      const affected=Math.max(0,integer(row.broken_count)),resolved=Math.min(affected,Math.max(0,integer(row.fixed_count)));
+      const affected=Math.max(0,integer(row.broken_count)),resolved=Math.min(affected,Math.max(0,integer(row.fixed_count))),status=affected===resolved?"resolved":faultStatus(row.status);
       const detail={legacyStatus:row.status,totalHeads:row.total_heads,notes:row.notes||""};
       const result=await client.query(`UPDATE operational_incidents SET incident_type=$4,title=$5,location=$6,affected_quantity=$7,resolved_quantity=$8,status=$9,detail=detail||$10::jsonb,updated_at=now()
         WHERE organization_id=$1 AND domain='lighting' AND source_system=$2 AND external_id=$3
-          AND (title LIKE '%?%' OR COALESCE(location,'') LIKE '%?%' OR detail::text LIKE '%?%')`,[organizationId,data.sourceSystem,String(row.id),category,`${category} — ${location||"Байршил"}`,location,affected,resolved,faultStatus(row.status),JSON.stringify(detail)]);
+          AND (title LIKE '%?%' OR COALESCE(location,'') LIKE '%?%' OR detail::text LIKE '%?%')`,[organizationId,data.sourceSystem,String(row.id),category,`${category} — ${location||"Байршил"}`,location,affected,resolved,status,JSON.stringify(detail)]);
       counts.incidents+=result.rowCount;
     }
 

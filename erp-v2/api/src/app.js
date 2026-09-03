@@ -43,6 +43,7 @@ function createApp() {
   app.use("/api/engineering", require("./routes/engineering"));
   app.use("/api/lighting", require("./routes/lighting"));
   app.use("/api/camera", require("./routes/camera"));
+  app.use("/api/camera/network", require("./routes/camera-network"));
   app.use("/api/map", require("./routes/map"));
   app.use("/api/gps", require("./routes/gps"));
   app.use("/api/iot", require("./routes/iot"));

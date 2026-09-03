@@ -107,11 +107,12 @@ async function resolveLinkedIncidents(client,{organizationId,workOrderId,userId}
     [organizationId,incident.id]);
     if(remaining.rows[0].count)continue;
     const quantity=Math.max(0,Number(incident.affected_quantity)-Number(incident.resolved_quantity));
-    await client.query(`UPDATE operational_incidents SET status='resolved',resolved_quantity=affected_quantity,updated_at=now()
-      WHERE organization_id=$1 AND id=$2`,[organizationId,incident.id]);
-    await client.query(`INSERT INTO operational_incident_events(organization_id,incident_id,actor_user_id,event_type,quantity,note,detail)
-      VALUES($1,$2,$3,'resolved',$4,$5,$6::jsonb)`,[organizationId,incident.id,userId,quantity,
-      'Холбогдсон ажил Ерөнхий инженерийн хүлээн авалтаар хаагдсан',JSON.stringify({workOrderId})]);
+    const updated=await client.query(`UPDATE operational_incidents
+      SET status='resolved',resolved_quantity=affected_quantity,version=version+1,updated_at=now()
+      WHERE organization_id=$1 AND id=$2 RETURNING version`,[organizationId,incident.id]);
+    await client.query(`INSERT INTO operational_incident_events(organization_id,incident_id,actor_user_id,event_type,quantity,note,detail,incident_version)
+      VALUES($1,$2,$3,'resolved',$4,$5,$6::jsonb,$7)`,[organizationId,incident.id,userId,quantity,
+      'Холбогдсон ажил Ерөнхий инженерийн хүлээн авалтаар хаагдсан',JSON.stringify({workOrderId}),updated.rows[0].version]);
     resolved.push(incident.id);
   }
   return resolved;
@@ -201,7 +202,7 @@ function requireInventory(req,res) {
 router.use(authenticate, requireModule("work-orders"));
 
 router.get("/options", asyncHandler(async(req,res)=>{
-  const [result,serviceAreas]=await withTenantTransaction(req.user.organization_id,client=>Promise.all([client.query(`SELECT wt.id,wt.code,wt.name,wt.category,wt.operational_stream,r.organization_unit_id AS department_id,
+  const [result,serviceAreas,cameraGroups]=await withTenantTransaction(req.user.organization_id,client=>Promise.all([client.query(`SELECT wt.id,wt.code,wt.name,wt.category,wt.operational_stream,r.organization_unit_id AS department_id,
     d.name AS department_name,r.workflow_policy_id,p.name AS workflow_name
     FROM organization_work_types wt
     LEFT JOIN organization_work_type_routes r ON r.organization_id=wt.organization_id AND r.work_type_id=wt.id AND r.active=true
@@ -210,8 +211,19 @@ router.get("/options", asyncHandler(async(req,res)=>{
     WHERE wt.organization_id=$1 AND wt.active=true ORDER BY wt.category,wt.name`,[req.user.organization_id]),
   client.query(`SELECT id,domain,code,name,icon,sort_order,intake_lane_title,team_lane_title
     FROM organization_work_service_areas
-    WHERE organization_id=$1 AND active=true ORDER BY domain,sort_order,name`,[req.user.organization_id])]));
-  res.json({items:result.rows,serviceAreas:serviceAreas.rows});
+    WHERE organization_id=$1 AND active=true ORDER BY domain,sort_order,name`,[req.user.organization_id]),
+  client.query(`SELECT DISTINCT NULLIF(btrim(source.source_snapshot->>'bag_no'),'') AS code
+    FROM operational_objects object_row
+    JOIN source_import_records source
+      ON source.organization_id=object_row.organization_id
+      AND source.source_system=object_row.source_system
+      AND source.source_table=object_row.source_table
+      AND source.source_id=object_row.source_id
+    WHERE object_row.organization_id=$1 AND object_row.domain='camera'
+      AND object_row.status<>'retired'
+      AND NULLIF(btrim(source.source_snapshot->>'bag_no'),'') IS NOT NULL
+    ORDER BY code`,[req.user.organization_id])]));
+  res.json({items:result.rows,serviceAreas:serviceAreas.rows,cameraGroups:cameraGroups.rows});
 }));
 
 router.get("/intake", asyncHandler(async(req,res)=>{
@@ -224,6 +236,7 @@ router.get("/intake", asyncHandler(async(req,res)=>{
     i.status,i.reported_at,i.operational_object_id,i.asset_id,i.service_area_id,i.detail,
     area.domain AS service_area_domain,area.code AS service_area_code,area.name AS service_area_name,area.icon AS service_area_icon,
     COALESCE(oo.code,a.code) AS object_code,COALESCE(oo.name,a.name) AS object_name,
+    NULLIF(btrim(object_source.source_snapshot->>'bag_no'),'') AS camera_source_group_code,
     COALESCE(related.open_count,0)::int AS related_open_work_count,
     related.first_work_id AS related_work_order_id,related.first_work_title AS related_work_order_title,
     suggestion.work_type_id AS suggested_work_type_id,suggestion.work_type_name AS suggested_work_type_name,
@@ -234,6 +247,11 @@ router.get("/intake", asyncHandler(async(req,res)=>{
     LEFT JOIN organization_work_service_areas area
       ON area.organization_id=i.organization_id AND area.id=i.service_area_id AND area.active=true
     LEFT JOIN operational_objects oo ON oo.organization_id=i.organization_id AND oo.id=i.operational_object_id
+    LEFT JOIN source_import_records object_source
+      ON object_source.organization_id=oo.organization_id
+      AND object_source.source_system=oo.source_system
+      AND object_source.source_table=oo.source_table
+      AND object_source.source_id=oo.source_id
     LEFT JOIN assets a ON a.organization_id=i.organization_id AND a.id=i.asset_id
     LEFT JOIN LATERAL(
       SELECT wt.id AS work_type_id,wt.name AS work_type_name,wt.operational_stream,
@@ -280,6 +298,7 @@ router.get("/", asyncHandler(async(req,res)=>{
     area.domain AS service_area_domain,area.code AS service_area_code,area.name AS service_area_name,area.icon AS service_area_icon,
     COALESCE(oo.code,a.code) AS asset_code,COALESCE(oo.name,a.name) AS asset_name,
     oo.code AS operational_object_code,oo.name AS operational_object_name,
+    NULLIF(btrim(object_source.source_snapshot->>'bag_no'),'') AS camera_source_group_code,
     a.code AS fixed_asset_code,a.name AS fixed_asset_name,wt.code AS work_type_code,wt.name AS work_type_name,d.name AS department_name,
     p.name AS workflow_name,p.config AS workflow_config,assignee.full_name AS assigned_name,
     assignee.role AS assigned_role,creator.full_name AS created_by_name
@@ -287,6 +306,11 @@ router.get("/", asyncHandler(async(req,res)=>{
     LEFT JOIN organization_work_service_areas area
       ON area.organization_id=w.organization_id AND area.id=w.service_area_id AND area.active=true
     LEFT JOIN operational_objects oo ON oo.organization_id=w.organization_id AND oo.id=w.operational_object_id
+    LEFT JOIN source_import_records object_source
+      ON object_source.organization_id=oo.organization_id
+      AND object_source.source_system=oo.source_system
+      AND object_source.source_table=oo.source_table
+      AND object_source.source_id=oo.source_id
     LEFT JOIN assets a ON a.organization_id=w.organization_id AND a.id=w.asset_id
     LEFT JOIN organization_work_types wt ON wt.organization_id=w.organization_id AND wt.id=w.work_type_id
     LEFT JOIN departments d ON d.organization_id=w.organization_id AND d.id=w.department_id
@@ -538,11 +562,12 @@ router.post("/",asyncHandler(async(req,res)=>{
       await client.query(`INSERT INTO operational_incident_work_orders(organization_id,incident_id,work_order_id,link_role,linked_by,detail)
         VALUES($1,$2,$3,'origin',$4,$5::jsonb)`,[req.user.organization_id,incident.id,item.id,req.user.id,
         JSON.stringify({sourceStatus:incident.status,sourceDomain:incident.domain})]);
-      await client.query(`UPDATE operational_incidents SET status='in_progress',updated_at=now()
-        WHERE organization_id=$1 AND id=$2`,[req.user.organization_id,incident.id]);
-      await client.query(`INSERT INTO operational_incident_events(organization_id,incident_id,actor_user_id,event_type,note,detail)
-        VALUES($1,$2,$3,'progress',$4,$5::jsonb)`,[req.user.organization_id,incident.id,req.user.id,
-        'Асуудлыг ажлын урсгалд оруулав',JSON.stringify({workOrderId:item.id})]);
+      const incidentUpdate=await client.query(`UPDATE operational_incidents
+        SET status='in_progress',version=version+1,updated_at=now()
+        WHERE organization_id=$1 AND id=$2 RETURNING version`,[req.user.organization_id,incident.id]);
+      await client.query(`INSERT INTO operational_incident_events(organization_id,incident_id,actor_user_id,event_type,note,detail,incident_version)
+        VALUES($1,$2,$3,'progress',$4,$5::jsonb,$6)`,[req.user.organization_id,incident.id,req.user.id,
+        'Асуудлыг ажлын урсгалд оруулав',JSON.stringify({workOrderId:item.id}),incidentUpdate.rows[0].version]);
     }
     await client.query(`INSERT INTO work_order_events(organization_id,work_order_id,actor_user_id,event_type,to_status,detail)
       VALUES($1,$2,$3,'created',$4,$5::jsonb)`,[req.user.organization_id,item.id,req.user.id,status,JSON.stringify({assignedTo:assignee?.id||null,assignedName:assignee?.full_name||null,workflowStage,operationalStream,assignmentKind,serviceAreaId})]);

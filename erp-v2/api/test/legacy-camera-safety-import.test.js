@@ -51,7 +51,7 @@ test("camera workspace exposes quantities, history and object dossiers",()=>{
   assert.match(route,/operational_object_components/);
   assert.match(ui,/data-camera-dossier/);
   assert.match(ui,/Камерын өдрийн төлөвийн түүх/);
-  assert.match(ui,/Объектын хувийн хэрэг/);
+  assert.match(ui,/Объектын master бүртгэл/);
 });
 
 test("safety overview includes imported documents, acknowledgements and routes",()=>{
