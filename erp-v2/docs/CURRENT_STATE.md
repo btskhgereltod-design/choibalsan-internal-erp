@@ -8,6 +8,13 @@ validated at enterprise scale.
 
 ## 2026-09-04 connected-operations production release
 
+- Production Web hotfix `8cade7e` corrects the fault-intake empty state found
+  during user acceptance. If the selected lighting or camera scope has zero
+  open-fault objects, **All** becomes the effective view, every eligible object
+  remains available for a new report, and the impossible **Faulty only 0**
+  filter is disabled. Web image
+  `sha256:83bf0037c1d69c3cb08f5116746d760255018978b2fa1135e2b49b6618d8a8aa`
+  is healthy in production; the API, schema and business data were unchanged.
 - The dashboard, report-schedule, Work follow-up/team, and lighting/camera fault
   changes are committed as feature commit `7d31ef9` plus tenant-query safety fix
   `912d1b1`, and successfully promoted through a controlled release. LAN

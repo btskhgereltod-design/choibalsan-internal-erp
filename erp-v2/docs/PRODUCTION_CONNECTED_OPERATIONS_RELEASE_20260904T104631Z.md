@@ -136,3 +136,22 @@ separate outage decision because it would discard valid post-cutoff business
 events.
 
 The release is complete and production is healthy.
+
+## Post-release Web hotfix
+
+User acceptance found that a zero-fault service area could retain the previous
+**Faulty only** client filter and show an empty table even though its healthy
+objects were valid new-fault targets. Commit `8cade7e` makes **All** the
+effective view whenever the scoped fault count is zero, disables the impossible
+zero-result filter and applies the same behavior to lighting and camera intake.
+
+The full repository suite passed `487/487`. Immutable Web image
+`overva-production-web:hotfix-8cade7e-20260904T110425Z`
+(`sha256:83bf0037c1d69c3cb08f5116746d760255018978b2fa1135e2b49b6618d8a8aa`)
+was promoted at `2026-09-04T11:05:21.991569109Z`. The prior Web image remains
+tagged `overva-production-web:rollback-zero-fault-20260904T110425Z`. The new
+container, external App route and external `lighting.js` returned healthy/200,
+and the externally served script contains the corrected state logic. All seven
+services remained healthy; release check still reports 110 migrations and 25
+modules with zero orphan events. The API, database schema, LAN and business
+data were not changed by this hotfix.
