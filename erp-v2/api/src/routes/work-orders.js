@@ -99,6 +99,9 @@ const materialDecisionSchema=z.object({
   if(value.decision==="rejected"&&!value.note)ctx.addIssue({code:"custom",path:["note"],message:"Rejection note is required"});
 });
 const materialIssueSchema=z.object({warehouseId:z.string().uuid(),idempotencyKey:z.string().uuid()});
+const materialConsumeSchema=z.object({consumedQuantity:z.coerce.number().positive().max(100000000).optional()});
+const materialReturnSchema=z.object({warehouseId:z.string().uuid(),returnedQuantity:z.coerce.number().positive().max(100000000),
+  idempotencyKey:z.string().uuid(),note:z.string().trim().min(1).max(2000)});
 const attachIncidentSchema=z.object({workOrderId:z.string().uuid(),idempotencyKey:z.string().uuid()});
 
 async function scopeClosure(client,organizationId,workOrderId){
@@ -112,6 +115,12 @@ async function scopeClosure(client,organizationId,workOrderId){
       ON disposition.organization_id=scope.organization_id AND disposition.source_scope_item_id=scope.id
     WHERE scope.organization_id=$1 AND scope.work_order_id=$2`,[organizationId,workOrderId]);
   return result.rows[0];
+}
+
+async function materialClosure(client,organizationId,workOrderId){
+  return (await client.query(`SELECT count(*)::int AS blocking_count FROM work_order_material_requests
+    WHERE organization_id=$1 AND work_order_id=$2 AND status NOT IN('rejected','consumed','reconciled','cancelled')`,
+  [organizationId,workOrderId])).rows[0];
 }
 
 async function resolveLinkedIncidents(client,{organizationId,workOrderId,userId}){
@@ -606,21 +615,56 @@ router.post("/:id/materials/:materialId/issue",asyncHandler(async(req,res)=>{
 
 router.post("/:id/materials/:materialId/consume",asyncHandler(async(req,res)=>{
   if(!hasPermission(req.user,WORK_ORDER_PERMISSIONS.MATERIAL_CONSUME))return deny(res,WORK_ORDER_PERMISSIONS.MATERIAL_CONSUME);
-  const id=z.string().uuid().safeParse(req.params.id),materialId=z.string().uuid().safeParse(req.params.materialId);
-  if(!id.success||!materialId.success)return res.status(400).json({error:"Invalid consumption confirmation"});
+  const id=z.string().uuid().safeParse(req.params.id),materialId=z.string().uuid().safeParse(req.params.materialId),parsed=materialConsumeSchema.safeParse(req.body||{});
+  if(!id.success||!materialId.success||!parsed.success)return res.status(400).json({error:"Invalid consumption confirmation",issues:parsed.error?.issues});
   const client=await getPool().connect();try{await client.query("BEGIN");
     const current=(await client.query(`SELECT mr.*,w.department_id,w.assigned_to,w.created_by FROM work_order_material_requests mr
       JOIN work_orders w ON w.organization_id=mr.organization_id AND w.id=mr.work_order_id
       WHERE mr.organization_id=$1 AND mr.work_order_id=$2 AND mr.id=$3 FOR UPDATE`,[req.user.organization_id,id.data,materialId.data])).rows[0];
     if(!current){await client.query("ROLLBACK");return res.status(404).json({error:"Material request not found"});}
     if(!canManageScope(req.user,current)){await client.query("ROLLBACK");return deny(res,WORK_ORDER_PERMISSIONS.MATERIAL_CONSUME);}
-    if(!canTransitionMaterial(current.status,"consumed")){await client.query("ROLLBACK");return res.status(409).json({error:"Only issued material can be confirmed as consumed"});}
-    const updated=await client.query(`UPDATE work_order_material_requests SET status='consumed',consumed_quantity=issued_quantity,consumed_by=$1,consumed_at=now(),updated_at=now()
-      WHERE organization_id=$2 AND id=$3 RETURNING *`,[req.user.id,req.user.organization_id,materialId.data]);
+    const consumed=parsed.data.consumedQuantity===undefined?Number(current.issued_quantity):Number(parsed.data.consumedQuantity);
+    if(consumed>Number(current.issued_quantity)){await client.query("ROLLBACK");return res.status(400).json({error:"Consumed quantity cannot exceed issued quantity"});}
+    const status=consumed===Number(current.issued_quantity)?"consumed":"partially_consumed";
+    if(!canTransitionMaterial(current.status,status)){await client.query("ROLLBACK");return res.status(409).json({error:"Only issued material can be confirmed as consumed"});}
+    const updated=await client.query(`UPDATE work_order_material_requests SET status=$1,consumed_quantity=$2,consumed_by=$3,consumed_at=now(),updated_at=now()
+      WHERE organization_id=$4 AND id=$5 RETURNING *`,[status,consumed,req.user.id,req.user.organization_id,materialId.data]);
     await client.query(`INSERT INTO work_order_material_events(organization_id,material_request_id,work_order_id,actor_user_id,action,detail)
-      VALUES($1,$2,$3,$4,'consumed',$5::jsonb)`,[req.user.organization_id,materialId.data,id.data,req.user.id,JSON.stringify({quantity:Number(current.issued_quantity)})]);
-    await writeAudit(req,"work_order.material.consumed","work_order_material_request",materialId.data,{workOrderId:id.data,quantity:Number(current.issued_quantity)},client);
+      VALUES($1,$2,$3,$4,$5,$6::jsonb)`,[req.user.organization_id,materialId.data,id.data,req.user.id,status,JSON.stringify({quantity:consumed,issuedQuantity:Number(current.issued_quantity)})]);
+    await writeAudit(req,`work_order.material.${status}`,"work_order_material_request",materialId.data,{workOrderId:id.data,quantity:consumed,issuedQuantity:Number(current.issued_quantity)},client);
     await client.query("COMMIT");res.json({item:updated.rows[0]});
+  }catch(error){await client.query("ROLLBACK").catch(()=>{});throw error}finally{client.release()}
+}));
+
+router.post("/:id/materials/:materialId/return",asyncHandler(async(req,res)=>{
+  if(!requireInventory(req,res))return;
+  if(!hasPermission(req.user,"work-orders.material.return"))return deny(res,"work-orders.material.return");
+  const id=z.string().uuid().safeParse(req.params.id),materialId=z.string().uuid().safeParse(req.params.materialId),parsed=materialReturnSchema.safeParse(req.body);
+  if(!id.success||!materialId.success||!parsed.success)return res.status(400).json({error:"Invalid material return",issues:parsed.error?.issues});
+  const v=parsed.data,client=await getPool().connect();try{await client.query("BEGIN");
+    const replay=(await client.query("SELECT * FROM stock_movements WHERE organization_id=$1 AND idempotency_key=$2 FOR UPDATE",[req.user.organization_id,v.idempotencyKey])).rows[0];
+    if(replay){await client.query("COMMIT");if(replay.work_order_material_request_id!==materialId.data)return res.status(409).json({error:"Idempotency key was already used for another stock movement",code:"IDEMPOTENCY_CONFLICT"});return res.json({item:replay,replayed:true});}
+    const current=(await client.query("SELECT * FROM work_order_material_requests WHERE organization_id=$1 AND work_order_id=$2 AND id=$3 FOR UPDATE",[req.user.organization_id,id.data,materialId.data])).rows[0];
+    if(!current){await client.query("ROLLBACK");return res.status(404).json({error:"Material request not found"});}
+    if(!canTransitionMaterial(current.status,"reconciled")){await client.query("ROLLBACK");return res.status(409).json({error:"Only partially consumed material can be returned"});}
+    const expected=Number(current.issued_quantity)-Number(current.consumed_quantity);
+    if(v.returnedQuantity!==expected){await client.query("ROLLBACK");return res.status(409).json({error:"Returned quantity must equal the issued remainder",code:"MATERIAL_RETURN_QUANTITY_MISMATCH",expected});}
+    const warehouse=(await client.query("SELECT id FROM warehouses WHERE organization_id=$1 AND id=$2 FOR UPDATE",[req.user.organization_id,v.warehouseId])).rows[0];
+    if(!warehouse){await client.query("ROLLBACK");return res.status(404).json({error:"Warehouse not found"});}
+    await client.query(`INSERT INTO inventory_balances(organization_id,warehouse_id,item_id,quantity) VALUES($1,$2,$3,$4)
+      ON CONFLICT(organization_id,warehouse_id,item_id) DO UPDATE SET quantity=inventory_balances.quantity+EXCLUDED.quantity,updated_at=now()`,
+    [req.user.organization_id,v.warehouseId,current.inventory_item_id,v.returnedQuantity]);
+    const movement=(await client.query(`INSERT INTO stock_movements(organization_id,item_id,to_warehouse_id,movement_type,quantity,reference,note,created_by,work_order_id,work_order_material_request_id,idempotency_key)
+      VALUES($1,$2,$3,'receipt',$4,$5,$6,$7,$8,$9,$10) RETURNING *`,[req.user.organization_id,current.inventory_item_id,v.warehouseId,v.returnedQuantity,
+      `WORK-RETURN:${id.data}`,v.note,req.user.id,id.data,materialId.data,v.idempotencyKey])).rows[0];
+    const updated=(await client.query(`UPDATE work_order_material_requests SET status='reconciled',returned_quantity=$1,returned_by=$2,returned_at=now(),updated_at=now()
+      WHERE organization_id=$3 AND id=$4 RETURNING *`,[v.returnedQuantity,req.user.id,req.user.organization_id,materialId.data])).rows[0];
+    await client.query(`INSERT INTO work_order_material_events(organization_id,material_request_id,work_order_id,actor_user_id,action,detail)
+      VALUES($1,$2,$3,$4,'returned',$5::jsonb),($1,$2,$3,$4,'reconciled',$5::jsonb)`,[req.user.organization_id,materialId.data,id.data,req.user.id,
+      JSON.stringify({warehouseId:v.warehouseId,quantity:v.returnedQuantity,stockMovementId:movement.id,idempotencyKey:v.idempotencyKey,note:v.note})]);
+    await writeAudit(req,"work_order.material.returned","work_order_material_request",materialId.data,{workOrderId:id.data,warehouseId:v.warehouseId,
+      returnedQuantity:v.returnedQuantity,consumedQuantity:Number(current.consumed_quantity),stockMovementId:movement.id,idempotencyKey:v.idempotencyKey},client);
+    await client.query("COMMIT");res.status(201).json({item:updated,movement,replayed:false});
   }catch(error){await client.query("ROLLBACK").catch(()=>{});throw error}finally{client.release()}
 }));
 
@@ -639,6 +683,9 @@ router.post("/",asyncHandler(async(req,res)=>{
         WHERE organization_id=$1 AND id=$2 FOR UPDATE`,[req.user.organization_id,value.incidentId])).rows[0];
       if(!incident){await client.query("ROLLBACK");return res.status(404).json({error:"Асуудал, хэрэгцээний бүртгэл олдсонгүй"});}
       if(!['open','in_progress'].includes(incident.status)){await client.query("ROLLBACK");return res.status(409).json({error:"Хаагдсан асуудлаас шинэ ажил үүсгэх боломжгүй"});}
+      if(Number(incident.affected_quantity)-Number(incident.resolved_quantity)<=0){
+        await client.query("ROLLBACK");return res.status(409).json({error:"Шийдвэрлэх үлдэгдэлгүй асуудлаас шинэ ажил үүсгэхгүй"});
+      }
       const activeLink=await client.query(`SELECT w.id,w.title FROM operational_incident_work_orders l
         JOIN work_orders w ON w.organization_id=l.organization_id AND w.id=l.work_order_id
         WHERE l.organization_id=$1 AND l.incident_id=$2 AND w.status NOT IN('completed','cancelled') LIMIT 1`,
@@ -733,6 +780,18 @@ router.post("/",asyncHandler(async(req,res)=>{
       await client.query(`INSERT INTO operational_incident_work_orders(organization_id,incident_id,work_order_id,link_role,linked_by,detail)
         VALUES($1,$2,$3,'origin',$4,$5::jsonb)`,[req.user.organization_id,incident.id,item.id,req.user.id,
         JSON.stringify({sourceStatus:incident.status,sourceDomain:incident.domain})]);
+      const remaining=Math.max(0,Number(incident.affected_quantity)-Number(incident.resolved_quantity));
+      const unit=String(incident.detail?.quantityUnit||"тохиолдол");
+      const originScope=(await client.query(`INSERT INTO work_order_scope_items(
+        organization_id,work_order_id,operational_object_id,asset_id,item_code,description,unit,
+        planned_quantity,weight,created_by,updated_by)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,1,$9,$9) RETURNING *`,[req.user.organization_id,item.id,
+        incident.operational_object_id||null,incident.asset_id||null,`incident:${incident.id}`,
+        incident.title,unit,remaining,req.user.id])).rows[0];
+      await client.query(`INSERT INTO work_order_scope_item_events(
+        organization_id,work_order_id,scope_item_id,actor_user_id,event_type,detail)
+        VALUES($1,$2,$3,$4,'created',$5::jsonb)`,[req.user.organization_id,item.id,originScope.id,req.user.id,
+        JSON.stringify({plannedQuantity:remaining,unit,incidentId:incident.id,source:"work_intake_origin"})]);
       const incidentUpdate=await client.query(`UPDATE operational_incidents
         SET status='in_progress',version=version+1,updated_at=now()
         WHERE organization_id=$1 AND id=$2 RETURNING version`,[req.user.organization_id,incident.id]);
@@ -860,7 +919,7 @@ router.patch("/:id/status",asyncHandler(async(req,res)=>{
     if(!canProgressOrder(req.user,current)){await client.query("ROLLBACK");return deny(res,WORK_ORDER_PERMISSIONS.PROGRESS);}
     if(!canTransition(current.status,parsed.data.status)){await client.query("ROLLBACK");return res.status(409).json({error:`Transition ${current.status} -> ${parsed.data.status} is not allowed`});}
     if(parsed.data.status==="completed"&&!hasPermission(req.user,WORK_ORDER_PERMISSIONS.WORKFLOW_APPROVE)){await client.query("ROLLBACK");return deny(res,WORK_ORDER_PERMISSIONS.WORKFLOW_APPROVE);}
-    if(parsed.data.status==="completed"){const closure=await scopeClosure(client,req.user.organization_id,id.data);if(closure.item_count&&(closure.blocking_count||closure.undisposed_count)){await client.query("ROLLBACK");return res.status(409).json({error:"Хэмжигдэх үр дүн эсвэл үлдэгдлийн дараагийн шийдвэр бүрэн хаагдаагүй байна",outcome:closure});}}
+    if(parsed.data.status==="completed"){const closure=await scopeClosure(client,req.user.organization_id,id.data);if(closure.item_count&&(closure.blocking_count||closure.undisposed_count)){await client.query("ROLLBACK");return res.status(409).json({error:"Хэмжигдэх үр дүн эсвэл үлдэгдлийн дараагийн шийдвэр бүрэн хаагдаагүй байна",outcome:closure});}const materials=await materialClosure(client,req.user.organization_id,id.data);if(materials.blocking_count){await client.query("ROLLBACK");return res.status(409).json({error:"Material requests must be reconciled before Work completion",code:"MATERIAL_RECONCILIATION_REQUIRED",materials});}}
     const updated=await client.query("UPDATE work_orders SET status=$1,updated_at=now() WHERE organization_id=$2 AND id=$3 RETURNING *",[parsed.data.status,req.user.organization_id,id.data]);
     await client.query("INSERT INTO work_order_events(organization_id,actor_user_id,work_order_id,event_type,from_status,to_status) VALUES($1,$2,$3,'status_changed',$4,$5)",[req.user.organization_id,req.user.id,id.data,current.status,parsed.data.status]);
     if(parsed.data.status==="pending_review")await notifyManagement(client,{organizationId:req.user.organization_id,excludeUserId:req.user.id,type:"review_requested",title:"Ажил хянуулах хүсэлт ирлээ",message:`Ажлын дугаар: ${id.data}`,entityId:id.data});
@@ -906,7 +965,7 @@ router.post("/:id/workflow-action",asyncHandler(async(req,res)=>{
       if(permitError){await client.query("ROLLBACK");return res.status(409).json({error:permitError,code:"SAFETY_PERMIT_INVALID"});}
     }
     const nextStatus=rule.status||current.status;
-    if(rule.to==="completed"){const closure=await scopeClosure(client,req.user.organization_id,id.data);if(closure.item_count&&(closure.blocking_count||closure.undisposed_count)){await client.query("ROLLBACK");return res.status(409).json({error:"Шийдэгдээгүй үлдэгдлийг дараагийн ажилд шилжүүлэх эсвэл үндэслэлтэй дуусгах шийдвэр шаардлагатай",outcome:closure});}}
+    if(rule.to==="completed"){const closure=await scopeClosure(client,req.user.organization_id,id.data);if(closure.item_count&&(closure.blocking_count||closure.undisposed_count)){await client.query("ROLLBACK");return res.status(409).json({error:"Шийдэгдээгүй үлдэгдлийг дараагийн ажилд шилжүүлэх эсвэл үндэслэлтэй дуусгах шийдвэр шаардлагатай",outcome:closure});}const materials=await materialClosure(client,req.user.organization_id,id.data);if(materials.blocking_count){await client.query("ROLLBACK");return res.status(409).json({error:"Material requests must be reconciled before Work completion",code:"MATERIAL_RECONCILIATION_REQUIRED",materials});}}
     const updated=await client.query("UPDATE work_orders SET workflow_stage=$1,status=$2,updated_at=now() WHERE organization_id=$3 AND id=$4 RETURNING *",[rule.to,nextStatus,req.user.organization_id,id.data]);
     const detail={action,fromStage:current.workflow_stage,toStage:rule.to,fromStatus:current.status,toStatus:nextStatus,
       safetyReviewId:safetyReview?.item?.id||null,riskScore:safetyReview?.item?.risk_score||null,templateVersion:safetyReview?.item?.template_version||null};
@@ -1036,8 +1095,10 @@ router.post("/:id/scope-items/:scopeId/exception",asyncHandler(async(req,res)=>{
           SELECT link.organization_id,link.incident_id,$3,'related',$4,$5::jsonb
           FROM operational_incident_work_orders link
           WHERE link.organization_id=$1 AND link.work_order_id=$2
+            AND $6='incident:'||link.incident_id::text
           ON CONFLICT(organization_id,incident_id,work_order_id) DO NOTHING RETURNING incident_id`,
-        [req.user.organization_id,id.data,followUp.id,req.user.id,JSON.stringify({followUpOfWorkOrderId:id.data,sourceScopeItemId:scopeId.data})]);
+        [req.user.organization_id,id.data,followUp.id,req.user.id,
+          JSON.stringify({followUpOfWorkOrderId:id.data,sourceScopeItemId:scopeId.data}),item.item_code]);
         for(const row of linked.rows){
           const changed=await client.query(`UPDATE operational_incidents SET status='in_progress',version=version+1,updated_at=now()
             WHERE organization_id=$1 AND id=$2 AND status IN('open','in_progress') RETURNING version`,[req.user.organization_id,row.incident_id]);

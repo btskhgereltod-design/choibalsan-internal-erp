@@ -226,7 +226,7 @@ router.get(
         [org, from, to],
       ),
       getPool().query(
-        `SELECT mr.id AS material_request_id,mr.status AS material_status,mr.issued_quantity,mr.consumed_quantity,mr.unit,mr.issued_at,wo.id AS work_order_id,wo.title AS work_order_title,wo.category AS work_order_category,i.sku,i.name AS item_name,sm.id AS stock_movement_id,sm.reference AS stock_reference,amr.id AS review_id,amr.treatment,amr.amount,amr.currency,amr.account_code,amr.document_reference,amr.status AS review_status,amr.note AS review_note,amr.reviewed_at FROM work_order_material_requests mr JOIN work_orders wo ON wo.organization_id=mr.organization_id AND wo.id=mr.work_order_id JOIN inventory_items i ON i.organization_id=mr.organization_id AND i.id=mr.inventory_item_id JOIN stock_movements sm ON sm.organization_id=mr.organization_id AND sm.work_order_material_request_id=mr.id LEFT JOIN accounting_material_reviews amr ON amr.organization_id=mr.organization_id AND amr.material_request_id=mr.id WHERE mr.organization_id=$1 AND mr.status IN('issued','consumed') ORDER BY mr.issued_at DESC LIMIT 200`,
+        `SELECT mr.id AS material_request_id,mr.status AS material_status,mr.issued_quantity,mr.consumed_quantity,mr.returned_quantity,mr.unit,mr.issued_at,wo.id AS work_order_id,wo.title AS work_order_title,wo.category AS work_order_category,i.sku,i.name AS item_name,sm.id AS stock_movement_id,sm.reference AS stock_reference,amr.id AS review_id,amr.treatment,amr.amount,amr.currency,amr.account_code,amr.document_reference,amr.status AS review_status,amr.note AS review_note,amr.reviewed_at FROM work_order_material_requests mr JOIN work_orders wo ON wo.organization_id=mr.organization_id AND wo.id=mr.work_order_id JOIN inventory_items i ON i.organization_id=mr.organization_id AND i.id=mr.inventory_item_id JOIN stock_movements sm ON sm.organization_id=mr.organization_id AND sm.work_order_material_request_id=mr.id AND sm.movement_type='issue' LEFT JOIN accounting_material_reviews amr ON amr.organization_id=mr.organization_id AND amr.material_request_id=mr.id WHERE mr.organization_id=$1 AND mr.status IN('issued','partially_consumed','consumed','reconciled') ORDER BY mr.issued_at DESC LIMIT 200`,
         [org],
       ),
       getPool().query(
@@ -478,7 +478,7 @@ router.post(
       await client.query("BEGIN");
       const source = (
         await client.query(
-          `SELECT mr.id,sm.id AS stock_movement_id FROM work_order_material_requests mr JOIN stock_movements sm ON sm.organization_id=mr.organization_id AND sm.work_order_material_request_id=mr.id WHERE mr.organization_id=$1 AND mr.id=$2 AND mr.status IN('issued','consumed') FOR UPDATE OF mr`,
+          `SELECT mr.id,sm.id AS stock_movement_id FROM work_order_material_requests mr JOIN stock_movements sm ON sm.organization_id=mr.organization_id AND sm.work_order_material_request_id=mr.id AND sm.movement_type='issue' WHERE mr.organization_id=$1 AND mr.id=$2 AND mr.status IN('issued','partially_consumed','consumed','reconciled') FOR UPDATE OF mr`,
           [org, v.materialRequestId],
         )
       ).rows[0];

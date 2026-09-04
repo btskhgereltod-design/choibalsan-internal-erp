@@ -1338,6 +1338,24 @@ that preserves append-only Incident and audit history. The simple intake
 cancellation is forbidden after the Incident has been linked to any Work Order;
 that case must preserve and reconcile the connected Work scope.
 
+### D-068 — Unused Work material returns by exact remainder
+
+Accepted: 2026-09-05
+
+Issued material is not assumed to be fully consumed. The Work assignee records
+the actual positive consumed quantity. When it is less than the issued
+quantity, the request becomes partially consumed and only an authorized
+material custodian may return it to a tenant-owned warehouse. The return must
+equal the complete issued remainder; partial or excess return commands fail
+closed so the request cannot remain ambiguously split.
+
+The successful return creates one idempotent stock receipt, append-only material
+events and an attributable audit record, then marks the material request
+reconciled. Inventory and accounting projections retain issued, consumed and
+returned quantities separately. Existing full-consumption behavior remains
+compatible; migration `0111` is additive except for expanding the governed
+status/action constraints.
+
 ## Active Hypotheses
 
 ### H-001 — Customer journey

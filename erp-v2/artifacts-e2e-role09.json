@@ -1,0 +1,25 @@
+{
+  "runId": "E2E-20260905-ROLE09",
+  "database": "erp_v2",
+  "schema": "0111",
+  "result": "PASS",
+  "goalsPassed": ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"],
+  "lightingObjectId": "bfd88d26-4bdc-46af-992b-d3efa2a643b9",
+  "lightingWorkOrderId": "c69ca086-869d-4a54-8059-605b52e8d2c2",
+  "followUpWorkOrderId": "1f9bfe73-9356-4b5a-904a-a63cee00e04a",
+  "cameraObjectId": "8b1a407d-4227-47dd-a44b-6eabda15b7af",
+  "cameraWorkOrderId": "df50f71d-e61a-4704-9673-8fba9125af6a",
+  "incidentIds": [
+    "58c7ae79-7a95-4152-8651-aa87719887af",
+    "76c3491e-9d8b-4fff-976b-dd0566c1c300",
+    "8dd5162c-dbe5-41ae-81ec-8e680eff5ac8",
+    "e4e88672-5b96-445b-98d5-e328f574e288",
+    "f91188ef-6524-42a7-a63c-aba8e28254f5"
+  ],
+  "materialRequestId": "5e267443-ee94-4467-ad8c-b3fff75fdb5d",
+  "warehouseId": "8f3da753-02d5-48c3-b0a9-8c441b343b86",
+  "inventoryItemId": "5f9179ff-9a45-4d16-bf6e-329599d078f0",
+  "stock": {"beforeIssue": 10, "afterIssue": 8, "afterReturn": 9},
+  "auditRows": 34,
+  "syntheticAccountsDeactivated": 99
+}

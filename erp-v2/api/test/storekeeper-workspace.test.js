@@ -15,7 +15,8 @@ test("storekeeper workspace uses live permissions instead of a legacy title",()=
 test("storekeeper UI preserves familiar tasks over connected OVERVA records",()=>{
   assert.match(shell,/Няравын ажлын талбар/);
   for(const label of ["Самбар","Орлого","Зарлага, олголт","Үлдэгдэл","Захиалга","Тайлан"])assert.match(web,new RegExp(label));
-  assert.match(web,/ажлын захиалга болон нягтлангийн тулгалттай автоматаар холбогдоно/);
+  assert.match(web,/data-issue-work-material/);
+  assert.match(web,/data-return-work-material/);
   assert.match(web,/Худалдан авалтын хүсэлт үүсгэж, батлах–захиалах–хүлээн авах урсгалаар явна/);
   assert.match(web,/data-open-procurement/);
 });

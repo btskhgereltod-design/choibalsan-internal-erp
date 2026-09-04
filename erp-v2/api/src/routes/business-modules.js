@@ -95,11 +95,13 @@ tenantRouter.patch("/structure/users/:id", primaryAdmin, asyncHandler(async (req
 tenantRouter.get("/inventory", asyncHandler(async(req,res)=>{
   const org=req.user.organization_id;
   const canIssueWorkMaterial=(req.user.permissions||[]).includes("work-orders.material.issue");
+  const canReturnWorkMaterial=(req.user.permissions||[]).includes("work-orders.material.return");
   const [warehouses,items,movements,workMaterialRequests]=await Promise.all([
     getPool().query(`SELECT w.*,COALESCE(sum(b.quantity),0)::numeric AS total_quantity,count(b.item_id)::int AS item_count FROM warehouses w LEFT JOIN inventory_balances b ON b.organization_id=w.organization_id AND b.warehouse_id=w.id WHERE w.organization_id=$1 GROUP BY w.id ORDER BY w.name`,[org]),
     getPool().query(`SELECT i.*,COALESCE(sum(b.quantity),0)::numeric AS total_quantity,jsonb_agg(jsonb_build_object('warehouseId',w.id,'warehouseName',w.name,'quantity',b.quantity)) FILTER(WHERE b.warehouse_id IS NOT NULL) AS balances FROM inventory_items i LEFT JOIN inventory_balances b ON b.organization_id=i.organization_id AND b.item_id=i.id LEFT JOIN warehouses w ON w.organization_id=b.organization_id AND w.id=b.warehouse_id WHERE i.organization_id=$1 GROUP BY i.id ORDER BY i.name`,[org]),
     getPool().query(`SELECT m.*,i.name AS item_name,i.sku,fw.name AS from_name,tw.name AS to_name,u.full_name AS created_by_name FROM stock_movements m JOIN inventory_items i ON i.organization_id=m.organization_id AND i.id=m.item_id LEFT JOIN warehouses fw ON fw.organization_id=m.organization_id AND fw.id=m.from_warehouse_id LEFT JOIN warehouses tw ON tw.organization_id=m.organization_id AND tw.id=m.to_warehouse_id LEFT JOIN users u ON u.organization_id=m.organization_id AND u.id=m.created_by WHERE m.organization_id=$1 ORDER BY m.created_at DESC LIMIT 100`,[org]),
-    canIssueWorkMaterial?getPool().query(`SELECT mr.id,mr.work_order_id,mr.approved_quantity,mr.unit,mr.reason,mr.requested_at,
+    (canIssueWorkMaterial||canReturnWorkMaterial)?getPool().query(`SELECT mr.id,mr.work_order_id,mr.status,mr.approved_quantity,mr.issued_quantity,mr.consumed_quantity,
+      (mr.issued_quantity-mr.consumed_quantity)::numeric return_quantity,mr.unit,mr.reason,mr.requested_at,
       wo.title AS work_order_title,i.id AS item_id,i.sku,i.name AS item_name,
       COALESCE(jsonb_agg(jsonb_build_object('warehouseId',w.id,'warehouseName',w.name,'quantity',b.quantity) ORDER BY w.name)
         FILTER(WHERE b.warehouse_id IS NOT NULL),'[]'::jsonb) AS balances
@@ -108,10 +110,10 @@ tenantRouter.get("/inventory", asyncHandler(async(req,res)=>{
       JOIN inventory_items i ON i.organization_id=mr.organization_id AND i.id=mr.inventory_item_id
       LEFT JOIN inventory_balances b ON b.organization_id=mr.organization_id AND b.item_id=mr.inventory_item_id
       LEFT JOIN warehouses w ON w.organization_id=b.organization_id AND w.id=b.warehouse_id
-      WHERE mr.organization_id=$1 AND mr.status='approved'
+      WHERE mr.organization_id=$1 AND mr.status IN('approved','partially_consumed')
       GROUP BY mr.id,wo.id,i.id ORDER BY mr.requested_at`,[org]):Promise.resolve({rows:[]})
   ]);
-  res.json({warehouses:warehouses.rows,items:items.rows,movements:movements.rows,workMaterialRequests:workMaterialRequests.rows,canIssueWorkMaterial});
+  res.json({warehouses:warehouses.rows,items:items.rows,movements:movements.rows,workMaterialRequests:workMaterialRequests.rows,canIssueWorkMaterial,canReturnWorkMaterial});
 }));
 
 tenantRouter.post("/inventory/warehouses", inventoryEditors, asyncHandler(async(req,res)=>{

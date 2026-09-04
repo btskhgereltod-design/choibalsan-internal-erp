@@ -1,10 +1,47 @@
 # OVERVA Current State
 
-Last updated: 2026-09-04
+Last updated: 2026-09-05
 
 This document answers one question: **what exists in the repository now?** It
 does not claim that every implemented foundation is complete or production-
 validated at enterprise scale.
+
+## 2026-09-05 governed human-workflow demo rehearsal
+
+- The isolated `localhost:4200` demo now runs schema `0111`; production remains
+  read-only and unchanged at schema `0110`. A full synthetic, multi-person
+  lighting and camera rehearsal passed from Incident intake through routed Work,
+  named participants, HSE return/authorization/suspension/completion review,
+  measured partial outcome, management disposition, exact follow-up, material
+  reconciliation, final acceptance, dossier projection, dashboard and audit.
+- Incident-origin Work now receives a measurable scope row in the same
+  transaction. A follow-up copies only the Incident represented by its source
+  scope row, so unrelated Incidents from a multi-fault Work are not kept open.
+- Employee access provisioning now grants the current lighting/camera Incident
+  roles, Work roles and separated storekeeper/accountant roles consistently from
+  both account-creation paths. The canonical `choibalsan-pilot` job-workspace
+  profile was applied to the local demo after a dry run; no production access
+  mapping changed.
+- Migration `0111` implements exact unused-material reconciliation. An assignee
+  can record partial consumption; an authorized material custodian can return
+  only the entire issued remainder to a tenant-owned warehouse. The return is
+  quantity-checked, idempotent, audit-attributable and represented by an
+  append-only stock movement and material events. The storekeeper UI exposes
+  the return queue and resulting status.
+- Final run `E2E-20260905-ROLE10` completed all three generated Work Orders and
+  reconciled stock `10 → 8 → 9` for two issued, one consumed and one returned.
+  All earlier incomplete synthetic Works were finished through normal APIs;
+  three orphan retry Incidents were cancelled rather than deleted. Final demo
+  checks show zero open `E2E-20260905-` Incidents and zero unfinished synthetic
+  Work. All 110 temporary login accounts were deactivated through the user API;
+  their named Employee, operational and audit evidence remains distinguishable.
+- Five category reads passed for road lighting, ger-area lighting, tower
+  lighting, traffic signals and camera. The complete repository suite passes
+  **492/492**. A disposable database applied all 111 migrations through `0111`
+  successfully and was removed after verification. Final verified demo backup is
+  `overva-20260904T125340Z`; source-final and runtime-final local API/Web images
+  were retained. `DEMO_HUMAN_WORKFLOW_E2E_20260905.md` contains the report and
+  exact record identifiers.
 
 ## 2026-09-04 local demo parity refresh
 

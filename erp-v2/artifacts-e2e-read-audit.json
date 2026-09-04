@@ -1,0 +1,15 @@
+{
+  "database": "erp_v2",
+  "schema": "0111",
+  "result": "PASS",
+  "categories": {
+    "road-lighting": {"id": "a4fe975d-c455-4629-8d51-33cd435087c7", "code": "LEGACY-SLP-24"},
+    "ger-area-lighting": {"id": "ac970228-62a8-4e7a-83b8-1aad0f651008", "code": "LEGACY-SLI-105"},
+    "tower-lighting": {"id": "a009e132-1a2c-4bcf-8e09-c8ee5953c866", "code": "LEGACY-SLI-234"},
+    "traffic-signal": {"id": "281075d2-d306-43c6-b2be-5f68a0d3a9a5", "code": "TRAF-005"},
+    "camera": {"id": "c8099114-c7a8-4e00-9d50-abaec407a21f", "code": "LEGACY-CAM-460"}
+  },
+  "e2eIncidentState": {"resolved": 37, "cancelled": 14, "open": 0, "inProgress": 0},
+  "lastRun": {"works": 3, "completed": 3},
+  "unfinishedSyntheticWorks": 0
+}

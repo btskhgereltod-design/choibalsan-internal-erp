@@ -56,6 +56,14 @@ test("a repeat incident can be explicitly added to the matching open work as mea
   assert.match(app,/\/api\/work-orders\/intake\/\$\{incidentId\}\/attach/);
 });
 
+test("the origin incident becomes measurable work scope before acceptance",()=>{
+  const route=read("src/routes/work-orders.js");
+  assert.match(route,/`incident:\$\{incident\.id\}`/);
+  assert.match(route,/source:"work_intake_origin"/);
+  assert.match(route,/remaining=Math\.max\(0,Number\(incident\.affected_quantity\)-Number\(incident\.resolved_quantity\)\)/);
+  assert.match(route,/Шийдвэрлэх үлдэгдэлгүй асуудлаас шинэ ажил үүсгэхгүй/);
+});
+
 test("assignment starts governed safety only after the chief engineer has chosen an owner",()=>{
   const route=read("src/routes/work-orders.js");
   assert.match(route,/workflowStage=workType\?\.workflow_policy_id&&assignee\?"awaiting_safety_start":null/);

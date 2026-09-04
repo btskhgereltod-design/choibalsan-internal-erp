@@ -29,8 +29,15 @@ test("follow-up disposition creates one measurable work item and retains inciden
   assert.match(route,/Үлдэгдлийг дараагийн ажилд шилжүүлэв/);
   assert.match(route,/undisposed_count/);
   assert.match(route,/IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD/);
+  assert.match(route,/\$6='incident:'\|\|link\.incident_id::text/);
+  assert.match(route,/item\.item_code/);
   assert.match(assignmentSource,/work_order_events_assignment_source_check/);
   assert.match(assignmentSource,/'scope_follow_up'/);
+});
+
+test("a follow-up keeps only the incident represented by its source scope row",()=>{
+  const route=read("src","routes","work-orders.js");
+  assert.match(route,/WHERE link\.organization_id=\$1 AND link\.work_order_id=\$2[\s\S]*AND \$6='incident:'\|\|link\.incident_id::text/);
 });
 
 test("work UI records measured outcome and offers explicit follow-up or accepted end",()=>{

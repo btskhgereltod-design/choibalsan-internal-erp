@@ -16,6 +16,16 @@ test("employee access overview is backed by tenant roles and permissions",()=>{
   assert.match(employees,/count\(DISTINCT rp\.permission_code\)/);
   assert.match(employees,/INSERT INTO user_roles/);
 });
+
+test("both account creation paths grant current operational roles",()=>{
+  for(const source of [employees,users]){
+    assert.match(source,/\["engineer", "electric"\]\.includes\(role\)\) codes\.push\("work-order-coordinator", "lighting-incident-reporter"\)/);
+    assert.match(source,/role === "camera_engineer"\) codes\.push\("work-order-coordinator", "camera-incident-reporter"\)/);
+    assert.match(source,/"lighting-incident-supervisor", "camera-incident-supervisor"/);
+    assert.match(source,/role === "storekeeper"\) codes\.push\("work-order-material-custodian", "inventory-custodian"\)/);
+    assert.match(source,/role === "accountant"\) codes\.push\("finance-accountant"\)/);
+  }
+});
 test("user access management is nested under settings instead of the main sidebar",()=>{
   assert.match(settingsUi,/data-settings-tab="organization"/);
   assert.match(settingsUi,/data-settings-tab="access"/);
