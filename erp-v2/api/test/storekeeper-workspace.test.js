@@ -26,3 +26,11 @@ test("ad-hoc issue is presented as an evidenced exception",()=>{
   assert.match(web,/name="reference" required/);
   assert.match(web,/name="note" required/);
 });
+
+test("storekeeper dashboard uses meaningful stock indicators and readable values",()=>{
+  assert.match(web,/function inventoryLowItems\(items\)/);
+  assert.match(web,/Number\(item\.minimum_stock\)>0/);
+  assert.match(web,/function inventoryQuantity\(value\)/);
+  assert.match(web,/function inventoryDateTime\(value\)/);
+  assert.match(web,/Үлдэгдэлтэй материал/);
+});

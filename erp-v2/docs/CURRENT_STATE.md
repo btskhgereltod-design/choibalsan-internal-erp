@@ -8,6 +8,14 @@ validated at enterprise scale.
 
 ## 2026-09-04 local demo parity refresh
 
+- The storekeeper dashboard now reports the count of materials with stock
+  instead of adding quantities with incompatible units, treats an item as a
+  replenishment risk only when a positive minimum level is configured, and
+  formats movement quantities and timestamps for compact reading. Two damaged
+  `LEGACY-WH-*` demo material labels plus their legacy warehouse and movement
+  notes were corrected from the read-only legacy SQLite source. The correction
+  is local-demo-only and produced five attributable audit rows; production data
+  was not changed.
 - A verified local backup `overva-20260904T113313Z` was created before changing
   the demo environment. The `localhost:4200` Web and its isolated
   `overva-local-demo-api` were rebuilt from commit `8cade7e`; recursive content
