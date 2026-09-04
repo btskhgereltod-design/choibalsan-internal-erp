@@ -1,17 +1,20 @@
 # Production Go Candidate — 2026-09-04
 
-Status: **NO-GO pending release controls**
+Status: **READY FOR EXPLICIT GO; not deployed**
 
 This record prepares the 2026-09-04 local work for a controlled production
 decision. It does not authorize or record a production deployment.
 
 ## Candidate identity
 
-- Reviewed implementation commit: `7d31ef9`.
-- API image: `overva-production-go-candidate:20260904`
-  (`sha256:667949a3a632b523c2b8028f96f50795da6e1b78337b0b500422ba5a546d5eb4`).
-- Web image: `overva-production-go-web-candidate:20260904`
-  (`sha256:19ecb7f0dcd1271522148f6ff6fb8c81ebddcc95beef22822732dce7d62bdde7`).
+- Feature implementation commit: `7d31ef9`.
+- Final API implementation commit: `912d1b1` (serializes tenant-transaction
+  dossier/workspace reads after an exact-image rehearsal exposed the pg@9
+  concurrent-query deprecation).
+- API image: `overva-production-go-api:912d1b1`
+  (`sha256:23dbce4ec014245d8695481461dc1e5ac2a86c349644e8f270bacd271f6cd2ed`).
+- Web image: `overva-production-go-web:912d1b1`
+  (`sha256:aea90cc7162a10472dceb22a938743c5193c28a8ccc07ce4ff90a95b358cd775`).
 - Production currently remains on API
   `sha256:2abafdd820fa5d0916818c40bb703bc39550e9bf9363f86056ba6dd1837dacc0`
   and Web
@@ -19,9 +22,9 @@ decision. It does not authorize or record a production deployment.
 - Production and LAN containers were not rebuilt, restarted, migrated or
   switched during this preparation.
 
-The image digests above were working-tree rehearsal artifacts. The candidate
-must now be rebuilt from implementation commit `7d31ef9`; only the rebuilt
-digests are eligible for promotion.
+The image digests above were rebuilt from implementation commit `912d1b1` and
+passed the exact-image release and live integration checks. They are the only
+candidate digests eligible for this promotion.
 
 ## Included capability scope
 
@@ -58,7 +61,7 @@ automation events.
 ## Verification evidence
 
 - API syntax check: passed.
-- Repository Node suite: **486/486 passed**. Integration entry files that are
+- Repository Node suite: **487/487 passed**. Integration entry files that are
   opt-in are not represented here as live database proof.
 - Work production-go live rehearsal: cross-tenant Employee rejection,
   responsible/executor persistence, measured residual scope, invalid terminal
@@ -68,6 +71,9 @@ automation events.
   cancellation, exact replay and append-only evidence passed.
 - Camera live rehearsal: tenant isolation, capacity/occurrence validation,
   cancellation, exact replay and append-only evidence passed.
+- The exact-image lighting and camera rehearsals were repeated with Node
+  deprecation tracing after commit `912d1b1`; no concurrent-client warning
+  remained.
 - Work material live rehearsal: request/replay, approval, insufficient-stock
   fail-safe, one issue, consumption and evidence passed.
 - Authenticated local report/home smoke: 20 active schedules, one dashboard
@@ -86,15 +92,16 @@ Read-only production checks on 2026-09-04 found:
 - schema `0105` / 105 migration rows;
 - zero active Employee-type login identities missing a canonical Employee;
 - zero tenantless automation events;
-- verified latest production backup `overva-20260903T131519Z` for database
+- previously verified production backup `overva-20260903T131519Z` for database
   `overva`, including SHA-256, PostgreSQL archive listing and uploads archive.
 
 The scheduled 2026-09-04 backup attempt ran while PostgreSQL was starting and
-failed. The scheduler then waits its normal interval, so process health alone
-does not prove a fresh backup. Before Go, create and independently verify a new
-database-plus-uploads backup after the database is healthy; record its name and
-retain a rollback copy. Do not use the similarly named local `backups/` artifact
-for production—the production authority is `backups-production/`.
+failed. A fresh production database-plus-uploads backup was therefore created
+manually after `pg_isready` passed: `overva-20260904T103838Z`. Its SHA-256 files,
+PostgreSQL custom archive listing and uploads tar archive passed both the
+scheduler-container verification and a separate read-only verifier container.
+Do not use the similarly named local `backups/` artifact for production—the
+production authority is `backups-production/`.
 
 The local demo release check intentionally remains blocked by one pre-existing
 bootstrap admin marked as an Employee without an Employee link. Production has
@@ -104,15 +111,14 @@ or create an Employee.
 
 ## Required Go sequence
 
-1. Rebuild both images from implementation commit `7d31ef9` and record their
-   new immutable digests. The unrelated `OVERVA.code-workspace` remains outside
-   this release.
-2. Repeat syntax, full tests, dependency audit, clean `0001`–`0110` migration,
-   release check and live domain rehearsals against those exact images.
+1. Confirm the recorded implementation commit and image digests. The unrelated
+   `OVERVA.code-workspace` remains outside this release.
+2. Confirm the recorded syntax, full tests, dependency audit, clean
+   `0001`–`0110` migration, release check and exact-image live rehearsals.
 3. Obtain explicit user authorization for production deployment and agree a
    short write/cutover window.
-4. Confirm PostgreSQL healthy, create a fresh production database/uploads
-   backup, verify it independently, and record the artifact and rollback images.
+4. Reconfirm PostgreSQL health and the fresh verified backup
+   `overva-20260904T103838Z` immediately before migration.
 5. Run the dedicated migration service once. Stop immediately on migration,
    checksum, privilege or canonical-data failure.
 6. Switch API/Web only to the recorded candidate digests. Do not rebuild from a
@@ -129,7 +135,7 @@ not rolled back or deleted; defects require a forward-compatible correction.
 
 ## Current decision
 
-The candidate behavior is technically rehearsed, but promotion is **NO-GO**
-until the source is committed and rebuilt, the exact-image checks are repeated,
-a fresh production backup is created and verified, and explicit production
-authorization is received.
+The source, exact images, clean migration, live behavior and fresh production
+backup are verified. The candidate is **READY FOR EXPLICIT GO**, but production
+migration and traffic switch have not been authorized or performed in this
+record.

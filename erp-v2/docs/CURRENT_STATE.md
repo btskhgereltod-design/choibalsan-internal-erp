@@ -9,7 +9,8 @@ validated at enterprise scale.
 ## 2026-09-04 production-go preparation (not deployed)
 
 - The dashboard, report-schedule, Work follow-up/team, and lighting/camera fault
-  changes are committed as implementation commit `7d31ef9` and assembled as a
+  changes are committed as feature commit `7d31ef9` plus tenant-query safety fix
+  `912d1b1`, and assembled as a
   local release candidate. Production and LAN remain untouched.
   `PRODUCTION_GO_CANDIDATE_20260904.md` records the exact candidate
   images, schema transition, verification evidence, rollback identity and
@@ -19,7 +20,7 @@ validated at enterprise scale.
   correction allowing `scope_follow_up` as the assignment-evidence source found
   during live follow-up rehearsal. Clean migration and release rehearsal pass
   at 110 migration rows and 25 active modules.
-- API syntax and all **486/486** repository tests pass. Separate live rehearsals
+- API syntax and all **487/487** repository tests pass. Separate live rehearsals
   pass for Work measured follow-up and participant inheritance, lighting and
   camera incident creation/cancellation, material issue/consumption, and the
   authenticated report/dashboard projection.
@@ -27,12 +28,17 @@ validated at enterprise scale.
   automation events. The local demo has one pre-existing unlinked bootstrap
   Employee login, so its release check correctly fails until governed identity
   reconciliation; this row was not hidden or mutated.
-- Production backup `overva-20260903T131519Z` verifies successfully. The next
-  scheduled attempt failed while PostgreSQL was starting and did not retry
-  immediately, so a new database/uploads backup and independent verification
-  are mandatory immediately before any approved Go. The current decision is
-  **NO-GO pending commit/rebuild, exact-image re-verification, fresh backup and
-  explicit production authorization**.
+- The scheduler's first 2026-09-04 attempt failed while PostgreSQL was starting.
+  After database readiness was confirmed, fresh production backup
+  `overva-20260904T103838Z` was created and passed scheduler-container plus
+  separate read-only-container verification of checksums, PostgreSQL archive
+  and uploads archive. Exact images from `912d1b1` also pass the release and
+  live domain rehearsals. The current decision is **READY FOR EXPLICIT GO; not
+  deployed**.
+- Exact-image live rehearsal also exposed pg's deprecated concurrent query use
+  on one transaction client in lighting/camera dossier reads. Commit `912d1b1`
+  now executes those reads sequentially and adds a regression check, avoiding a
+  future pg@9 runtime failure without weakening the tenant transaction.
 
 ## Lighting and camera home overview (local demo, not production)
 
