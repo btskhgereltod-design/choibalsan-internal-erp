@@ -1,9 +1,10 @@
 # Production Go Candidate — 2026-09-04
 
-Status: **READY FOR EXPLICIT GO; not deployed**
+Status: **PROMOTED — see `PRODUCTION_CONNECTED_OPERATIONS_RELEASE_20260904T104631Z.md`**
 
-This record prepares the 2026-09-04 local work for a controlled production
-decision. It does not authorize or record a production deployment.
+This record prepared the 2026-09-04 local work for a controlled production
+decision. It did not itself authorize deployment; the completed promotion is
+recorded in `PRODUCTION_CONNECTED_OPERATIONS_RELEASE_20260904T104631Z.md`.
 
 ## Candidate identity
 
@@ -15,12 +16,13 @@ decision. It does not authorize or record a production deployment.
   (`sha256:23dbce4ec014245d8695481461dc1e5ac2a86c349644e8f270bacd271f6cd2ed`).
 - Web image: `overva-production-go-web:912d1b1`
   (`sha256:aea90cc7162a10472dceb22a938743c5193c28a8ccc07ce4ff90a95b358cd775`).
-- Production currently remains on API
+- Production previously ran API
   `sha256:2abafdd820fa5d0916818c40bb703bc39550e9bf9363f86056ba6dd1837dacc0`
   and Web
   `sha256:2e066846e1636cf46b8903a84a5ccb158b8d5957e19aa4518505c3886932f2e2`.
-- Production and LAN containers were not rebuilt, restarted, migrated or
-  switched during this preparation.
+- Production and LAN containers were not changed during candidate preparation;
+  production was later promoted under the separate release record above, while
+  LAN remained untouched.
 
 The image digests above were rebuilt from implementation commit `912d1b1` and
 passed the exact-image release and live integration checks. They are the only
@@ -136,6 +138,6 @@ not rolled back or deleted; defects require a forward-compatible correction.
 ## Current decision
 
 The source, exact images, clean migration, live behavior and fresh production
-backup are verified. The candidate is **READY FOR EXPLICIT GO**, but production
-migration and traffic switch have not been authorized or performed in this
-record.
+backup were verified, explicit Go was received, and the candidate was promoted.
+Production evidence and the rollback boundary are recorded in
+`PRODUCTION_CONNECTED_OPERATIONS_RELEASE_20260904T104631Z.md`.

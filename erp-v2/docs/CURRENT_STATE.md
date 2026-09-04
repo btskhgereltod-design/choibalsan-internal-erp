@@ -6,17 +6,17 @@ This document answers one question: **what exists in the repository now?** It
 does not claim that every implemented foundation is complete or production-
 validated at enterprise scale.
 
-## 2026-09-04 production-go preparation (not deployed)
+## 2026-09-04 connected-operations production release
 
 - The dashboard, report-schedule, Work follow-up/team, and lighting/camera fault
   changes are committed as feature commit `7d31ef9` plus tenant-query safety fix
-  `912d1b1`, and assembled as a
-  local release candidate. Production and LAN remain untouched.
-  `PRODUCTION_GO_CANDIDATE_20260904.md` records the exact candidate
-  images, schema transition, verification evidence, rollback identity and
-  remaining Go gates.
-- Production is read-only verified healthy at schema `0105`; the candidate adds
-  ordered migrations `0106` through `0110`. Migration `0110` is an additive
+  `912d1b1`, and successfully promoted through a controlled release. LAN
+  remains untouched.
+  `PRODUCTION_CONNECTED_OPERATIONS_RELEASE_20260904T104631Z.md` records the
+  promoted images, schema transition, verification evidence, rollback identity,
+  backups and external-route checks.
+- Production began the release healthy at schema `0105` and was advanced through
+  ordered migrations `0106` to `0110`. Migration `0110` is an additive
   correction allowing `scope_follow_up` as the assignment-evidence source found
   during live follow-up rehearsal. Clean migration and release rehearsal pass
   at 110 migration rows and 25 active modules.
@@ -33,14 +33,20 @@ validated at enterprise scale.
   `overva-20260904T103838Z` was created and passed scheduler-container plus
   separate read-only-container verification of checksums, PostgreSQL archive
   and uploads archive. Exact images from `912d1b1` also pass the release and
-  live domain rehearsals. The current decision is **READY FOR EXPLICIT GO; not
-  deployed**.
+  live domain rehearsals. Explicit Go was received and production now runs API
+  `sha256:23dbce4e…cd2ed` and Web `sha256:aea90cc7…cd775` at schema `0110`.
+  Release, authenticated tenant/RBAC, lighting, camera, Work, dashboard and
+  external-route smokes pass; all seven long-running services are healthy.
+  Pre/post backups `overva-20260904T103838Z` and
+  `overva-20260904T105136Z` passed stored plus independent verification and
+  have hash-matched D: copies. Full evidence is in
+  `PRODUCTION_CONNECTED_OPERATIONS_RELEASE_20260904T104631Z.md`.
 - Exact-image live rehearsal also exposed pg's deprecated concurrent query use
   on one transaction client in lighting/camera dossier reads. Commit `912d1b1`
   now executes those reads sequentially and adds a regression check, avoiding a
   future pg@9 runtime failure without weakening the tenant transaction.
 
-## Lighting and camera home overview (local demo, not production)
+## Lighting and camera home overview (production)
 
 - The management organization home now includes compact **Гэрэлтүүлгийн тойм**
   and **Камерын тойм** panels. They retain the useful visual grouping of the
@@ -65,8 +71,9 @@ validated at enterprise scale.
   302 devices, 236 active and 66 faulty (78.1%). The desktop arrangement keeps
   these panels, decision alerts and recent information flow in the working
   viewport; narrow screens retain responsive scrolling.
-- This capability is rebuilt only at `http://localhost:4200`. Production has
-  not been modified and remains subject to the existing release gates.
+- This capability was promoted to production in release
+  `20260904T104631Z`; the authenticated dashboard and domain smokes passed.
+  The local demo remains available for isolated follow-on testing.
 - The compact home now gives each infrastructure fact one visual home: when the
   detailed lighting/camera panels are present, their duplicate top metrics and
   duplicate dashboard alert rows are omitted. Their underlying incidents are
@@ -104,7 +111,7 @@ validated at enterprise scale.
   The brand shortcut
   is an unobtrusive icon beside that time, with an accessible label and tooltip.
 
-## Organization information flow (local demo, not production)
+## Organization information flow (production)
 
 - The organization home now includes a compact **Мэдээллийн урсгал** board.
   It reads recent Work Order, correspondence, Employee, stock-movement and
@@ -128,12 +135,11 @@ validated at enterprise scale.
   resource cards while the complete priority alert list remains alongside it.
   This keeps both decision signals and recent information flow in the working
   viewport; responsive layouts remain vertical on narrower screens.
-- This capability is currently rebuilt and exercised only at
-  `http://localhost:4200`. The complete Node suite passes `472/472`, and
-  authenticated smoke returned 12 safe information-flow rows plus the exact
-  reconciled lighting/camera overview. Production was not modified.
+- This capability was promoted to production in release
+  `20260904T104631Z`. Authenticated production smoke returned 12 safe
+  information-flow rows plus the reconciled lighting/camera overview.
 
-## Work responsible employee and executing crew (local demo, not production)
+## Work responsible employee and executing crew (production)
 
 - Migration `0109` adds tenant-scoped current Work participation and append-only
   assignment evidence. A Work may name one responsible Employee and multiple
@@ -148,16 +154,15 @@ validated at enterprise scale.
 - Work Board cards and Work history expose responsible and executing people.
   The existing `assigned_to` User remains a distinct system/workflow owner and
   continues to be governed by its existing authorization and audit path.
-- The local demo migration, authenticated options/list/history smoke, image
-  builds, JavaScript syntax checks, and all `481/481` repository tests pass.
-  This capability is deployed only to `http://localhost:4200`; production/LAN
-  was not modified.
+- Migration, authenticated options/list/history smoke, image builds, JavaScript
+  syntax checks, and the final `487/487` repository tests pass. This capability
+  was promoted to production in release `20260904T104631Z`; LAN was not changed.
 - Migration `0110` extends only the allowed assignment-event source vocabulary
   with `scope_follow_up`, matching the already accepted participant inheritance
   path. It was added rather than rewriting migration `0109`; the disposable
   production-go integration exposed and verifies the correction.
 
-## Understandable multi-fault lighting intake (local demo, not production)
+## Understandable multi-fault lighting intake (production)
 
 - The lighting fault sheet now shows registered equipment and current open
   faults by type beside each object. A user prepares a fault type and quantity
@@ -187,13 +192,11 @@ validated at enterprise scale.
 - The pilot HSE/safety-reviewer role does not implicitly receive lighting
   Incident report or cancellation authority; those remain separately granted
   operational permissions.
-- JavaScript syntax, focused tests, all `484/484` repository tests, image builds,
-  authenticated workspace smoke (439 objects, 12 fixed assets, 215 historical
-  Incident rows and 8 reference types), and both local health endpoints pass.
-  Only `http://localhost:4200` and its loopback API were rebuilt; production/LAN
-  was not modified.
+- JavaScript syntax, focused tests, the final `487/487` repository tests, image
+  builds and authenticated workspace smoke pass. This capability was promoted
+  to production in release `20260904T104631Z`; LAN was not changed.
 
-## Report schedule (local demo, not production)
+## Report schedule (production foundation; no production schedule rows yet)
 
 - Migration `0106` and `/api/report-schedules` implement the first governed
   report-obligation schedule. It retains the useful legacy interaction—name,
@@ -218,12 +221,10 @@ validated at enterprise scale.
   creation evidence. The current local `choibalsan-hugjil` demo contains the 20
   reviewed active legacy schedules. A pre-change local backup
   `overva-20260904T024849Z` was created first.
-- The local web image is additionally available at `http://localhost:4200`
-  through the isolated `overva-report-schedule-demo` container. This is a demo
-  convenience endpoint, not a production deployment. Production remains at
-  schema `0105`; promotion requires the normal release candidate, backup,
-  migration rehearsal, authenticated smoke, rollback and explicit production
-  authorization gates.
+- The governed schema, API and UI were promoted to production in release
+  `20260904T104631Z`. Production intentionally contains zero schedule rows;
+  the guarded legacy importer remains local/demo-only and was not run against
+  production.
 - The unified organization home now derives overdue, due-today and warning-window
   report signals from the governed schedule source. The server applies tenant,
   permission, responsibility and organization-timezone scope; management sees
@@ -418,9 +419,8 @@ validated at enterprise scale.
   batch before saving. An authorized supervisor can cancel a specific mistaken,
   unlinked camera Incident with a reason, version check, idempotent receipt,
   append-only Incident evidence and tenant audit. Work-linked faults fail closed.
-  The change is deployed only to `localhost:4200`, whose web container now
-  proxies to a separate `overva-local-demo-api`; the LAN web and its existing
-  API containers were not restarted or replaced.
+  The change was promoted to production in release `20260904T104631Z` after
+  exact-image lighting and camera live rehearsals; LAN was not changed.
 - A read-only comparison with the legacy camera registry confirmed that its
   useful nested navigation is a second dimension, not another object category:
   110 source points split into groups `3=1`, `5=1`, `7=15`, `8=9`, `9=21`,
@@ -1534,10 +1534,10 @@ validated at enterprise scale.
   service area, work type, workflow and incident links, return to the ordinary
   Work Board and keep bidirectional source history. The disposition journal is
   tenant-scoped, append-only, idempotent and unique per source scope item.
-- Local verification on 2026-09-04 applied migration `0108`, passed all `478`
-  repository tests, authenticated the Work list/history read model, and served
-  the isolated `localhost:4200` demo with a healthy API. No production/LAN web
-  service was rebuilt or promoted by this change.
+- Verification on 2026-09-04 applied migration `0108`, passed the final
+  `487/487` repository tests and authenticated the Work list/history read model.
+  The migration and related UI/API were promoted in production release
+  `20260904T104631Z`; LAN was not changed.
 
 - Migration `0064` adds eight tenant-scoped Work Order permissions and three
   domain roles: `work-order-manager`, `work-order-safety-reviewer`, and
