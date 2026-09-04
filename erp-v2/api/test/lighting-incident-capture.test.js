@@ -148,6 +148,9 @@ test("incorrect saved lighting incidents are cancelled with versioned append-onl
   assert.match(ui,/data-lighting-fault-view/);
   assert.match(ui,/Number\(right\.hasOpen\)-Number\(left\.hasOpen\)/);
   assert.match(ui,/faultyTargetCount/);
+  assert.match(ui,/showFaultyOnly=state\.lightingFaultView==="faulty"&&faultyTargetCount>0/);
+  assert.match(ui,/faultyTargetCount\?'':'disabled aria-disabled="true"/);
+  assert.match(ui,/Шинэ гэмтэл бүртгэх \$\{visibleTargets\.length\} объектыг бүгдийг харуулж байна/);
   assert.match(ui,/incidentCodes=\[\.\.\.new Set\(records\.map/);
   assert.match(ui,/legacyLabel/);
   assert.match(ui,/quantity_unit:incidentUnit\(record\)/);

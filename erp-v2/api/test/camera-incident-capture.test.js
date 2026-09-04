@@ -81,6 +81,9 @@ test("camera fault tab mirrors the quick numeric lighting interaction at camera 
   assert.match(ui,/data-remove-camera-fault-draft/);
   assert.match(ui,/data-clear-all-camera-fault-drafts/);
   assert.match(ui,/data-camera-fault-view/);
+  assert.match(ui,/showFaultyOnly=state\.cameraFaultView==='faulty'&&faultyObjectCount>0/);
+  assert.match(ui,/faultyObjectCount\?'':'disabled aria-disabled="true"/);
+  assert.match(ui,/Шинэ гэмтэл бүртгэх \$\{data\.assets\.length\} объектыг бүгдийг харуулж байна/);
   assert.match(ui,/Number\(right\.hasOpen\)-Number\(left\.hasOpen\)/);
   assert.match(ui,/fault-change-review/);
   assert.match(css,/\.fault-view-filter/);
