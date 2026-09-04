@@ -18,6 +18,9 @@ validated at enterprise scale.
   `map`, `procurement`, and `records`) were enabled through the authenticated
   tenant module API, producing 11 attributable `developer.module_toggle` audit
   rows. Session/report/CSV smoke passes with 25 modules and 102 permissions.
+- Authenticated read smokes for the newly enabled records, archive, maintenance,
+  procurement, map, fleet/GPS, IoT, automation, AI Director, developer, and
+  integration-lab overviews all return HTTP 200 in the local demo.
 - Production data was not copied into the demo. The local database remains a
   separate one-tenant test boundary at schema `0110`. Its one pre-existing
   unlinked bootstrap login still prevents a production-grade release check and
