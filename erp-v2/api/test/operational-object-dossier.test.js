@@ -80,6 +80,16 @@ test("object dossier activity is permission scoped and reuses domain authorities
   assert.match(assets,/assetId: id\.data/);
 });
 
+test("tenant transaction clients execute dossier and workspace reads sequentially",()=>{
+  const lighting=read("src","routes","lighting.js");
+  const camera=read("src","routes","camera.js");
+  for(const route of [lighting,camera]){
+    assert.match(route,/async function runSequentially/);
+    assert.doesNotMatch(route,/await Promise\.all\(\[\s*client\.query/);
+    assert.doesNotMatch(route,/client=>Promise\.all/);
+  }
+});
+
 test("object and fixed-asset dossier UI shows incident notes and the append-only incident timeline",()=>{
   const ui=read("..","web","lighting.js");
   const app=read("..","web","app.js");

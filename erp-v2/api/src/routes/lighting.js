@@ -14,6 +14,12 @@ const {loadOperationalObjectActivity}=require("../services/operational-object-ac
 const {asyncHandler}=require("../utils/async-handler");
 const router=express.Router();
 
+async function runSequentially(tasks){
+  const results=[];
+  for(const task of tasks)results.push(await task());
+  return results;
+}
+
 router.use(authenticate,requireModule("lighting-operations"));
 
 const objectId=z.string().uuid();
@@ -318,8 +324,8 @@ router.get("/objects/:id/dossier",asyncHandler(async(req,res)=>{
     LEFT JOIN LATERAL(SELECT ${legacyLightingClassificationSql} AS code) classified ON true
     WHERE o.organization_id=$1 AND o.id=$2 AND o.domain='lighting'`,[org,id.data]);
   if(!object.rowCount)return null;
-  const [components,events,children,assetOptions,lampGroups,supplyPoints,media]=await Promise.all([
-    client.query(`SELECT c.*,a.code asset_code,a.name asset_name,a.category asset_category,a.status asset_status,
+  const [components,events,children,assetOptions,lampGroups,supplyPoints,media]=await runSequentially([
+    ()=>client.query(`SELECT c.*,a.code asset_code,a.name asset_name,a.category asset_category,a.status asset_status,
       u.full_name assigned_by_name FROM operational_object_components c
       JOIN assets a ON a.organization_id=c.organization_id AND a.id=c.asset_id
       LEFT JOIN LATERAL(SELECT actor_user_id FROM operational_object_events e
@@ -328,22 +334,22 @@ router.get("/objects/:id/dossier",asyncHandler(async(req,res)=>{
       LEFT JOIN users u ON u.organization_id=c.organization_id AND u.id=source.actor_user_id
       WHERE c.organization_id=$1 AND c.operational_object_id=$2
       ORDER BY c.removed_at NULLS FIRST,c.created_at DESC`,[org,id.data]),
-    client.query(`SELECT e.*,u.full_name actor_name FROM operational_object_events e
+    ()=>client.query(`SELECT e.*,u.full_name actor_name FROM operational_object_events e
       LEFT JOIN users u ON u.organization_id=e.organization_id AND u.id=e.actor_user_id
       WHERE e.organization_id=$1 AND e.operational_object_id=$2 ORDER BY e.created_at DESC,e.id DESC LIMIT 200`,[org,id.data]),
-    client.query(`SELECT id,code,name,object_type,status FROM operational_objects
+    ()=>client.query(`SELECT id,code,name,object_type,status FROM operational_objects
       WHERE organization_id=$1 AND parent_object_id=$2 ORDER BY name`,[org,id.data]),
-    client.query(`SELECT a.id,a.code,a.name,a.category,a.status,a.location,a.allocatable_quantity,a.allocation_unit,
+    ()=>client.query(`SELECT a.id,a.code,a.name,a.category,a.status,a.location,a.allocatable_quantity,a.allocation_unit,
       COALESCE(allocated.quantity,0) allocated_quantity,a.allocatable_quantity-COALESCE(allocated.quantity,0) available_quantity
       FROM assets a LEFT JOIN LATERAL(SELECT sum(c.quantity) quantity FROM operational_object_components c
         WHERE c.organization_id=a.organization_id AND c.asset_id=a.id AND c.removed_at IS NULL) allocated ON true
       WHERE a.organization_id=$1 AND a.status<>'retired' AND COALESCE(a.metadata->>'excludedFromAssetMaster','false')<>'true'
       ORDER BY a.name LIMIT 1000`,[org]),
-    client.query(`SELECT group_row.* FROM operational_object_lamp_groups group_row
+    ()=>client.query(`SELECT group_row.* FROM operational_object_lamp_groups group_row
       JOIN operational_objects object_row ON object_row.organization_id=group_row.organization_id
         AND object_row.current_specification_id=group_row.specification_id
       WHERE object_row.organization_id=$1 AND object_row.id=$2 ORDER BY group_row.wattage_w DESC,group_row.lamp_type`,[org,id.data]),
-    client.query(`SELECT point.*,panel.code panel_asset_code,panel.name panel_asset_name,
+    ()=>client.query(`SELECT point.*,panel.code panel_asset_code,panel.name panel_asset_name,
       meter.code meter_asset_code,meter.name meter_asset_name
       FROM operational_object_supply_points point
       JOIN operational_objects object_row ON object_row.organization_id=point.organization_id
@@ -351,7 +357,7 @@ router.get("/objects/:id/dossier",asyncHandler(async(req,res)=>{
       LEFT JOIN assets panel ON panel.organization_id=point.organization_id AND panel.id=point.panel_asset_id
       LEFT JOIN assets meter ON meter.organization_id=point.organization_id AND meter.id=point.meter_asset_id
       WHERE object_row.organization_id=$1 AND object_row.id=$2 ORDER BY point.sequence_no`,[org,id.data]),
-    client.query(`SELECT document.id,document.title,document.document_type,document.status,link.relation_type,
+    ()=>client.query(`SELECT document.id,document.title,document.document_type,document.status,link.relation_type,
       version.id version_id,version.original_name,version.mime_type,version.size_bytes,version.created_at
       FROM document_links link JOIN documents document
         ON document.organization_id=link.organization_id AND document.id=link.document_id

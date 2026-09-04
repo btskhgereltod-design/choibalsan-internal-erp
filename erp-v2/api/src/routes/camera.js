@@ -10,6 +10,12 @@ const { loadOperationalObjectActivity } = require("../services/operational-objec
 const { asyncHandler } = require("../utils/async-handler");
 
 const router = express.Router();
+
+async function runSequentially(tasks){
+  const results=[];
+  for(const task of tasks)results.push(await task());
+  return results;
+}
 router.use(authenticate, requireModule("camera-operations"), requireWorkspace("camera"));
 
 const uuid=z.string().uuid();
@@ -218,20 +224,20 @@ router.get("/objects/:id/dossier", asyncHandler(async (req, res) => {
       ON spec.organization_id=o.organization_id AND spec.id=o.current_specification_id AND spec.profile_kind='camera'
     WHERE o.organization_id=$1 AND o.id=$2 AND o.domain='camera'`, [org, id.data]);
   if (!object.rowCount) return null;
-  const [components,events,children,points,devices] = await Promise.all([
-    client.query(`SELECT c.*,a.code asset_code,a.name asset_name,a.category asset_category,a.status asset_status
+  const [components,events,children,points,devices] = await runSequentially([
+    ()=>client.query(`SELECT c.*,a.code asset_code,a.name asset_name,a.category asset_category,a.status asset_status
       FROM operational_object_components c JOIN assets a ON a.organization_id=c.organization_id AND a.id=c.asset_id
       WHERE c.organization_id=$1 AND c.operational_object_id=$2 ORDER BY c.removed_at NULLS FIRST,c.created_at DESC`, [org, id.data]),
-    client.query(`SELECT e.*,u.full_name actor_name FROM operational_object_events e
+    ()=>client.query(`SELECT e.*,u.full_name actor_name FROM operational_object_events e
       LEFT JOIN users u ON u.organization_id=e.organization_id AND u.id=e.actor_user_id
       WHERE e.organization_id=$1 AND e.operational_object_id=$2 ORDER BY e.created_at DESC,e.id DESC LIMIT 200`, [org, id.data]),
-    client.query(`SELECT id,code,name,object_type,status FROM operational_objects
+    ()=>client.query(`SELECT id,code,name,object_type,status FROM operational_objects
       WHERE organization_id=$1 AND parent_object_id=$2 ORDER BY name`, [org, id.data]),
-    client.query(`SELECT point.* FROM operational_object_camera_points point
+    ()=>client.query(`SELECT point.* FROM operational_object_camera_points point
       JOIN operational_objects object_row ON object_row.organization_id=point.organization_id
         AND object_row.current_specification_id=point.specification_id
       WHERE object_row.organization_id=$1 AND object_row.id=$2 ORDER BY point.sequence_no`,[org,id.data]),
-    client.query(`SELECT device.* FROM operational_object_camera_devices device
+    ()=>client.query(`SELECT device.* FROM operational_object_camera_devices device
       JOIN operational_objects object_row ON object_row.organization_id=device.organization_id
         AND object_row.current_specification_id=device.specification_id
       WHERE object_row.organization_id=$1 AND object_row.id=$2 ORDER BY device.camera_point_id,device.sequence_no`,[org,id.data]),
@@ -350,15 +356,15 @@ router.get("/workspace", asyncHandler(async (req, res) => {
     return res.status(403).json({ error: "Камерын ажлын талбарт хөрөнгө болон ажлын урсгалын эрх шаардлагатай." });
   }
 
-  const [capability, objects, incidentTypes, incidents, workOrders, snapshots] = await withTenantTransaction(organizationId,client=>Promise.all([
-    client.query(`SELECT EXISTS(
+  const [capability, objects, incidentTypes, incidents, workOrders, snapshots] = await withTenantTransaction(organizationId,client=>runSequentially([
+    ()=>client.query(`SELECT EXISTS(
       SELECT 1 FROM organization_work_types
       WHERE organization_id=$1 AND active=true
         AND code IN ('camera-inspection','camera-repair','camera-maintenance','camera-network-repair','network-repair')
       UNION ALL
       SELECT 1 FROM operational_objects WHERE organization_id=$1 AND domain='camera'
     ) available`, [organizationId]),
-    client.query(`SELECT object_row.id,object_row.code,object_row.name,object_row.object_type,object_row.domain,
+    ()=>client.query(`SELECT object_row.id,object_row.code,object_row.name,object_row.object_type,object_row.domain,
       object_row.status,object_row.location,object_row.metadata,object_row.updated_at,
       NULLIF(btrim(object_row.metadata->>'subCategory'),'') object_category,
       legacy_source.source_group_code,legacy_source.source_condition,legacy_source.source_status,
@@ -410,11 +416,11 @@ router.get("/workspace", asyncHandler(async (req, res) => {
             OR work.category LIKE 'camera.%')) open_work ON true
       WHERE object_row.organization_id=$1 AND object_row.domain='camera' AND object_row.status<>'retired'
       ORDER BY object_row.name LIMIT 1000`, [organizationId]),
-    client.query(`SELECT code,name,quantity_unit,sort_order
+    ()=>client.query(`SELECT code,name,quantity_unit,sort_order
       FROM organization_operational_incident_types
       WHERE organization_id=$1 AND domain='camera' AND active=true
       ORDER BY sort_order,name`,[organizationId]),
-    client.query(`SELECT i.*,o.code asset_code,o.name asset_name,
+    ()=>client.query(`SELECT i.*,o.code asset_code,o.name asset_name,
       NULLIF(btrim(o.metadata->>'subCategory'),'') object_category,
       legacy_source.source_group_code,legacy_source.source_condition
       FROM operational_incidents i
@@ -430,7 +436,7 @@ router.get("/workspace", asyncHandler(async (req, res) => {
         ORDER BY record.imported_at DESC LIMIT 1) legacy_source ON true
       WHERE i.organization_id=$1 AND i.domain='camera'
       ORDER BY i.reported_at DESC LIMIT 500`, [organizationId]),
-    client.query(`SELECT w.id,w.operational_object_id,w.title,w.status,w.priority,w.workflow_stage,w.due_at,w.created_at,
+    ()=>client.query(`SELECT w.id,w.operational_object_id,w.title,w.status,w.priority,w.workflow_stage,w.due_at,w.created_at,
       o.code asset_code,o.name asset_name,
       NULLIF(btrim(o.metadata->>'subCategory'),'') object_category,
       legacy_source.source_group_code,legacy_source.source_condition,
@@ -462,7 +468,7 @@ router.get("/workspace", asyncHandler(async (req, res) => {
       WHERE w.organization_id=$1
         AND (wt.code IN ('camera-inspection','camera-repair','camera-maintenance','camera-network-repair','network-repair') OR w.category LIKE 'camera.%')
       ORDER BY w.created_at DESC LIMIT 500`, [organizationId]),
-    client.query(`SELECT snapshot_date,metrics FROM operational_domain_snapshots
+    ()=>client.query(`SELECT snapshot_date,metrics FROM operational_domain_snapshots
       WHERE organization_id=$1 AND domain='camera' ORDER BY snapshot_date DESC LIMIT 120`, [organizationId]),
   ]));
 
