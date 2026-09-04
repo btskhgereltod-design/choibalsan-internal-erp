@@ -37,6 +37,25 @@ test("intake is tenant scoped, department bounded for specialists, and duplicate
   assert.match(route,/incidentId:incident\?\.id\|\|null/);
 });
 
+test("a repeat incident can be explicitly added to the matching open work as measurable scope",()=>{
+  const route=read("src/routes/work-orders.js"),app=read("../web/app.js");
+  assert.match(route,/router\.post\("\/intake\/:incidentId\/attach"/);
+  assert.match(route,/WORK_ORDER_PERMISSIONS\.CREATE/);
+  assert.match(route,/WORK_ORDER_PERMISSIONS\.SCOPE_MANAGE/);
+  assert.match(route,/INCIDENT_WORK_TARGET_MISMATCH/);
+  assert.match(route,/INCIDENT_WORK_AREA_MISMATCH/);
+  assert.match(route,/INCIDENT_ALREADY_LINKED/);
+  assert.match(route,/INSERT INTO operational_incident_work_orders/);
+  assert.match(route,/INSERT INTO work_order_scope_items/);
+  assert.match(route,/incident:\$\{incident\.id\}/);
+  assert.match(route,/work_order\.incident\.attach/);
+  assert.match(route,/pg_advisory_xact_lock/);
+  assert.match(app,/data-attach-intake/);
+  assert.match(app,/Өмнөх ажилд хэмжих мөрөөр нэмэх/);
+  assert.match(app,/Тусдаа шинэ ажил үүсгэх/);
+  assert.match(app,/\/api\/work-orders\/intake\/\$\{incidentId\}\/attach/);
+});
+
 test("assignment starts governed safety only after the chief engineer has chosen an owner",()=>{
   const route=read("src/routes/work-orders.js");
   assert.match(route,/workflowStage=workType\?\.workflow_policy_id&&assignee\?"awaiting_safety_start":null/);
@@ -64,6 +83,9 @@ test("unified board exposes intake, exception decision, team backlog, governed c
   assert.match(app,/workBoardLanes\.filter\(x=>!\["closed","decision"\]\.includes\(x\.key\)\)/);
   assert.match(css,/repeat\(7/);
   assert.match(css,/work-intake-tabs/);
+  assert.match(app,/view==="work-orders"\)refresh\(\)/);
+  assert.match(app,/loadLighting\(true\)/);
+  assert.match(app,/loadCamera\(true\)/);
 });
 
 test("lighting service areas are tenant configuration and filter the same canonical flow",()=>{

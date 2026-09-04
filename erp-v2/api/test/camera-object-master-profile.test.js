@@ -21,14 +21,13 @@ test("camera master reuses the object specification version and normalizes point
   assert.match(migration,/ENABLE ROW LEVEL SECURITY/);
 });
 
-test("camera dossier is master-only and technical writes are versioned and audited",()=>{
+test("camera dossier keeps master writes separate while projecting authorized activity",()=>{
   const route=read("src","routes","camera.js");
   const dossier=route.slice(route.indexOf('router.get("/objects/:id/dossier"'),route.indexOf('router.patch("/objects/:id"'));
   assert.match(dossier,/withTenantTransaction\(org/);
   assert.match(dossier,/cameraPoints/);
   assert.match(dossier,/cameraDevices/);
-  assert.doesNotMatch(dossier,/workOrders:/);
-  assert.doesNotMatch(dossier,/incidents:/);
+  assert.match(dossier,/loadOperationalObjectActivity/);
   assert.match(route,/router\.post\("\/objects\/:id\/specifications"/);
   assert.match(route,/profile_kind\)\s*VALUES[\s\S]*'camera'/);
   assert.match(route,/totalCameras=devices\.reduce/);
@@ -48,7 +47,7 @@ test("camera UI edits mount points GPS and per-point device specifications",()=>
   assert.match(camera,/lighting-object-summary/);
   assert.match(camera,/data-camera-group/);
   assert.doesNotMatch(camera,/cameraCategoryNavigation|data-camera-category|ОБЪЕКТЫН АНГИЛАЛ/);
-  assert.match(camera,/Нээх \/ засах/);
+  assert.match(camera,/Хувийн хэрэг/);
   assert.match(route,/camera_point_count/);
   assert.match(route,/gps_point_count/);
 });

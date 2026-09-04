@@ -46,11 +46,50 @@ test("lighting UI opens one understandable object dossier",()=>{
   const ui=read("..","web","lighting.js");
   const shell=read("..","web","index.html");
   assert.match(ui,/data-object-dossier/);
+  assert.match(ui,/data-asset-id="\$\{x\.id\}">Хувийн хэрэг/);
+  assert.match(ui,/data-object-dossier="\$\{x\.id\}">Хувийн хэрэг/);
   assert.match(ui,/Бүрэлдэхүүн хөрөнгө/);
   assert.match(ui,/Өөрчлөлтийн audit түүх/);
+  assert.match(ui,/Гэмтэл ба ажлын түүх/);
+  assert.match(ui,/data-dossier-print/);
+  assert.match(ui,/data-dossier-download/);
   assert.doesNotMatch(ui.slice(ui.indexOf("function lightingDossierHtml"),ui.indexOf("async function openLightingDossier")),/d\.incidents|d\.workOrders/);
   assert.match(ui,/Хөрөнгийн мастер бүртгэлийг нүүлгэхгүй/);
   assert.match(shell,/lightingDossierDialog/);
+});
+
+test("object dossier activity is permission scoped and reuses domain authorities",()=>{
+  const service=read("src","services","operational-object-activity.js");
+  const assets=read("src","routes","assets.js");
+  const lighting=read("src","routes","lighting.js");
+  const camera=read("src","routes","camera.js");
+  assert.match(service,/incident\.operational_object_id=\$2/);
+  assert.match(service,/incident\.asset_id=\$3/);
+  assert.match(service,/source\.operational_object_id=\$2/);
+  assert.match(service,/source\.asset_id=\$3/);
+  assert.match(service,/operational_incident_events/);
+  assert.match(service,/reported_note/);
+  assert.match(service,/canReadOrder\(user, work\)/);
+  assert.match(service,/permission\.startsWith\("work-orders\."\)/);
+  assert.match(service,/WORKFLOW_SAFETY/);
+  assert.match(service,/WORKFLOW_APPROVE/);
+  assert.doesNotMatch(service,/UPDATE |INSERT INTO |DELETE FROM /);
+  assert.match(lighting,/loadOperationalObjectActivity/);
+  assert.match(camera,/loadOperationalObjectActivity/);
+  assert.match(assets,/loadOperationalObjectActivity/);
+  assert.match(assets,/assetId: id\.data/);
+});
+
+test("object and fixed-asset dossier UI shows incident notes and the append-only incident timeline",()=>{
+  const ui=read("..","web","lighting.js");
+  const app=read("..","web","app.js");
+  const shell=read("..","web","index.html");
+  assert.match(ui,/activity\.incidentEvents/);
+  assert.match(ui,/item\.reported_note/);
+  assert.match(ui,/Гэмтлийн бүртгэл зассан/);
+  assert.match(app,/assetOperationalActivity/);
+  assert.match(app,/operationalDossierActivity\(result\)/);
+  assert.match(shell,/id="assetOperationalActivity"/);
 });
 
 test("encoding repair preserves UUIDs and supersedes damaged visible notes append-only",()=>{

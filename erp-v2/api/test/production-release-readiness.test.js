@@ -36,6 +36,7 @@ test("post-deploy runbook has exact data, privilege, smoke, and stop gates",()=>
   assert.match(runbook,/forward-fix/);
   assert.match(session,/23-column reconciliation contract/);
   assert.match(session,/ordinary user 403/);
+  assert.match(session,/u\.active=true AND u\.can_login=true/);
   assert.match(contract,/ASSIGNMENT_IDEMPOTENCY_CONFLICT/);
   assert.match(contract,/foreign-tenant user must not resolve/);
 });

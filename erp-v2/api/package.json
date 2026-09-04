@@ -40,9 +40,11 @@
     "smoke:safety": "node scripts/safety-smoke.js",
     "smoke:work-intake": "node scripts/work-intake-smoke.js",
     "smoke:lighting": "node scripts/lighting-workspace-smoke.js",
+    "smoke:report-schedules": "node scripts/report-schedule-smoke.js",
     "smoke:camera-network-demo": "node scripts/camera-network-demo-smoke.js",
     "extract:legacy-fiber-preview": "node scripts/extract-legacy-fiber-preview.js",
     "stage:camera-network-demo": "node scripts/stage-camera-network-demo.js",
+    "stage:legacy-report-schedules": "node scripts/stage-legacy-report-schedules.js",
     "smoke:administration": "node scripts/administration-smoke.js",
     "smoke:builder": "node scripts/builder-smoke.js",
     "smoke:ai-provider": "node scripts/ai-provider-smoke.js",
@@ -80,6 +82,7 @@
     "zod": "^4.0.17"
   },
   "overrides": {
+    "qs": "6.16.0",
     "uuid": "11.1.1"
   }
 }

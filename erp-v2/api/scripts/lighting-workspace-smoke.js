@@ -6,7 +6,7 @@ const {signAccessToken}=require("../src/security/token");
 
 const base=String(process.env.SMOKE_API_BASE||"http://127.0.0.1:4100").replace(/\/$/,"");
 const slug=String(process.env.SMOKE_TENANT_SLUG||"choibalsan-hugjil").trim();
-const expectedPilotAreas=["road-lighting","ger-area-lighting","tower-lighting","panel-board","traffic-signal"];
+const expectedPilotAreas=["road-lighting","ger-area-lighting","tower-lighting","traffic-signal"];
 
 function metric(data,code){
   const matches=item=>item.service_area_code===code;

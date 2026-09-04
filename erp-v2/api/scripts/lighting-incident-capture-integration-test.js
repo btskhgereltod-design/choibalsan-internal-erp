@@ -138,15 +138,23 @@ async function main(){
     })});
     assert.equal(crossTenant.status,409);
     assert.equal(crossTenant.body.code,"INVALID_LIGHTING_OBJECT");
+    const cancelKey=crypto.randomUUID();
+    const cancelPayload={reason:"Rehearsal incorrect entry",expectedVersion:1,idempotencyKey:cancelKey};
+    const cancelled=await request(base,`/api/lighting/incidents/${created.body.items[0].id}/cancel`,token,{method:"POST",body:JSON.stringify(cancelPayload)});
+    assert.equal(cancelled.status,200);
+    assert.equal(cancelled.body.item.status,"cancelled");
+    const cancelReplay=await request(base,`/api/lighting/incidents/${created.body.items[0].id}/cancel`,token,{method:"POST",body:JSON.stringify(cancelPayload)});
+    assert.equal(cancelReplay.status,200);
+    assert.equal(cancelReplay.body.replayed,true);
     const evidence=await pool.query(`SELECT
       (SELECT count(*) FROM operational_incidents WHERE organization_id=$1 AND domain='lighting') incidents,
-      (SELECT count(*) FROM operational_incident_events WHERE organization_id=$1 AND event_type='reported') events,
+      (SELECT count(*) FROM operational_incident_events WHERE organization_id=$1) events,
       (SELECT count(*) FROM operational_incident_command_receipts WHERE organization_id=$1) receipts,
-      (SELECT count(*) FROM audit_logs WHERE organization_id=$1 AND action='operational_incident.report') audits`,
+      (SELECT count(*) FROM audit_logs WHERE organization_id=$1 AND action IN('operational_incident.report','operational_incident.cancel')) audits`,
     [first.organization.id]);
     assert.deepEqual(Object.fromEntries(Object.entries(evidence.rows[0]).map(([key,value])=>[key,Number(value)])),
-      {incidents:1,events:1,receipts:1,audits:1});
-    console.log(JSON.stringify({ok:true,incidentTypes:8,towerProjection:{poles:1,heads:6},idempotent:true,crossTenantBlocked:true,evidence:evidence.rows[0]}));
+      {incidents:1,events:2,receipts:2,audits:2});
+    console.log(JSON.stringify({ok:true,incidentTypes:8,towerProjection:{poles:1,heads:6},idempotent:true,cancelReplay:true,crossTenantBlocked:true,evidence:evidence.rows[0]}));
   }finally{
     await new Promise(resolve=>server.close(resolve));
     await closePool();

@@ -1,6 +1,6 @@
 # OVERVA Architecture
 
-Last reviewed: 2026-09-02
+Last reviewed: 2026-09-04
 
 This is a current map and a stable default, not a permanent restriction. For
 production operations, see `../PRODUCTION_DEPLOYMENT.md`. For data rules, see
@@ -38,6 +38,116 @@ public application endpoints.
 - `api/migrations/` — ordered source of truth for PostgreSQL schema evolution.
 - `ops/` — backup, restore, tunnel, startup, and operational scripts.
 - `docs/` — governed product, architecture, data, AI, and delivery knowledge.
+
+## Report obligation schedule boundary
+
+`report_schedules` is tenant-owned master/configuration data for recurring or
+one-time reporting obligations. It is not a generated report, a notification
+delivery queue, or proof that an external recipient received anything.
+Responsibility may point only to an active User in the same organization;
+unmatched legacy responsibility text remains a non-authoritative label.
+
+Create, update, human-confirmed submission and retirement are distinct
+attributable actions. Updates use optimistic versions. Submission locks the
+schedule, consumes an exact-payload idempotency key, appends an immutable event,
+advances one recurrence and writes tenant audit evidence in one transaction.
+Concurrent retries serialize on the tenant/idempotency key. One-time schedules
+retire after submission; all other retirement is reasoned and never deletes the
+schedule or its history. Tenant identity always comes from authentication and
+all schedule queries execute inside an explicit tenant transaction.
+
+The unified organization dashboard projects schedule attention directly from
+that source of truth; it does not copy alerts into a second business table.
+Projection requires `report-schedules.read`, uses the organization's timezone,
+shows all tenant schedules only to the existing management scope, and otherwise
+shows only schedules assigned to the authenticated User. Dashboard alerts route
+back to the schedule workspace, where the governed action and evidence live.
+
+## Organization information-flow projection
+
+The organization-home information board is a read model, not a new business
+domain or audit stream. It merges a bounded recent window from domain-owned
+evidence (`work_order_events`, `correspondence_events`, `employee_events`,
+`stock_movements`, `finance_obligation_events` and
+`accounting_material_review_events`, plus governed `finance_transactions`
+imports), orders it by occurrence time and links
+each row back to the owning workspace. Domain tables remain authoritative.
+
+The projection executes in a tenant transaction and applies both module and
+permission gates before querying a domain. Work rows additionally retain the
+existing all-work versus related-work boundary. Event note/detail payloads do
+not cross into the home surface. Correspondence titles are redacted for
+confidential/restricted classifications; restricted existence is not returned
+without the established restricted-document permission. HR and finance data
+require their domain read authority. Inventory fuel/lubricant activity is an
+ordinary governed stock movement, not a second dashboard-owned ledger.
+
+## Organization infrastructure-overview projection
+
+The organization-home lighting and camera panels are tenant-scoped read models
+over the existing operational authority. Lighting counts come from current
+`operational_objects`, `operational_object_specifications`, lamp groups,
+reviewed `source_import_records`, canonical traffic-signal Assets and open
+`operational_incidents`. Camera counts come from current camera Operational
+Objects/specifications and open camera Incidents. The panels do not own or
+mutate infrastructure state and route users back to the authoritative Lighting
+or Camera workspace.
+
+The projection is enabled only with the corresponding organization module and
+existing engineering/management access. Tenant identity comes from the
+authenticated session. Legacy-name compatibility is limited to reviewed import
+evidence and existing object-linked incident evidence; rows that cannot be
+classified are returned as an explicit reconciliation count, never guessed or
+discarded. Fault status remains live because it is calculated from open and
+in-progress incident quantities at read time.
+
+## Operational-object dossier activity projection
+
+An Operational Object dossier remains anchored in the object master owned by
+its domain registry. Its operational-history section is a request-time
+projection over authoritative Operational Incidents, append-only Incident
+events, Work Orders, scope items, append-only Work events and authorized safety
+reviews. The same read model accepts an exact Operational Object or fixed Asset
+identity, so traffic-signal and other fixed-equipment dossiers retain the same
+incident-to-work chronology without copying records. It does not copy those
+records into an object-owned history table and does not grant a new cross-domain
+read permission.
+
+Incident history follows the object's domain read boundary. Work history is
+returned only when the Work module is enabled, the User has a Work permission,
+and the existing per-order read rule permits that Work Order. Detailed safety
+review evidence requires owner, all-work, safety-review or workflow-approval
+authority. Client-side print/PDF and JSON download contain only the already
+authorized response and are marked with their generation time; they are
+snapshots, not authoritative records or signed acceptance evidence.
+
+A repeat Incident may join an existing open Work Order only through the
+explicit intake attach command. The command requires Work create and scope
+management authority, serializes on the Incident, validates the same tenant,
+object/asset and service area, then appends the immutable Incident–Work link and
+a measurable scope item for the unresolved quantity in one transaction. It
+also appends Incident, Work and audit evidence. Display-name similarity is not
+an identity rule, and capture never silently changes an existing Work Order.
+
+The lighting capture surface separates observation from commit. A user may
+prepare several fault types for the same Operational Object, review the exact
+object/type/quantity changes, remove any unsaved row, and commit the remaining
+rows as one bounded idempotent batch. Current open faults are projected by
+object and incident type beside registered equipment capacity; the projection
+does not rewrite either source. An incorrectly saved Incident is never
+physically deleted. A separately authorized, version-checked and idempotent
+cancellation records the reason in append-only Incident and tenant audit
+evidence. Cancellation from this intake surface fails closed once any Work
+Order is linked, because altering a Work-linked Incident requires coordinated
+scope handling rather than erasing operational history.
+
+An accepted unresolved or deferred Work scope is not allowed to disappear when
+the source Work Order closes. The approving manager must either end it with a
+recorded reason or create one exact-quantity follow-up Work Order. The latter
+inherits the canonical object, service area, work type, workflow and incident
+links; it re-enters the normal team, assignment and safety path. The append-only
+`work_order_scope_dispositions` record connects both directions, provides
+idempotency evidence and prevents a second follow-up for the same source scope.
 
 ## Choibalsan governed administration domains
 
@@ -375,6 +485,19 @@ without a history version are legacy evidence and never authorize a fabricated
 backfill. Historical reporting returns their assignment state as unknown.
 The journal rejects row mutation, runtime update/delete/truncate privileges are
 revoked, and its parent relation uses delete restriction rather than cascade.
+
+Operational participation is a separate concern from that login assignment.
+`work_order_participants` identifies one responsible Employee and zero or more
+executing Employees from the canonical tenant Employee master. The selected
+Work Type route bounds participants to its responsible department. Membership
+never creates a User, grants login, changes RBAC, or supplies workflow approval
+authority. Current membership is tenant-scoped and its assignment/removal
+evidence is append-only in `work_order_participant_events`. The User snapshot
+in `work_orders.assigned_to` remains the independently authorized system owner.
+Work created from an Incident inherits its exact operational object or Asset;
+the browser does not ask a user to choose a second unrelated Asset, and the
+server rejects a lighting/camera Work Type whose domain conflicts with the
+Incident.
 
 Assignment enforcement deploys in two phases. The schema-first phase accepts
 unversioned events from a previous application image as explicitly non-

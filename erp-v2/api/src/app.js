@@ -36,6 +36,7 @@ function createApp() {
   app.use("/api/employees", require("./routes/employees"));
   app.use("/api/notifications", require("./routes/notifications"));
   app.use("/api/reports", require("./routes/reports"));
+  app.use("/api/report-schedules", require("./routes/report-schedules"));
   app.use("/api/attachments", require("./routes/attachments"));
   app.use("/api/audit", require("./routes/audit"));
   app.use("/api/assets", require("./routes/assets"));

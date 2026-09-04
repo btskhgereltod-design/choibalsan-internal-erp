@@ -50,6 +50,7 @@ test("camera workspace exposes quantities, history and object dossiers",()=>{
   assert.match(route,/operational_domain_snapshots/);
   assert.match(route,/operational_object_components/);
   assert.match(ui,/data-camera-dossier/);
+  assert.match(ui,/data-camera-dossier="\$\{item\.id\}">Хувийн хэрэг/);
   assert.match(ui,/Камерын өдрийн төлөвийн түүх/);
   assert.match(ui,/Объектын master бүртгэл/);
 });

@@ -5,6 +5,7 @@ const { z } = require("zod");
 const { getPool } = require("../db");
 const { authenticate, requireRoles, requireModule } = require("../middleware/auth");
 const { writeAudit } = require("../services/audit");
+const { loadOperationalObjectActivity } = require("../services/operational-object-activity");
 const { asyncHandler } = require("../utils/async-handler");
 
 const router = express.Router();
@@ -61,7 +62,7 @@ router.get("/:id", asyncHandler(async (req, res) => {
       WHERE a.organization_id=$1 AND a.id=$2`, [req.user.organization_id,id.data]
   );
   if (!asset.rowCount) return res.status(404).json({ error: "Asset not found" });
-  const [orders,events] = await Promise.all([
+  const [orders,events,activity] = await Promise.all([
     getPool().query(
       `SELECT id,title,status,priority,assigned_to,due_at,created_at
          FROM work_orders WHERE organization_id=$1 AND asset_id=$2 ORDER BY created_at DESC LIMIT 100`,
@@ -73,8 +74,13 @@ router.get("/:id", asyncHandler(async (req, res) => {
         WHERE e.organization_id=$1 AND e.asset_id=$2 ORDER BY e.created_at DESC LIMIT 100`,
       [req.user.organization_id,id.data]
     ),
+    loadOperationalObjectActivity(getPool(), {
+      organizationId: req.user.organization_id,
+      assetId: id.data,
+      user: req.user,
+    }),
   ]);
-  res.json({ item: asset.rows[0], workOrders: orders.rows, events: events.rows });
+  res.json({ item: asset.rows[0], workOrders: orders.rows, events: events.rows, activity });
 }));
 
 router.post("/", requireRoles(...editableRoles), asyncHandler(async (req, res) => {

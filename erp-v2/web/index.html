@@ -8,12 +8,12 @@
   <link rel="icon" href="/cop-icon.svg" type="image/svg+xml">
   <meta name="color-scheme" content="light">
   <title>OVERVA ERP</title>
-  <link rel="stylesheet" href="/style.css?v=52">
+  <link rel="stylesheet" href="/style.css?v=58">
   <link rel="stylesheet" href="/workflow.css?v=9">
-  <link rel="stylesheet" href="/work-history.css?v=2">
+  <link rel="stylesheet" href="/work-history.css?v=4">
   <link rel="stylesheet" href="/notifications.css">
   <link rel="stylesheet" href="/asset-detail.css">
-  <link rel="stylesheet" href="/reports.css?v=2">
+  <link rel="stylesheet" href="/reports.css?v=3">
   <link rel="stylesheet" href="/attachments.css">
   <link rel="stylesheet" href="/audit.css">
   <link rel="stylesheet" href="/business-modules.css?v=23">
@@ -39,7 +39,7 @@
   <link rel="stylesheet" href="/industry-profile.css">
   <link rel="stylesheet" href="/builder.css">
   <link rel="stylesheet" href="/builder-ai.css">
-  <link rel="stylesheet" href="/standard-workspace.css?v=27">
+  <link rel="stylesheet" href="/standard-workspace.css?v=36">
   <link rel="stylesheet" href="/organization-blueprint.css?v=4">
   <link rel="stylesheet" href="/structure-smart-import.css?v=1">
   <link rel="stylesheet" href="/organization-structure-hub.css?v=1">
@@ -139,6 +139,7 @@
     <input name="id" type="hidden">
     <div class="dialog-head"><div><span class="eyebrow">ХӨРӨНГИЙН ДЭЛГЭРЭНГҮЙ</span><h2 id="assetDetailTitle">Хөрөнгө</h2></div><button type="button" class="icon-button" data-close="assetDetailDialog">×</button></div>
     <div class="asset-detail-grid"><section class="asset-edit-fields"><div class="form-grid"><label>Код<input name="code" required maxlength="80"></label><label>Төлөв<select name="status"><option value="active">Идэвхтэй</option><option value="repair">Засварт</option><option value="inactive">Идэвхгүй</option><option value="retired">Акталсан</option></select></label></div><label>Нэр<input name="name" required maxlength="250"></label><label>Ангилал<input name="category" required maxlength="100"></label><div class="form-grid"><label>Серийн дугаар<input name="serialNumber" maxlength="200"></label><label>Байршил<input name="location" maxlength="250"></label></div><div class="form-grid"><label>Нийт оноож болох хэмжээ<input name="allocatableQuantity" type="number" min="0.001" step="0.001" required></label><label>Хэмжих нэгж<input name="allocationUnit" maxlength="30" required></label></div><div class="form-grid"><label>Хариуцагч<select name="responsibleUserId" id="assetDetailResponsible"></select></label><label>Ашиглалтад орсон<input name="acquiredAt" type="date"></label></div><label>Тэмдэглэл<textarea name="notes" rows="3" maxlength="5000"></textarea></label><p class="form-error" data-form-error></p><button class="primary" type="submit">Өөрчлөлт хадгалах</button></section><section class="asset-related"><h3>Засвар үйлчилгээний ажлууд</h3><div id="assetWorkOrders"></div><h3>Өөрчлөлтийн түүх</h3><div id="assetEvents"></div></section></div>
+    <div id="assetOperationalActivity"></div>
     <section class="attachment-box"><h3>Хавсралтууд</h3><div class="attachment-upload"><input id="assetAttachmentFile" type="file" accept="image/jpeg,image/png,image/webp,application/pdf,text/plain,.docx,.xlsx"><button type="button" class="secondary" id="assetAttachmentUpload">Файл нэмэх</button></div><div class="attachment-list" id="assetAttachments"></div><small class="attachment-help">Зураг, PDF, TXT, DOCX, XLSX · дээд хэмжээ 10 MB</small></section>
   </form></dialog>
 
@@ -148,8 +149,14 @@
     <label>Ажлын нэр<input name="title" placeholder="Камерын тэжээл шалгах" required maxlength="300"></label>
     <label>Ажлын төрөл ба хариуцах нэгж<select name="workTypeId" id="workOrderType"><option value="">Ердийн ажлын захиалга</option></select><small class="field-help">Ажлын төрлөөс хариуцах тасаг, зөвшөөрөл болон хяналтын урсгал автоматаар сонгогдоно.</small></label>
     <label>Үйлчилгээний чиглэл<select name="serviceAreaId" id="workOrderServiceArea"><option value="">Үйлчилгээний чиглэл сонгохгүй</option></select><small class="field-help">Жишээ нь авто замын гэрэл, шит/самбар. Энэ нь тасаг эсвэл ажлын шат биш.</small></label>
-    <label>Холбогдох хөрөнгө<select name="assetId" id="workOrderAsset"><option value="">Хөрөнгө сонгохгүй</option></select></label>
-    <label>Хариуцагч ажилтан<select name="assignedTo" id="workOrderAssignee"><option value="">Дараа хуваарилах</option></select></label>
+    <label id="workOrderAssetField">Холбогдох хөрөнгө<select name="assetId" id="workOrderAsset"><option value="">Хөрөнгө сонгохгүй</option></select></label>
+    <input type="hidden" name="assignedTo">
+    <section class="work-team-picker">
+      <div><strong>Ажил гүйцэтгэх хүмүүс</strong><small id="workOrderTeamHint">Эхлээд ажлын төрөл сонгоно уу. Сонгосон тасгийн ажилтнууд л харагдана.</small></div>
+      <label>Хариуцах ажилтан<select name="responsibleEmployeeId" id="workOrderResponsibleEmployee"><option value="">Хариуцах хүн сонгохгүй</option></select><small class="field-help">Ажлын явц, үр дүнг тухайн тасгаас хариуцах нэг ажилтан.</small></label>
+      <fieldset><legend>Гүйцэтгэх баг</legend><div id="workOrderExecutors" class="work-executor-list"><small>Ажлын төрөл сонгосны дараа ажилтнууд гарна.</small></div></fieldset>
+      <small class="field-help">Энэ сонголт ажилтны ажлын оролцоог бүртгэнэ. Системийн нэвтрэх болон батлах эрх автоматаар олгохгүй.</small>
+    </section>
     <div class="form-grid"><label>Ажлын зорилго<select name="operationalStream"><option value="">Төрлөөс автоматаар</option><option value="core_service">Үндсэн үйлчилгээ</option><option value="internal_operation">Дотоод үйл ажиллагаа</option></select></label><label>Үүргийн шинж<select name="assignmentKind"><option value="normal">Ердийн</option><option value="special">Тусгай үүрэг</option><option value="emergency">Яаралтай үүрэг</option></select></label></div>
     <div class="form-grid"><label>Ангилал<select name="category"><option>Засвар үйлчилгээ</option><option>Үзлэг шалгалт</option><option>Суурилуулалт</option><option>Бусад</option></select></label><label>Эрэмбэ<select name="priority"><option value="normal">Хэвийн</option><option value="high">Өндөр</option><option value="emergency">Яаралтай</option><option value="low">Бага</option></select></label></div>
     <label>Дуусгах хугацаа<input name="dueAt" type="datetime-local"></label>
@@ -159,6 +166,8 @@
 
   <dialog id="workHistoryDialog" class="wide-dialog"><div class="dialog-form">
     <div class="dialog-head"><div><span class="eyebrow">АЖЛЫН ГҮЙЦЭТГЭЛ</span><h2 id="workHistoryTitle">Ажлын түүх</h2></div><button type="button" class="icon-button" data-close="workHistoryDialog">×</button></div>
+    <section id="workParticipants" class="work-participants"></section>
+    <section class="work-scope-box"><div class="work-material-head"><div><small>ХЭМЖИГДЭХ ҮР ДҮН</small><h3>Гүйцэтгэл ба үлдэгдэл</h3></div></div><div id="workScopeItems"></div></section>
     <div class="work-history" id="workHistory"></div>
     <section class="work-material-box">
       <div class="work-material-head"><div><small>НӨӨЦИЙН МӨР</small><h3>Шаардлагатай материал</h3></div></div>
@@ -174,6 +183,16 @@
     <form id="workNoteForm" class="note-form"><input name="workOrderId" type="hidden"><label>Гүйцэтгэлийн тэмдэглэл<textarea name="note" rows="3" maxlength="2000" placeholder="Хийсэн ажил, гарсан үр дүнг бичнэ үү..." required></textarea></label><p class="form-error" data-form-error></p><div class="dialog-actions"><button type="submit" class="primary">Тэмдэглэл нэмэх</button></div></form>
     <section class="attachment-box"><h3>Хавсралтууд</h3><div class="attachment-upload"><input id="workAttachmentFile" type="file" accept="image/jpeg,image/png,image/webp,application/pdf,text/plain,.docx,.xlsx"><button type="button" class="secondary" id="workAttachmentUpload">Файл нэмэх</button></div><div class="attachment-list" id="workAttachments"></div><small class="attachment-help">Зураг, PDF, TXT, DOCX, XLSX · дээд хэмжээ 10 MB</small></section>
   </div></dialog>
+
+  <dialog id="workScopeDecisionDialog"><form id="workScopeDecisionForm" class="dialog-form">
+    <input name="workOrderId" type="hidden"><input name="scopeItemId" type="hidden"><input name="dispositionType" type="hidden"><input name="idempotencyKey" type="hidden">
+    <div class="dialog-head"><div><span class="eyebrow">ҮЛДЭГДЛИЙН ШИЙДВЭР</span><h2 id="workScopeDecisionTitle">Үлдэгдлийг шийдвэрлэх</h2></div><button type="button" class="icon-button" data-close="workScopeDecisionDialog">×</button></div>
+    <label>Шалтгааны төрөл<select name="reasonCode" required><option value="material_shortage">Материал дутсан</option><option value="access_blocked">Талбайд нэвтрэх боломжгүй</option><option value="weather">Цаг агаарын нөхцөл</option><option value="safety">ХАБЭА-н эрсдэл</option><option value="equipment">Техник, тоног төхөөрөмж</option><option value="technical_impossibility">Техникийн боломжгүй</option><option value="out_of_scope">Ажлын хүрээнд хамаарахгүй</option><option value="other">Бусад</option></select></label>
+    <label>Дараагийн ажлын хугацаа<input name="dueAt" type="datetime-local"></label>
+    <label>Шалтгаан ба хийх дараагийн алхам<textarea name="reason" rows="4" minlength="3" maxlength="2000" required></textarea></label>
+    <label>Шийдвэрийн тайлбар<textarea name="note" rows="3" minlength="1" maxlength="2000" required></textarea></label>
+    <p class="form-error" data-form-error></p><div class="dialog-actions"><button type="button" class="secondary" data-close="workScopeDecisionDialog">Болих</button><button type="submit" class="primary">Шийдвэр хадгалах</button></div>
+  </form></dialog>
 
   <dialog id="workSafetyReviewDialog" class="wide-dialog"><form id="workSafetyReviewForm" class="dialog-form safety-review-form">
     <input name="workOrderId" type="hidden"><input name="action" type="hidden"><input name="templateId" type="hidden"><input name="reviewType" type="hidden"><input name="idempotencyKey" type="hidden">
@@ -252,7 +271,7 @@
     <p class="form-error" data-form-error></p><div class="dialog-actions"><button type="button" class="secondary" data-close="passwordDialog">Болих</button><button type="submit" class="primary">Нууц үг солих</button></div>
   </form></dialog>
   <div class="toast" id="toast" role="status"></div>
-  <script src="/app.js?v=50" defer></script>
+  <script src="/app.js?v=57" defer></script>
   <script src="/employee-access.js?v=30" defer></script>
   <script src="/business-modules.js?v=35" defer></script>
   <script src="/organization-blueprint.js?v=5" defer></script>
@@ -277,11 +296,11 @@
   <script src="/legacy-migration-review.js?v=2" defer></script>
   <script src="/industry-profile.js" defer></script>
   <script src="/builder.js" defer></script>
-  <script src="/lighting.js?v=13" defer></script>
+  <script src="/lighting.js?v=22" defer></script>
   <script src="/camera-network.js?v=6" defer></script>
-  <script src="/camera.js?v=8" defer></script>
+  <script src="/camera.js?v=10" defer></script>
   <script src="/engineering.js?v=3" defer></script>
   <script src="/workspace-policy.js?v=33" defer></script>
-  <script src="/standard-workspace.js?v=34" defer></script>
+  <script src="/standard-workspace.js?v=45" defer></script>
 </body>
 </html>

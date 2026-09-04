@@ -55,7 +55,7 @@ test("department tabs filter presentation without becoming workflow stages",()=>
   assert.match(app,/cameraGroupLabel/);
   assert.match(cameraSmoke,/cameraOpenIncidents:cameraIncidents\.length/);
   assert.match(cameraSmoke,/Unexpected camera groups/);
-  assert.match(html,/app\.js\?v=50/);
+  assert.match(html,/app\.js\?v=57/);
   assert.match(html,/workflow\.css\?v=9/);
   assert.doesNotMatch(app,/Миний хариуцсан/);
   assert.doesNotMatch(app,/Шууд шинэ ажил/);

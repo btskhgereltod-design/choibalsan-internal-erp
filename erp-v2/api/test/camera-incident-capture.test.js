@@ -19,6 +19,22 @@ test("camera incidents use tenant-owned reference types and explicit camera role
   assert.match(migration,/user_row\.role='camera_engineer'/);
 });
 
+test("incorrect camera incidents use the same governed cancellation contract",()=>{
+  const route=read("src","routes","camera.js");
+  const ui=read("..","web","camera.js");
+  assert.match(route,/router\.post\("\/incidents\/:id\/cancel"/);
+  assert.match(route,/hasPermission\(req,"operational-incidents\.cancel"\)/);
+  assert.match(route,/domain='camera' FOR UPDATE/);
+  assert.match(route,/INCIDENT_VERSION_CONFLICT/);
+  assert.match(route,/INCIDENT_HAS_LINKED_WORK/);
+  assert.match(route,/event_type,quantity,note,detail,incident_version,request_id/);
+  assert.match(route,/commandType=`cancel_camera_incident:/);
+  assert.match(route,/writeAudit\(req,"operational_incident\.cancel"/);
+  assert.match(route,/canCancelIncidents:hasPermission/);
+  assert.match(ui,/data-cancel-camera-incident/);
+  assert.match(ui,/cancelIncident\.dataset\.cancelCameraIncident/);
+});
+
 test("camera reference configuration follows provisioning and module activation",()=>{
   const service=read("src","services","lighting-configuration.js");
   const tenant=read("src","services","tenant-provisioning.js");
@@ -49,6 +65,7 @@ test("camera batch capture is tenant-derived, bounded, idempotent and audited",(
 
 test("camera fault tab mirrors the quick numeric lighting interaction at camera grain",()=>{
   const ui=read("..","web","camera.js");
+  const css=read("..","web","style.css");
   assert.match(ui,/Камерын гэмтлийг тоогоор хурдан бүртгэх/);
   assert.match(ui,/cameraFaultDrafts/);
   assert.match(ui,/Шон \/ цэг/);
@@ -58,5 +75,14 @@ test("camera fault tab mirrors the quick numeric lighting interaction at camera 
   assert.match(ui,/\/api\/camera\/incidents\/batch/);
   assert.match(ui,/unit==="камер"\?cameraCount:null/);
   assert.match(ui,/operational-incidents\.report/);
+  assert.match(ui,/state\.cameraFaultEditors/);
+  assert.match(ui,/state\.cameraFaultView/);
+  assert.match(ui,/data-add-camera-fault/);
+  assert.match(ui,/data-remove-camera-fault-draft/);
+  assert.match(ui,/data-clear-all-camera-fault-drafts/);
+  assert.match(ui,/data-camera-fault-view/);
+  assert.match(ui,/Number\(right\.hasOpen\)-Number\(left\.hasOpen\)/);
+  assert.match(ui,/fault-change-review/);
+  assert.match(css,/\.fault-view-filter/);
   assert.match(ui,/Бүртгэгдсэн гэмтлийн түүх/);
 });

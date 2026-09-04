@@ -1,10 +1,239 @@
 # OVERVA Current State
 
-Last updated: 2026-09-03
+Last updated: 2026-09-04
 
 This document answers one question: **what exists in the repository now?** It
 does not claim that every implemented foundation is complete or production-
 validated at enterprise scale.
+
+## 2026-09-04 production-go preparation (not deployed)
+
+- The dashboard, report-schedule, Work follow-up/team, and lighting/camera fault
+  changes are assembled as a local release candidate. Production and LAN remain
+  untouched. `PRODUCTION_GO_CANDIDATE_20260904.md` records the exact candidate
+  images, schema transition, verification evidence, rollback identity and
+  remaining Go gates.
+- Production is read-only verified healthy at schema `0105`; the candidate adds
+  ordered migrations `0106` through `0110`. Migration `0110` is an additive
+  correction allowing `scope_follow_up` as the assignment-evidence source found
+  during live follow-up rehearsal. Clean migration and release rehearsal pass
+  at 110 migration rows and 25 active modules.
+- API syntax and all **486/486** repository tests pass. Separate live rehearsals
+  pass for Work measured follow-up and participant inheritance, lighting and
+  camera incident creation/cancellation, material issue/consumption, and the
+  authenticated report/dashboard projection.
+- Production contains zero unlinked Employee login identities and zero tenantless
+  automation events. The local demo has one pre-existing unlinked bootstrap
+  Employee login, so its release check correctly fails until governed identity
+  reconciliation; this row was not hidden or mutated.
+- Production backup `overva-20260903T131519Z` verifies successfully. The next
+  scheduled attempt failed while PostgreSQL was starting and did not retry
+  immediately, so a new database/uploads backup and independent verification
+  are mandatory immediately before any approved Go. The current decision is
+  **NO-GO pending commit/rebuild, exact-image re-verification, fresh backup and
+  explicit production authorization**.
+
+## Lighting and camera home overview (local demo, not production)
+
+- The management organization home now includes compact **Гэрэлтүүлгийн тойм**
+  and **Камерын тойм** panels. They retain the useful visual grouping of the
+  legacy dashboard while deriving every displayed value from current OVERVA
+  tenant data rather than copying a legacy dashboard snapshot.
+- Lighting location and installed-quantity figures are projected from governed
+  Operational Objects, their current specifications/lamp groups, reviewed
+  source-import evidence and canonical traffic-signal Assets. Fault quantities
+  come from currently open or in-progress Operational Incidents. The four
+  visible groups are road lighting, ger-district lighting, towers/projectors
+  and traffic signals. Unresolved lighting classification is shown explicitly
+  instead of being silently assigned to a convenient group.
+- Camera location/device totals are projected from current Operational Objects
+  and camera specifications; active and faulty quantities are derived from open
+  Incident quantities. Both panels route to their owning operational workspace
+  for governed detail and action. The home remains a read model and owns no
+  duplicate infrastructure ledger.
+- The local `choibalsan-hugjil` demo currently verifies road lighting at 36
+  locations / 1,747 poles / 2,582 heads / 338 open faults, ger-district lighting
+  at 191 / 2,237 / 212, towers at 143 / 786 / 182, traffic signals at 12 / 12 /
+  0, and 69 unclassified lighting objects. Camera verifies at 110 locations,
+  302 devices, 236 active and 66 faulty (78.1%). The desktop arrangement keeps
+  these panels, decision alerts and recent information flow in the working
+  viewport; narrow screens retain responsive scrolling.
+- This capability is rebuilt only at `http://localhost:4200`. Production has
+  not been modified and remains subject to the existing release gates.
+- The compact home now gives each infrastructure fact one visual home: when the
+  detailed lighting/camera panels are present, their duplicate top metrics and
+  duplicate dashboard alert rows are omitted. Their underlying incidents are
+  unchanged and remain available in the owning workspace. Repeated equivalent
+  information-flow events are summarized with an exact record count instead of
+  occupying one row each. Resources, remaining decision alerts and information
+  flow share one three-column desktop row so the working view does not require
+  vertical scrolling at the supported desktop layout; narrower screens remain
+  responsively scrollable for readability.
+- The redundant **Өнөөдөр / Чиг хандлага** switch below the organization banner
+  has been removed. Trend analysis remains available through its authorised
+  workspace navigation. **Үндсэн хөрөнгө** is now grouped under **Нөөц ба
+  санхүү** instead of occupying the operational-signal row.
+- The home also restores the useful legacy-familiar workforce and work signals
+  without restoring legacy truth: total Employees comes from the canonical
+  Employee master; present today and the compact leave/sick/vacation/overtime
+  strip come from today's Attendance records; annual Work total comes from
+  current Work Orders. Until measured scope quantities exist, the displayed
+  work-progress percentage is explicitly the completed-Work share and shows
+  its completed/total evidence instead of inventing intermediate progress.
+- Attendance was enabled for the local `choibalsan-hugjil` demo through the
+  governed module-configuration endpoint, which preserves an attributable
+  tenant audit entry. The demo currently has no Attendance row for today, so
+  its arrival and absence breakdowns remain truthful zeroes until users record
+  attendance. The resource panel now keeps all five authorised resource and
+  finance indicators in a two-column desktop grid, with the final odd card
+  spanning the row so currency values are not clipped.
+- The attendance strip includes absence as its own red signal alongside leave,
+  sickness, vacation and overtime. The banner's redundant manual refresh
+  control is removed; authorised Settings users instead receive a **Change
+  banner image** shortcut to the existing governed organization-brand form.
+  The home banner avoids repeating the full date: the identity side carries no
+  date and the status side shows the year, month, day and time once, without an
+  extra refresh-status label.
+  The brand shortcut
+  is an unobtrusive icon beside that time, with an accessible label and tooltip.
+
+## Organization information flow (local demo, not production)
+
+- The organization home now includes a compact **Мэдээллийн урсгал** board.
+  It reads recent Work Order, correspondence, Employee, stock-movement and
+  accountant-workspace events from their existing authoritative tables; it
+  does not create a second activity source of truth.
+- Every feed query runs inside an explicit tenant transaction and is enabled
+  only when the authenticated User has the corresponding module and read
+  permission. Organization-wide Work visibility is limited to management or
+  `work-orders.read-all`; other Users see only work they created, received or
+  acted on. Each row routes to the owning workspace where its full governed
+  history can be reviewed.
+- The home projection omits event notes and JSON detail. Confidential and
+  restricted correspondence uses a redacted title, and restricted rows are
+  absent unless the User already has restricted-document permission. HR and
+  finance entries appear only to their domain-authorised Users. Inventory
+  receipts, issues, transfers and adjustments include item/quantity/unit, so
+  fuel and lubricant movements appear when they are recorded through the
+  governed Inventory workflow; the dashboard does not invent a parallel fuel
+  ledger.
+- The desktop command layout places five newest authorised update groups below the
+  resource cards while the complete priority alert list remains alongside it.
+  This keeps both decision signals and recent information flow in the working
+  viewport; responsive layouts remain vertical on narrower screens.
+- This capability is currently rebuilt and exercised only at
+  `http://localhost:4200`. The complete Node suite passes `472/472`, and
+  authenticated smoke returned 12 safe information-flow rows plus the exact
+  reconciled lighting/camera overview. Production was not modified.
+
+## Work responsible employee and executing crew (local demo, not production)
+
+- Migration `0109` adds tenant-scoped current Work participation and append-only
+  assignment evidence. A Work may name one responsible Employee and multiple
+  executing Employees from the canonical HR Employee master without granting
+  any login, RBAC, workflow or approval authority.
+- The new Work dialog filters both roles to active Employees in the department
+  routed by the selected Work Type. Work created from a lighting or camera
+  Incident shows only the matching domain's Work Types and service areas; the
+  API rejects a cross-domain Work Type even if a client bypasses the screen.
+  The source Incident's exact operational object/Asset is inherited, so the
+  dialog hides the unrelated global Asset selector during conversion.
+- Work Board cards and Work history expose responsible and executing people.
+  The existing `assigned_to` User remains a distinct system/workflow owner and
+  continues to be governed by its existing authorization and audit path.
+- The local demo migration, authenticated options/list/history smoke, image
+  builds, JavaScript syntax checks, and all `481/481` repository tests pass.
+  This capability is deployed only to `http://localhost:4200`; production/LAN
+  was not modified.
+- Migration `0110` extends only the allowed assignment-event source vocabulary
+  with `scope_follow_up`, matching the already accepted participant inheritance
+  path. It was added rather than rewriting migration `0109`; the disposable
+  production-go integration exposed and verifies the correction.
+
+## Understandable multi-fault lighting intake (local demo, not production)
+
+- The lighting fault sheet now shows registered equipment and current open
+  faults by type beside each object. A user prepares a fault type and quantity
+  explicitly instead of editing an ambiguous single value.
+- Multiple different fault types may be prepared for the same street/object.
+  Prepared rows remain visible in one **changes to save** review, can be removed
+  individually or cleared together, and are committed in one existing
+  tenant-scoped idempotent batch. Repeating the same object/type in the draft
+  merges its quantity rather than producing a duplicate batch row.
+- The fault sheet keeps every object available for new reporting but sorts
+  objects with current open Incidents first, marks those rows, and provides
+  **All / Faulty only** controls with distinct object counts. This prevents a
+  category's healthy alphabetical rows from hiding its real open faults.
+- Legacy open Incidents whose imported type label is not a current reference
+  code remain visible as **Previous recorded fault**, including their retained
+  label and quantity. Their fallback unit matches the server's head-based
+  legacy capacity calculation instead of falsely presenting the object as
+  fault-free.
+- A supervisor with `operational-incidents.cancel` may mark an incorrectly
+  saved, still-unlinked open Incident as cancelled after entering a reason.
+  Each current aggregate can be expanded beside its object to identify the
+  exact Incident by fault type, reported time and remaining quantity before
+  cancelling it. Users without that permission receive a read-only view.
+  The command is version checked and idempotent and appends Incident and audit
+  evidence; it never deletes history. A Work-linked Incident fails closed and
+  must be handled through its connected Work scope.
+- The pilot HSE/safety-reviewer role does not implicitly receive lighting
+  Incident report or cancellation authority; those remain separately granted
+  operational permissions.
+- JavaScript syntax, focused tests, all `484/484` repository tests, image builds,
+  authenticated workspace smoke (439 objects, 12 fixed assets, 215 historical
+  Incident rows and 8 reference types), and both local health endpoints pass.
+  Only `http://localhost:4200` and its loopback API were rebuilt; production/LAN
+  was not modified.
+
+## Report schedule (local demo, not production)
+
+- Migration `0106` and `/api/report-schedules` implement the first governed
+  report-obligation schedule. It retains the useful legacy interaction—name,
+  recurrence, next due date, responsible person/unit, recipient, warning days,
+  note and **Илгээсэн**—without reusing the legacy global table or trusting a
+  client-supplied organization.
+- Every row is tenant-owned, RLS protected and version checked. Responsibility
+  may reference an active same-tenant User while an unmatched legacy name is
+  preserved only as a label. Create, update, submission and retirement write
+  attributable tenant audit evidence; lifecycle/submission events and command
+  receipts are append-only. Submission is exact-payload idempotent and advances
+  only one scheduled occurrence. A one-time schedule closes after submission.
+  Deletion is not exposed: retirement keeps history.
+- The existing **Нэгдсэн тайлан** surface now has separate **Нэгдсэн тайлан**
+  and **Тайлангийн хуваарь** tabs. The schedule tab includes due-state cards,
+  the legacy-style wide table, add/edit form and permission-derived actions.
+  Its copy explicitly says that a human **Илгээсэн** mark is evidence of that
+  action, not proof of delivery by an external system.
+- The guarded local importer opens the legacy SQLite database read-only,
+  refuses production, non-loopback and non-demo targets, requires an empty
+  target, and preserves legacy source IDs plus responsibility-match status in
+  creation evidence. The current local `choibalsan-hugjil` demo contains the 20
+  reviewed active legacy schedules. A pre-change local backup
+  `overva-20260904T024849Z` was created first.
+- The local web image is additionally available at `http://localhost:4200`
+  through the isolated `overva-report-schedule-demo` container. This is a demo
+  convenience endpoint, not a production deployment. Production remains at
+  schema `0105`; promotion requires the normal release candidate, backup,
+  migration rehearsal, authenticated smoke, rollback and explicit production
+  authorization gates.
+- The unified organization home now derives overdue, due-today and warning-window
+  report signals from the governed schedule source. The server applies tenant,
+  permission, responsibility and organization-timezone scope; management sees
+  the organization aggregate while another authorised User sees only directly
+  assigned schedules. Selecting the signal opens the schedule tab directly.
+- On desktop viewports the organization home uses a compact command layout:
+  the identity banner and operating metrics consume less vertical space, while
+  resources and the complete prioritised alert list sit side by side. No signal
+  is hidden to achieve the fit; narrower screens retain the readable responsive
+  vertical layout.
+- The API dependency lock overrides `qs` to `6.16.0`; `npm audit --omit=dev`
+  and the rebuilt demo image report zero known vulnerabilities. The complete
+  local production release check is still blocked because the existing
+  `choibalsan-hugjil` admin login is marked as an employee without a canonical
+  employee link. That pre-existing data issue was not changed or hidden by this
+  slice and must be resolved through an explicit identity-data review before a
+  production promotion.
 
 ## Lighting, camera and fiber workspaces (production)
 
@@ -43,8 +272,13 @@ validated at enterprise scale.
   `overva_rehearsal_lighting_demo`, requires the reviewed legacy baseline
   `117 points / 36 ГТ objects / 1,747 poles / 2,582 total heads / 43 replacement
   poles`, preserves `source_import_records`, and appends object events plus one
-  tenant audit record. Runtime projection now accepts the preserved source code
-  or the reconciled `metadata.legacyCode` and still fails closed otherwise.
+  tenant audit record. Runtime projection accepts the preserved source code or
+  reconciled `metadata.legacyCode`; a rebuilt local demo that has not replayed
+  that reconciliation may recover the same 36 road rows only from the retained
+  exact semantic note or their linked source Incident. These bounded evidence
+  paths match the dashboard classifier, while every other `sl_points` row still
+  fails closed. Traffic-signal compatibility copies are likewise excluded by
+  retained code or exact semantic note, preventing duplicate display.
 - Area cards are now tab-aware. **Гэрэлтүүлгийн объектын бүртгэл** is a
   master-data-only surface: its heading asks for an object classification and
   its cards show only object/equipment counts. Fault and active-work measures
@@ -79,6 +313,35 @@ validated at enterprise scale.
   idempotency, append-only incident events and tenant audit evidence. Zero is
   deliberately not a resolve/cancel command; accepted Work Order completion
   remains ordinary repair authority.
+- The local demo keeps the explicit **Гэмтэл хадгалах** action and live selected-row
+  count in the fault sheet header, outside the long object-list scroll area. The
+  bottom duplicate action is removed, so saving remains visible without weakening
+  the existing server validation, idempotency or audit boundary. This is the
+  capture entry remains separate from triage. In the Work board, an authorized
+  triage User can explicitly add a repeat Incident to the matching open Work
+  Order or deliberately create a separate Work Order. The attach command locks
+  the Incident, verifies tenant, object/asset, service area, open states and
+  scope authority, appends an immutable relationship, creates a measurable
+  scope row for the unresolved quantity, advances the Incident and writes Work,
+  Incident and audit evidence. It never attaches from display-name similarity.
+  Opening the Work board now reloads its Intake and Work projections, and
+  returning to Lighting or Camera reloads that domain workspace. Therefore a
+  just-reported Incident, a triage/link decision and later Work state changes do
+  not remain hidden behind an earlier client-side cache.
+- Each domain keeps its dossier entry beside its own master registry row. The
+  lighting Operational Object registry, canonical fixed-equipment/traffic-signal
+  registry and camera Operational Object registry now label that action
+  **Хувийн хэрэг**. This is navigation to the existing owning record, not a new
+  cross-domain dossier table. The dossier now projects the object's incident
+  history and append-only Incident events, including the reported note, quantity,
+  actor and occurrence time. The same projection is present in fixed-Asset detail
+  for traffic signals and other fixed equipment. It also returns only the Work
+  Orders visible under the signed-in User's existing Work
+  authority, measured scope and attributable work events. Detailed HSE review is
+  returned only to owner, all-work, safety-review or workflow-approval authority.
+  Users can print/save the visible dossier as PDF and download the same
+  permission-scoped snapshot as JSON; neither action creates a second source of
+  truth or claims that the snapshot is a signed completion certificate.
 - Migration `0099` introduces incident versions, tenant-owned operational
   incident type reference data, separate report/correct/cancel permissions and
   append-only command receipts with tenant RLS. Only `report_batch` is wired in
@@ -141,6 +404,16 @@ validated at enterprise scale.
   lighting roles while the permission vocabulary is shared and domain-neutral.
   New tenant provisioning, Builder application and later camera-module
   activation all install the same camera reference/role configuration.
+- The camera fault sheet now uses the same reviewed multi-fault interaction as
+  lighting: objects with open faults sort first; **All / Faulty only** shows
+  distinct object counts; current faults are visible by type and remaining
+  quantity; multiple types can be prepared for one object and reviewed in one
+  batch before saving. An authorized supervisor can cancel a specific mistaken,
+  unlinked camera Incident with a reason, version check, idempotent receipt,
+  append-only Incident evidence and tenant audit. Work-linked faults fail closed.
+  The change is deployed only to `localhost:4200`, whose web container now
+  proxies to a separate `overva-local-demo-api`; the LAN web and its existing
+  API containers were not restarted or replaced.
 - A read-only comparison with the legacy camera registry confirmed that its
   useful nested navigation is a second dimension, not another object category:
   110 source points split into groups `3=1`, `5=1`, `7=15`, `8=9`, `9=21`,
@@ -1246,6 +1519,18 @@ validated at enterprise scale.
   is still partial.
 
 ## Work Order explicit-authority cutover
+
+- Migration `0108` implements accountable residual-work disposition. A fully
+  measured unresolved/deferred scope cannot support final Work closure until a
+  manager either records an accepted end or atomically creates one follow-up
+  Work Order for the exact remaining quantity. Follow-ups preserve object,
+  service area, work type, workflow and incident links, return to the ordinary
+  Work Board and keep bidirectional source history. The disposition journal is
+  tenant-scoped, append-only, idempotent and unique per source scope item.
+- Local verification on 2026-09-04 applied migration `0108`, passed all `478`
+  repository tests, authenticated the Work list/history read model, and served
+  the isolated `localhost:4200` demo with a healthy API. No production/LAN web
+  service was rebuilt or promoted by this change.
 
 - Migration `0064` adds eight tenant-scoped Work Order permissions and three
   domain roles: `work-order-manager`, `work-order-safety-reviewer`, and

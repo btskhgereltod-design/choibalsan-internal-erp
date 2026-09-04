@@ -7,6 +7,8 @@ state.cameraGroupFilter = "all";
 state.cameraOperationalFilter = "all";
 state.cameraSearch = "";
 state.cameraFaultDrafts = {};
+state.cameraFaultEditors = {};
+state.cameraFaultView = "all";
 state.cameraFaultExpanded = false;
 state.cameraFaultSaving = false;
 state.cameraFaultBatchKey = null;
@@ -132,12 +134,12 @@ function cameraAssets(data) {
     const operational = cameraOperationalStateOf(item), decision = cameraSourceDecision(item);
     const operationalLabel = operational === "decision" ? decision : operational === "attention" ? "Засвар шаардлагатай" : "Хэвийн";
     const operationalDetail = operational === "attention" ? `${Number(item.affected_camera_count || 0)} камер · ${Number(item.open_incident_count || 0)} гэмтлийн мөр` : operational === "decision" ? "Эх өгөгдлийн шийдвэр" : "Нээлттэй гэмтэлгүй";
-    return `<tr><td><button class="object-dossier-link" data-camera-dossier="${item.id}">${esc(item.name)}</button><small>${esc(item.code || "—")} · Объектын master бүртгэл</small></td><td>${esc(cameraGroupLabel(cameraGroupOf(item)))}</td><td>${esc(item.location || "—")}</td><td>${Number(item.camera_point_count || 0)}</td><td>${Number(item.camera_count || 0)}</td><td><span class="camera-operational-state ${operational}">${esc(operationalLabel)}</span><small>${esc(operationalDetail)}</small></td><td>${Number(item.gps_point_count || 0)}</td><td><span class="classification-state ${esc(item.classification_state)}">${item.classification_state === "canonical" ? `Canonical v${Number(item.specification_version)}` : "Эх өгөгдөл"}</span></td><td><button class="secondary dossier-open-action" data-camera-dossier="${item.id}">Нээх / засах</button></td></tr>`;
+    return `<tr><td><button class="object-dossier-link" data-camera-dossier="${item.id}">${esc(item.name)}</button><small>${esc(item.code || "—")} · Объектын master бүртгэл</small></td><td>${esc(cameraGroupLabel(cameraGroupOf(item)))}</td><td>${esc(item.location || "—")}</td><td>${Number(item.camera_point_count || 0)}</td><td>${Number(item.camera_count || 0)}</td><td><span class="camera-operational-state ${operational}">${esc(operationalLabel)}</span><small>${esc(operationalDetail)}</small></td><td>${Number(item.gps_point_count || 0)}</td><td><span class="classification-state ${esc(item.classification_state)}">${item.classification_state === "canonical" ? `Canonical v${Number(item.specification_version)}` : "Эх өгөгдөл"}</span></td><td><button class="secondary dossier-open-action" data-camera-dossier="${item.id}">Хувийн хэрэг</button></td></tr>`;
   });
   return `<div class="lighting-section-stack"><section><div class="lighting-section-title"><h2>Камерын объектын бүртгэл</h2><span>Объект → шон/цэг → камерын төхөөрөмж ба үзүүлэлт → GPS гэсэн холбоос бүхий ашиглалтын master data</span></div><div class="lighting-object-summary"><span><b>${data.assets.length}</b> объект</span><span><b>${totals.points}</b> шон / цэг</span><span><b>${totals.cameras}</b> камер</span><span><b>${totals.gps}</b> GPS цэг</span></div>${cameraTable(["Код / камерын объект", "Баг / бүс", "Байршил", "Шон / цэг", "Камер", "Ажиллагаа", "GPS", "Master төлөв", "Үйлдэл"], rows, 9)}</section></div>`;
 }
 
-function cameraIncidents(data) {
+function cameraIncidentsLegacy(data) {
   const types=data.incidentTypes||[],canReport=Boolean(data.capabilities?.canReportIncidents),
     typeByCode=new Map(types.map(type=>[type.code,type])),openByObjectUnit=new Map();
   const incidentUnit=incident=>String(incident.detail?.quantityUnit||typeByCode.get(incident.incident_type)?.quantity_unit||"камер");
@@ -165,6 +167,44 @@ function cameraIncidents(data) {
     typeNames=new Map(types.map(type=>[type.code,type.name]));
   const history=data.incidents.length?`<details class="lighting-incident-history"><summary>Бүртгэгдсэн гэмтлийн түүх (${data.incidents.length})</summary><div class="table-panel"><table class="data-table"><thead><tr><th>Гэмтэл</th><th>Камерын объект</th><th>Нөлөөлсөн</th><th>Зассан</th><th>Огноо</th><th>Төлөв</th></tr></thead><tbody>${data.incidents.map(item=>`<tr><td><strong>${esc(typeNames.get(item.incident_type)||item.incident_type)}</strong><small>${esc(item.title||"")}</small></td><td>${esc(item.asset_name||item.location||"—")}</td><td>${Number(item.affected_quantity||0)}</td><td>${Number(item.resolved_quantity||0)}</td><td>${date(item.reported_at)}</td><td><span class="badge ${esc(item.status)}">${lightingStatus(item.status)}</span></td></tr>`).join("")}</tbody></table></div></details>`:"";
   return `<section class="lighting-fault-sheet quick"><div class="lighting-fault-toolbar"><div><h2>Камерын гэмтлийг тоогоор хурдан бүртгэх</h2><small>Объектын нийт камерын тоог харж байгаад гэмтлийн төрөл, нөлөөлсөн камерын тоог шууд сонгоно.</small></div><div class="lighting-fault-controls"><button type="button" class="secondary" data-camera-fault-expanded>${state.cameraFaultExpanded?"Тайлбар нуух":"Тайлбар нэмэх"}</button></div></div>${canReport?"":`<div class="lighting-permission-note">Танд бүртгэлийг харах эрх байна. Шинэ гэмтэл хадгалах <code>operational-incidents.report</code> эрх олгогдоогүй.</div>`}<form id="cameraFaultBatchForm"><div class="lighting-fault-scroll"><table class="data-table lighting-fault-table lighting-quick-fault-table"><thead><tr><th class="fault-object-cell">Код / камерын объект</th><th>Шон / цэг</th><th>Нийт камер</th><th>GPS</th><th>Гэмтэл</th>${state.cameraFaultExpanded?"<th>Тайлбар</th>":""}<th></th></tr></thead><tbody>${rows}</tbody></table></div>${canReport?`<div class="lighting-fault-save"><span><b>${draftCount}</b> мөр бэлэн</span><small>Камерын төрлийн гэмтэл нийт камерын тооноос хэтрэхгүй. Хадгалах үед эрх, тоо, давхардлыг сервер дахин шалгаж audit үүсгэнэ.</small><button class="primary" ${!draftCount||state.cameraFaultSaving?"disabled":""}>${state.cameraFaultSaving?"Хадгалж байна…":"Шалгаж хадгалах"}</button></div>`:""}</form></section>${history}`;
+}
+
+function cameraIncidents(data){
+  const types=data.incidentTypes||[],canReport=Boolean(data.capabilities?.canReportIncidents),canCancel=Boolean(data.capabilities?.canCancelIncidents),
+    typeByCode=new Map(types.map(type=>[type.code,type])),allObjects=state.cameraWorkspace?.assets||data.assets,targetById=new Map(allObjects.map(object=>[object.id,object])),
+    openIncidents=(data.incidents||[]).filter(item=>item.operational_object_id&&['open','in_progress'].includes(item.status)&&Number(item.affected_quantity)>Number(item.resolved_quantity)),
+    drafts=Object.values(state.cameraFaultDrafts),openByObjectType=new Map(),openByObjectUnit=new Map();
+  const incidentUnit=incident=>String(incident.detail?.quantityUnit||typeByCode.get(incident.incident_type)?.quantity_unit||'камер');
+  for(const incident of openIncidents){
+    const remaining=Math.max(0,Number(incident.affected_quantity)-Number(incident.resolved_quantity)),unit=incidentUnit(incident),objectId=incident.operational_object_id;
+    openByObjectType.set(`${objectId}:${incident.incident_type}`,(openByObjectType.get(`${objectId}:${incident.incident_type}`)||0)+remaining);
+    openByObjectUnit.set(`${objectId}:${unit}`,(openByObjectUnit.get(`${objectId}:${unit}`)||0)+remaining);
+  }
+  const hasOpen=object=>openIncidents.some(item=>item.operational_object_id===object.id),faultyObjectCount=data.assets.filter(hasOpen).length,
+    displayedObjects=data.assets.map((object,index)=>({object,index,hasOpen:hasOpen(object)})).filter(item=>state.cameraFaultView!=='faulty'||item.hasOpen)
+      .sort((left,right)=>Number(right.hasOpen)-Number(left.hasOpen)||left.index-right.index);
+  const openSummary=object=>{
+    const records=openIncidents.filter(item=>item.operational_object_id===object.id),codes=[...new Set(records.map(item=>item.incident_type))],
+      items=codes.map(code=>{const record=records.find(item=>item.incident_type===code),known=typeByCode.get(code);return {type:known||{name:'Өмнөх бүртгэлийн гэмтэл',quantity_unit:incidentUnit(record)},legacyLabel:known?'':code,count:openByObjectType.get(`${object.id}:${code}`)||0}}).filter(item=>item.count>0);
+    if(!items.length)return '<span class="fault-none-chip">Одоогоор нээлттэй гэмтэлгүй</span>';
+    const totals=items.map(item=>`<span class="fault-open-chip"><b>${esc(item.type.name)}</b>${item.count} ${esc(item.type.quantity_unit)}${item.legacyLabel?`<small>${esc(item.legacyLabel)}</small>`:''}</span>`).join(''),
+      details=records.map(item=>{const type=typeByCode.get(item.incident_type),remaining=Math.max(0,Number(item.affected_quantity)-Number(item.resolved_quantity));return `<div class="fault-open-record"><span><b>${esc(type?.name||'Өмнөх бүртгэлийн гэмтэл')}</b><small>${type?'':`${esc(item.incident_type)} · `}${dateTime(item.reported_at)} · үлдсэн ${remaining} ${esc(incidentUnit(item))}</small></span>${canCancel?`<button type="button" class="secondary incident-cancel" data-cancel-camera-incident="${item.id}" data-version="${item.version}">Хүчингүй болгох</button>`:'<small>Зөвхөн харах эрхтэй</small>'}</div>`}).join('');
+    return `${totals}<details class="fault-object-history"><summary>${canCancel?'Буруу бүртгэл засах / хүчингүй болгох':'Бүртгэл тус бүрийг харах'} (${records.length})</summary><div>${details}</div></details>`;
+  };
+  const draftSummary=drafts.map(draft=>{const object=targetById.get(draft.objectId),type=typeByCode.get(draft.incidentType);if(!object||!type)return '';return `<div class="fault-review-item"><span><b>${esc(object.name)}</b><small>${esc(type.name)} · шинээр +${draft.affectedQuantity} ${esc(type.quantity_unit)}${draft.note?` · ${esc(draft.note)}`:''}</small></span><button type="button" class="icon-button" data-remove-camera-fault-draft="${draft.rowKey}" title="Энэ өөрчлөлтийг хасах">×</button></div>`}).join('');
+  const rows=displayedObjects.map(({object,hasOpen:objectHasOpen})=>{
+    const fallback=types[0]?.code||'',editor=state.cameraFaultEditors[object.id]||{incidentType:fallback,affectedQuantity:'',note:''};
+    if(!types.some(type=>type.code===editor.incidentType))editor.incidentType=fallback;
+    const selectedType=typeByCode.get(editor.incidentType)||types[0]||{},unit=selectedType.quantity_unit||'тохиолдол',cameraCount=Number(object.camera_count||0),
+      total=unit==='камер'?cameraCount:null,open=openByObjectUnit.get(`${object.id}:${unit}`)||0,
+      pending=drafts.filter(item=>item.objectId===object.id&&typeByCode.get(item.incidentType)?.quantity_unit===unit).reduce((sum,item)=>sum+Number(item.affectedQuantity||0),0),
+      remaining=total===null?1000000:Math.max(0,total-open-pending),prepared=drafts.filter(item=>item.objectId===object.id),
+      options=types.map(type=>`<option value="${esc(type.code)}" ${type.code===editor.incidentType?'selected':''}>${esc(type.name)} · ${esc(type.quantity_unit)}</option>`).join(''),
+      preparedHtml=prepared.length?`<div class="fault-row-drafts">${prepared.map(item=>{const type=typeByCode.get(item.incidentType);return `<span><b>${esc(type?.name||item.incidentType)}</b> +${item.affectedQuantity} ${esc(type?.quantity_unit||'')}<button type="button" data-remove-camera-fault-draft="${item.rowKey}" aria-label="Бэлтгэсэн мөр хасах">×</button></span>`}).join('')}</div>`:'';
+    return `<tr class="${objectHasOpen?'fault-row-current':''}" data-camera-fault-row="${object.id}"><td class="fault-object-cell"><button type="button" class="object-dossier-link" data-camera-dossier="${object.id}">${esc(object.name)}</button><small>${esc(object.code||'—')} · ${esc(cameraGroupLabel(cameraGroupOf(object)))}</small></td><td><span class="fault-inventory">Цэг ${Number(object.camera_point_count||0)} · Камер ${cameraCount} · GPS ${Number(object.gps_point_count||0)}</span></td><td><div class="fault-open-list">${openSummary(object)}</div></td><td class="quick-fault-cell"><select class="fault-type-select" data-camera-fault-field="incidentType" data-object-id="${object.id}" ${canReport?'':'disabled'}>${options}</select><div class="fault-entry-line"><label><small>Шинээр нэмэх (${esc(unit)})</small><input class="fault-quantity-input" type="number" min="0" max="${remaining}" step="1" value="${esc(editor.affectedQuantity||'')}" placeholder="0" data-camera-fault-field="affectedQuantity" data-object-id="${object.id}" ${canReport?'':'disabled'}></label><button type="button" class="secondary fault-prepare" data-add-camera-fault="${object.id}" ${canReport&&remaining>0?'':'disabled'}>+ Бэлтгэх</button></div>${state.cameraFaultExpanded?`<input class="fault-note-input" value="${esc(editor.note||'')}" maxlength="2000" placeholder="Тайлбар" data-camera-fault-field="note" data-object-id="${object.id}" ${canReport?'':'disabled'}>`:''}${preparedHtml}</td></tr>`;
+  }).join('')||'<tr><td colspan="4" class="fault-filter-empty">Энэ сонголтод нээлттэй гэмтэлтэй камерын объект алга.</td></tr>';
+  const history=data.incidents||[],historyHtml=history.length?`<details class="lighting-incident-history"><summary>Бүртгэгдсэн гэмтлийн түүх (${history.length})</summary><div class="table-panel"><table class="data-table"><thead><tr><th>Гэмтэл</th><th>Камерын объект</th><th>Нөлөөлсөн</th><th>Зассан</th><th>Огноо</th><th>Төлөв</th><th>Үйлдэл</th></tr></thead><tbody>${history.map(item=>`<tr><td><strong>${esc(typeByCode.get(item.incident_type)?.name||item.incident_type)}</strong><small>${esc(item.title||'')}</small></td><td>${esc(item.asset_name||item.location||'—')}</td><td>${Number(item.affected_quantity||0)}</td><td>${Number(item.resolved_quantity||0)}</td><td>${date(item.reported_at)}</td><td><span class="badge ${esc(item.status)}">${lightingStatus(item.status)}</span></td><td>${canCancel&&['open','in_progress'].includes(item.status)?`<button type="button" class="secondary incident-cancel" data-cancel-camera-incident="${item.id}" data-version="${item.version}">Хүчингүй болгох</button>`:'—'}</td></tr>`).join('')}</tbody></table></div></details>`:'';
+  return `<section class="lighting-fault-sheet quick"><div class="lighting-fault-toolbar"><div><h2>Камерын шинэ гэмтэл бүртгэх</h2><small>${faultyObjectCount} гэмтэлтэй объект эхэнд байна. Нэг объектод олон төрлийн гэмтлийг бэлтгээд нэг удаа хадгална.</small></div><div class="lighting-fault-controls"><div class="fault-view-filter"><button type="button" class="${state.cameraFaultView==='all'?'active':''}" data-camera-fault-view="all">Бүгд ${data.assets.length}</button><button type="button" class="${state.cameraFaultView==='faulty'?'active':''}" data-camera-fault-view="faulty">Зөвхөн гэмтэлтэй ${faultyObjectCount}</button></div><button type="button" class="secondary" data-camera-fault-expanded>${state.cameraFaultExpanded?'Тайлбар нуух':'Тайлбар нэмэх'}</button></div></div>${drafts.length?`<section class="fault-change-review"><div><strong>Хадгалах өөрчлөлт — ${drafts.length} мөр</strong><small>Бүх мөр тус тусын камерын объект, гэмтлийн төрөлд нэмэгдэнэ.</small></div><div class="fault-review-list">${draftSummary}</div><div class="fault-review-actions"><button type="button" class="secondary" data-clear-all-camera-fault-drafts>Бүгдийг цэвэрлэх</button><button type="submit" form="cameraFaultBatchForm" class="primary" ${state.cameraFaultSaving?'disabled':''}>${state.cameraFaultSaving?'Хадгалж байна…':`${drafts.length} өөрчлөлт хадгалах`}</button></div></section>`:''}${canReport?'':`<div class="lighting-permission-note">Танд бүртгэлийг харах эрх байна. Шинэ гэмтэл хадгалах эрх олгогдоогүй.</div>`}<form id="cameraFaultBatchForm"><div class="lighting-fault-scroll"><table class="data-table lighting-fault-table lighting-fault-understandable"><thead><tr><th class="fault-object-cell">Камерын объект</th><th>Бүртгэлтэй тоноглол</th><th>Одоогийн нээлттэй гэмтэл</th><th>Шинэ өөрчлөлт бэлтгэх</th></tr></thead><tbody>${rows}</tbody></table></div><div class="lighting-fault-save"><small>Бэлтгэсэн мөрийг хадгалахаас өмнө × товчоор хасна. Хадгалсан буруу мөрийг тухайн объектын нээлттэй гэмтлээс шалтгаантай хүчингүй болгоно.</small></div></form></section>${historyHtml}`;
 }
 
 function cameraWork(data) {
@@ -224,7 +264,7 @@ function cameraView() {
     ${navigation}${content}`;
 }
 
-document.addEventListener("click", (event) => {
+document.addEventListener("click", async (event) => {
   const tab = event.target.closest("[data-camera-tab]");
   if (tab) {
     state.cameraTab = tab.dataset.cameraTab;
@@ -247,6 +287,8 @@ document.addEventListener("click", (event) => {
     state.cameraFaultExpanded=!state.cameraFaultExpanded;
     render();
   }
+  const faultView=event.target.closest("[data-camera-fault-view]");
+  if(faultView){state.cameraFaultView=faultView.dataset.cameraFaultView;render()}
   const faultStep=event.target.closest("[data-camera-fault-step]");
   if(faultStep){
     const input=document.querySelector(`[data-camera-fault-field="affectedQuantity"][data-object-id="${faultStep.dataset.objectId}"]`);
@@ -263,6 +305,36 @@ document.addEventListener("click", (event) => {
     state.cameraFaultBatchKey=null;
     state.cameraFaultBatchReportedAt=null;
     render();
+  }
+  const addFault=event.target.closest("[data-add-camera-fault]");
+  if(addFault){
+    const objectId=addFault.dataset.addCameraFault,row=addFault.closest('[data-camera-fault-row]'),typeInput=row?.querySelector('[data-camera-fault-field="incidentType"]'),quantityInput=row?.querySelector('[data-camera-fault-field="affectedQuantity"]'),noteInput=row?.querySelector('[data-camera-fault-field="note"]'),
+      incidentType=typeInput?.value||'',quantity=Number(quantityInput?.value||0),maximum=Number(quantityInput?.max||1000000),key=`${objectId}:${incidentType}`,existing=state.cameraFaultDrafts[key];
+    if(!incidentType||!Number.isInteger(quantity)||quantity<1)return toast('Гэмтлийн төрөл болон шинээр нэмэх тоог оруулна уу',true);
+    if(quantity>maximum)return toast(`Энэ төрлийн үлдсэн боломжит тоо ${maximum}`,true);
+    state.cameraFaultDrafts[key]={rowKey:existing?.rowKey||crypto.randomUUID(),objectId,incidentType,affectedQuantity:Number(existing?.affectedQuantity||0)+quantity,note:String(noteInput?.value||existing?.note||'').trim()};
+    state.cameraFaultEditors[objectId]={incidentType,affectedQuantity:'',note:''};
+    state.cameraFaultBatchKey=null;state.cameraFaultBatchReportedAt=null;render();
+  }
+  const removeDraft=event.target.closest("[data-remove-camera-fault-draft]");
+  if(removeDraft){
+    const entry=Object.entries(state.cameraFaultDrafts).find(([,item])=>item.rowKey===removeDraft.dataset.removeCameraFaultDraft);
+    if(entry)delete state.cameraFaultDrafts[entry[0]];
+    state.cameraFaultBatchKey=null;state.cameraFaultBatchReportedAt=null;render();
+  }
+  if(event.target.closest("[data-clear-all-camera-fault-drafts]")){
+    state.cameraFaultDrafts={};state.cameraFaultBatchKey=null;state.cameraFaultBatchReportedAt=null;render();
+  }
+  const cancelIncident=event.target.closest("[data-cancel-camera-incident]");
+  if(cancelIncident){
+    const reason=prompt('Яагаад энэ камерын гэмтлийн бүртгэлийг хүчингүй болгож байгааг бичнэ үү');
+    if(reason===null)return;
+    if(reason.trim().length<3)return toast('Хүчингүй болгосон шалтгааныг 3-аас дээш тэмдэгтээр бичнэ үү',true);
+    cancelIncident.disabled=true;
+    try{
+      await api(`/api/camera/incidents/${cancelIncident.dataset.cancelCameraIncident}/cancel`,{method:'POST',body:JSON.stringify({reason:reason.trim(),expectedVersion:Number(cancelIncident.dataset.version),idempotencyKey:crypto.randomUUID()})});
+      await loadCamera(true);toast('Камерын буруу гэмтлийн бүртгэлийг түүхтэй нь хүчингүй болголоо');
+    }catch(error){toast(error.message,true)}finally{cancelIncident.disabled=false}
   }
   const dossier=event.target.closest("[data-camera-dossier]");
   if(dossier)openCameraDossier(dossier.dataset.cameraDossier);
@@ -282,32 +354,24 @@ document.addEventListener("input",event=>{
   }
   if(!event.target.matches("[data-camera-fault-field]"))return;
   const objectId=event.target.dataset.objectId,field=event.target.dataset.cameraFaultField;
-  const current=state.cameraFaultDrafts[objectId]||{
-    rowKey:crypto.randomUUID(),incidentType:state.cameraWorkspace?.incidentTypes?.[0]?.code||"",
+  const current=state.cameraFaultEditors[objectId]||{
+    incidentType:state.cameraWorkspace?.incidentTypes?.[0]?.code||"",
     affectedQuantity:"",note:""
   };
   current[field]=event.target.value;
-  state.cameraFaultDrafts[objectId]=current;
+  state.cameraFaultEditors[objectId]=current;
   state.cameraFaultBatchKey=null;
   state.cameraFaultBatchReportedAt=null;
-  const form=event.target.closest("form"),button=form?.querySelector("button.primary"),
-    visibleObjectIds=new Set(cameraScoped(state.cameraWorkspace).assets.map(object=>object.id)),
-    count=Object.entries(state.cameraFaultDrafts).filter(([id,item])=>visibleObjectIds.has(id)&&Number(item.affectedQuantity)>0).length;
-  if(button)button.disabled=!count;
-  const countElement=form?.querySelector(".lighting-fault-save span b");
-  if(countElement)countElement.textContent=String(count);
-  const clear=form?.querySelector(`[data-clear-camera-fault="${objectId}"]`);
-  if(clear)clear.disabled=!(current.affectedQuantity||current.note);
 });
 
 document.addEventListener("submit",async event=>{
   if(event.target.id!=="cameraFaultBatchForm")return;
   event.preventDefault();
   state.cameraFaultBatchReportedAt=state.cameraFaultBatchReportedAt||new Date().toISOString();
-  const visibleObjectIds=new Set(cameraScoped(state.cameraWorkspace).assets.map(object=>object.id));
-  const rows=Object.entries(state.cameraFaultDrafts)
-    .filter(([id,item])=>visibleObjectIds.has(id)&&Number(item.affectedQuantity)>0)
-    .map(([operationalObjectId,item])=>({rowKey:item.rowKey,operationalObjectId,
+  const allObjectIds=new Set((state.cameraWorkspace?.assets||[]).map(object=>object.id));
+  const rows=Object.values(state.cameraFaultDrafts)
+    .filter(item=>allObjectIds.has(item.objectId)&&Number(item.affectedQuantity)>0)
+    .map(item=>({rowKey:item.rowKey,operationalObjectId:item.objectId,
       incidentType:item.incidentType||state.cameraWorkspace?.incidentTypes?.[0]?.code||"",
       affectedQuantity:Number(item.affectedQuantity),reportedAt:state.cameraFaultBatchReportedAt,
       note:String(item.note||"").trim()}));
@@ -318,7 +382,7 @@ document.addEventListener("submit",async event=>{
   try{
     const result=await api("/api/camera/incidents/batch",{method:"POST",
       body:JSON.stringify({idempotencyKey:state.cameraFaultBatchKey,rows})});
-    for(const item of result.items||[])delete state.cameraFaultDrafts[item.operational_object_id];
+    state.cameraFaultDrafts={};
     state.cameraFaultBatchKey=null;
     state.cameraFaultBatchReportedAt=null;
     await loadCamera(true);

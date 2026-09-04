@@ -19,6 +19,8 @@ test("lighting incident capture has bounded reference data and explicit permissi
   assert.match(migration,/'operational-incidents\.cancel'/);
   assert.match(migration,/lighting-incident-reporter/);
   assert.match(migration,/lighting-incident-supervisor/);
+  assert.match(migration,/user_row\.role IN\('director','chief_engineer','engineer','electric'\)/);
+  assert.doesNotMatch(migration,/WHEN user_row\.role='safety' THEN 'lighting-incident/);
   assert.match(grants,/REVOKE UPDATE,DELETE,TRUNCATE ON[^`]*operational_incident_command_receipts/);
 });
 
@@ -53,11 +55,14 @@ test("incident report batch is tenant-derived, atomic, idempotent and audited",(
   assert.doesNotMatch(route,/organizationId\s*:\s*z\./);
 });
 
-test("legacy road mapping fails closed outside the known GT object codes",()=>{
+test("legacy road mapping accepts retained code, semantic note or linked source incident and otherwise fails closed",()=>{
   const route=read("src","routes","lighting.js");
   assert.match(route,/NULLIF\(source\.source_snapshot->>'code',''\)/);
   assert.match(route,/NULLIF\(o\.metadata->>'legacyCode',''\)/);
-  assert.match(route,/LIKE 'ГТ-%' THEN 'road-lighting'/);
+  assert.match(route,/LIKE 'ГТ-%'/);
+  assert.match(route,/metadata->>'notes',''\)='Гудамжны гэрэлтүүлэг'/);
+  assert.match(route,/marker\.operational_object_id=o\.id/);
+  assert.match(route,/marker\.incident_type='Авто замын гэрэл'/);
   assert.match(route,/WHEN o\.source_table='sl_points' THEN 'unclassified'/);
   assert.doesNotMatch(route,/WHEN o\.source_table='sl_points' THEN 'road-lighting'/);
 });
@@ -66,7 +71,7 @@ test("quick fault sheet uses the correct pole or head basis and keeps governed b
   const ui=read("..","web","lighting.js");
   const css=read("..","web","style.css");
   const route=read("src","routes","lighting.js");
-  assert.match(ui,/Гэмтлийг тоогоор хурдан бүртгэх/);
+  assert.match(ui,/Шинэ гэмтэл бүртгэх/);
   assert.match(ui,/lightingFaultDrafts/);
   assert.match(ui,/Нийт шон/);
   assert.match(ui,/Нийт толгой/);
@@ -75,7 +80,17 @@ test("quick fault sheet uses the correct pole or head basis and keeps governed b
   assert.match(ui,/unit==="толгой"\?headCount:unit==="шон"\?poleCount/);
   assert.match(ui,/data-clear-fault/);
   assert.match(ui,/\/api\/lighting\/incidents\/batch/);
-  assert.match(ui,/0 бол шинэ гэмтэл нэмэхгүй/);
+  assert.match(ui,/Гэмтэл хадгалах/);
+  assert.match(ui,/form="lightingFaultBatchForm"/);
+  assert.match(ui,/data-lighting-fault-draft-count/);
+  assert.match(ui,/lightingFaultTargets/);
+  assert.match(ui,/faultTargetKind==="asset"/);
+  assert.match(route,/INVALID_TRAFFIC_SIGNAL_ASSET/);
+  assert.match(route,/i\.asset_id=ANY\(\$3::uuid\[\]\)/);
+  assert.match(route,/operational_object_id,asset_id,service_area_id/);
+  assert.match(route,/a\.category='Гэрлэн дохио'/);
+  assert.match(ui,/data-lighting-fault-save/);
+  assert.match(ui,/0 тоотой мөр хадгалагдахгүй/);
   assert.match(ui,/нээлттэй гэмтлийн мөр/);
   assert.match(ui,/гэмтэлтэй нэгж/);
   assert.match(ui,/Number\(item\.affected_quantity\) - Number\(item\.resolved_quantity\) > 0/);
@@ -97,4 +112,46 @@ test("linked Work Order state changes advance incident versions",()=>{
   assert.match(route,/status='in_progress',version=version\+1/);
   assert.match(route,/status='resolved',resolved_quantity=affected_quantity,version=version\+1/);
   assert.match(route,/incident_version/);
+});
+
+test("lighting fault sheet prepares multiple fault types and reviews them before one batch save",()=>{
+  const ui=read("..","web","lighting.js");
+  const css=read("..","web","style.css");
+  assert.match(ui,/state\.lightingFaultEditors/);
+  assert.match(ui,/data-add-fault/);
+  assert.match(ui,/objectId,incidentType/);
+  assert.match(ui,/data-remove-fault-draft/);
+  assert.match(ui,/data-clear-all-fault-drafts/);
+  assert.match(ui,/Хадгалах өөрчлөлт/);
+  assert.match(ui,/Одоогийн нээлттэй гэмтэл/);
+  assert.match(ui,/Object\.values\(state\.lightingFaultDrafts\)/);
+  assert.match(css,/\.fault-change-review\{/);
+  assert.match(css,/\.fault-open-chip/);
+});
+
+test("incorrect saved lighting incidents are cancelled with versioned append-only evidence",()=>{
+  const route=read("src","routes","lighting.js");
+  const ui=read("..","web","lighting.js");
+  const css=read("..","web","style.css");
+  assert.match(route,/router\.post\("\/incidents\/:id\/cancel"/);
+  assert.match(route,/hasPermission\(req,"operational-incidents\.cancel"\)/);
+  assert.match(route,/domain='lighting' FOR UPDATE/);
+  assert.match(route,/INCIDENT_VERSION_CONFLICT/);
+  assert.match(route,/INCIDENT_HAS_LINKED_WORK/);
+  assert.match(route,/event_type,quantity,note,detail,incident_version,request_id/);
+  assert.match(route,/writeAudit\(req,"operational_incident\.cancel"/);
+  assert.match(route,/operational_incident_command_receipts/);
+  assert.match(ui,/data-cancel-lighting-incident/);
+  assert.match(ui,/Буруу бүртгэл засах \/ хүчингүй болгох/);
+  assert.match(ui,/fault-open-record/);
+  assert.match(ui,/state\.lightingFaultView/);
+  assert.match(ui,/data-lighting-fault-view/);
+  assert.match(ui,/Number\(right\.hasOpen\)-Number\(left\.hasOpen\)/);
+  assert.match(ui,/faultyTargetCount/);
+  assert.match(ui,/incidentCodes=\[\.\.\.new Set\(records\.map/);
+  assert.match(ui,/legacyLabel/);
+  assert.match(ui,/quantity_unit:incidentUnit\(record\)/);
+  assert.match(css,/\.fault-view-filter/);
+  assert.match(css,/\.fault-row-current/);
+  assert.match(ui,/Түүх устахгүй/);
 });

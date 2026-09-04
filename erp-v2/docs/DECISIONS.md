@@ -1,6 +1,6 @@
 # OVERVA Decisions
 
-Last updated: 2026-09-01
+Last updated: 2026-09-04
 
 This is a lightweight decision log. It preserves rationale without freezing
 implementation. Hypotheses are labelled separately from accepted decisions.
@@ -1201,6 +1201,142 @@ that legacy codes outrank canonical data. A reviewed canonical technical
 specification continues to own operational quantities. Application rollback
 may leave this additive provenance correction in place; reversing valid object
 events or audit evidence by deletion is forbidden.
+
+### D-062 — Report schedules are governed obligations, not delivery claims
+
+Accepted: 2026-09-04
+
+OVERVA models a report schedule as tenant-owned master/configuration data with
+a separate append-only lifecycle and submission journal. The familiar legacy
+fields and quick **Илгээсэн** interaction remain useful, but the legacy global
+table, free mutation, unauthorised submission and hard delete semantics do not.
+Runtime authority is split into read, manage and submit permissions. Tenant and
+actor come from the authenticated server context; typed responsibility cannot
+cross the tenant boundary; every consequential write is version checked,
+audited and transactional.
+
+**Илгээсэн** means an authorised person confirmed the report was submitted. It
+does not claim transport or recipient delivery. The command is exact-payload
+idempotent, serializes concurrent retries and advances one due occurrence so
+missed obligations are not silently skipped. External delivery automation, if
+added later, must own separate attempt/delivery evidence and cannot rewrite the
+human submission journal.
+
+Schedules retire rather than delete. The legacy Choibalsan rows may enter only
+a guarded demo import that opens its source read-only, preserves source identity
+and unmatched responsibility as evidence, requires an empty local target and
+fails closed in production. Production promotion remains a separate reviewed
+release with backup, rehearsal, smoke and rollback evidence.
+
+Schedule attention on the organization home is a derived projection, not a new
+notification authority. It is permission and responsibility scoped, calculated
+in the tenant timezone, and resolves only when the underlying governed schedule
+changes. Selecting the signal opens the schedule workspace rather than allowing
+the dashboard to bypass submission controls.
+
+### D-063 — Organization information flow is a redacted domain projection
+
+Accepted: 2026-09-04
+
+The organization home may present recent activity from Work, Records, Human
+Resources, Inventory and Finance, but it must not own or copy a second business
+history. The board derives rows at request time from each domain's authoritative
+event or movement record and routes the User back to that domain for detail.
+
+Tenant context, enabled module and domain read permission are mandatory before
+a source participates. All-work visibility continues to require management or
+`work-orders.read-all`; otherwise Work activity is limited to the authenticated
+User's related work. The compact projection must not include event notes, JSON
+detail, HR private fields or finance narrative. Confidential/restricted
+correspondence titles are redacted, and restricted rows are withheld unless the
+existing restricted-document authority permits their existence to be shown.
+
+Fuel and lubricant receipts/issues remain Inventory movements. A dashboard
+label or filter may help Users recognise them, but must not create a parallel
+fuel ledger or imply activity that was not recorded through the authoritative
+workflow. Production promotion remains subject to the normal backup, migration,
+security, authenticated smoke and explicit authorisation gates.
+
+### D-064 — Object dossiers project authorized operational history
+
+Accepted: 2026-09-04
+
+Each domain exposes an object's **Хувийн хэрэг** from that domain's own master
+registry. The dossier does not become another source of Incident, Work, HSE,
+Document or audit truth. It projects those authoritative records at request
+time and keeps their identifiers and timestamps so a street light, tower,
+traffic signal or camera can be understood through one object-centred view.
+
+Operational-object read authority permits the object's own incident history but
+does not imply organization-wide Work access. A Work row participates only when
+the Work module is enabled, the User already has a Work permission, and the
+canonical per-order read rule passes. Detailed safety-review evidence requires
+owner, all-work, safety-review or workflow-approval authority. A hidden row must
+not leak through counts, timeline text, downloadable output or printable output.
+
+Print/PDF and JSON download are permission-scoped snapshots of the response
+already delivered to the User, stamped at generation time. They are not signed
+completion certificates and cannot update source records. Adding a newly
+reported incident to an existing open Work Order remains a separate
+consequential command requiring explicit human choice, server validation,
+idempotency and audit evidence. The accepted command requires Work create and
+scope-management authority, exact object/asset identity and compatible service
+area; it adds the unresolved quantity as measurable Work scope in the same
+transaction as the append-only link and evidence. Automatic matching by title
+or location text is prohibited.
+
+### D-065 — Unfinished measured work returns through an explicit disposition
+
+Accepted: 2026-09-04
+
+A Work Order may finish its current visit or attempt without claiming that all
+measured scope was repaired. Every accepted unresolved/deferred quantity must
+have one manager-approved disposition: either a reasoned terminal end for work
+that should not continue, or one exact-quantity follow-up Work Order that
+returns to the normal Work Board.
+
+The follow-up inherits canonical object, service area, work type, department,
+workflow and linked Incident identities. It does not duplicate the Incident or
+rewrite the source Work history. Source and follow-up remain linked through an
+append-only, tenant-scoped and idempotent disposition record that is unique per
+source scope item. Consequently the source can close, the Incident remains open
+while any linked follow-up remains active, and ordinary assignment, HSE and
+acceptance controls apply again to the follow-up.
+
+### D-066 — Operational Work participants do not grant system authority
+
+Accepted: 2026-09-04
+
+A Work Order may identify one responsible Employee and multiple executing
+Employees from the canonical tenant Employee master. These are operational
+participants: they record who is accountable for the result and who performs
+the field work. They do not create login identities, grant permissions, claim
+the Work Order, or authorize workflow and HSE decisions.
+
+The existing assigned User remains the separate system/workflow owner. A Work
+Type's tenant-owned route determines the participant department, and both UI
+and server validate that boundary. Incident conversion also inherits the exact
+source object/Asset and requires a compatible domain Work Type. Current
+participant membership is tenant-scoped, while assignment/removal evidence is
+append-only and attributable. Follow-up Work created for accepted unfinished
+scope inherits the operational participants so the remaining work does not
+lose its named people.
+
+### D-067 — Fault intake reviews a batch; correction preserves history
+
+Accepted: 2026-09-04
+
+One observation visit may find several different fault types on the same
+Operational Object. The intake therefore prepares changes at
+object-plus-incident-type grain, shows current open faults and registered
+capacity separately, and requires one explicit review before the batch is
+committed. Unsaved rows are freely removable because they are not evidence yet.
+
+A saved Incident is operational evidence and is not physically deleted. An
+authorized correction uses a reasoned, version-checked, idempotent cancellation
+that preserves append-only Incident and audit history. The simple intake
+cancellation is forbidden after the Incident has been linked to any Work Order;
+that case must preserve and reconcile the connected Work scope.
 
 ## Active Hypotheses
 

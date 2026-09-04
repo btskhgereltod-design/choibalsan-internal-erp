@@ -10,6 +10,7 @@ const {getPool,withTenantTransaction}=require("../db");
 const {authenticate,requireModule}=require("../middleware/auth");
 const {writeAudit}=require("../services/audit");
 const {payloadHash}=require("../services/workflow-coordination");
+const {loadOperationalObjectActivity}=require("../services/operational-object-activity");
 const {asyncHandler}=require("../utils/async-handler");
 const router=express.Router();
 
@@ -61,12 +62,20 @@ const incidentBatchSchema=z.object({
   idempotencyKey:z.string().uuid(),
   rows:z.array(z.object({
     rowKey:z.string().uuid(),
-    operationalObjectId:z.string().uuid(),
+    operationalObjectId:z.string().uuid().nullable().optional(),
+    assetId:z.string().uuid().nullable().optional(),
     incidentType:z.string().regex(/^[a-z][a-z0-9_-]{1,79}$/),
     affectedQuantity:z.coerce.number().int().min(1).max(1_000_000),
     reportedAt:z.iso.datetime(),
     note:z.string().trim().max(2000).default("")
+  }).superRefine((row,ctx)=>{
+    if(Boolean(row.operationalObjectId)===Boolean(row.assetId))ctx.addIssue({code:"custom",message:"Нэг мөр яг нэг объект эсвэл хөрөнгийг заана"});
   })).min(1).max(100)
+});
+const incidentCancelSchema=z.object({
+  reason:z.string().trim().min(3).max(2000),
+  expectedVersion:z.coerce.number().int().positive(),
+  idempotencyKey:z.string().uuid()
 });
 const hasPermission=(req,permission)=>new Set(req.user.permissions||[]).has(permission)||new Set(req.user.system_roles||[]).has("owner");
 const deny=(res,permission)=>res.status(403).json({error:"Insufficient permission",permission});
@@ -81,10 +90,13 @@ function uploadObjectMedia(req,res,next){mediaUpload.single("file")(req,res,erro
 })}
 
 const legacyLightingClassificationSql=`CASE
-  WHEN o.source_table='sl_points' AND COALESCE(
-    NULLIF(o.metadata->>'legacyCode',''),
-    NULLIF(source.source_snapshot->>'code','')
-  ) LIKE 'ГТ-%' THEN 'road-lighting'
+  WHEN o.source_table='sl_points' AND (
+    COALESCE(NULLIF(o.metadata->>'legacyCode',''),NULLIF(source.source_snapshot->>'code','')) LIKE 'ГТ-%'
+    OR COALESCE(o.metadata->>'notes','')='Гудамжны гэрэлтүүлэг'
+    OR EXISTS(SELECT 1 FROM operational_incidents marker
+      WHERE marker.organization_id=o.organization_id AND marker.operational_object_id=o.id
+        AND marker.incident_type='Авто замын гэрэл')
+  ) THEN 'road-lighting'
   WHEN o.source_table='sl_ger_inventory' AND source.source_snapshot->>'category' IN(
     'Гэр хороолол','Гэр хорооллын гэрэл','??? ????????'
   ) THEN 'ger-area-lighting'
@@ -105,7 +117,7 @@ router.post("/incidents/batch",asyncHandler(async(req,res)=>{
   if(new Set(value.rows.map(row=>row.rowKey)).size!==value.rows.length){
     return res.status(400).json({error:"Нэг багцад rowKey давхардаж болохгүй",code:"DUPLICATE_ROW_KEY"});
   }
-  if(new Set(value.rows.map(row=>`${row.operationalObjectId}:${row.incidentType}`)).size!==value.rows.length){
+  if(new Set(value.rows.map(row=>`${row.operationalObjectId||row.assetId}:${row.incidentType}`)).size!==value.rows.length){
     return res.status(400).json({error:"Нэг объектын ижил төрлийн гэмтлийг багцад давхардуулж болохгүй",code:"DUPLICATE_INCIDENT_TARGET"});
   }
   if(value.rows.some(row=>new Date(row.reportedAt).getTime()>Date.now()+5*60*1000)){
@@ -123,7 +135,8 @@ router.post("/incidents/batch",asyncHandler(async(req,res)=>{
       }
       return {status:200,body:{...receipt.result,replayed:true}};
     }
-    const objectIds=[...new Set(value.rows.map(row=>row.operationalObjectId))];
+    const objectIds=[...new Set(value.rows.map(row=>row.operationalObjectId).filter(Boolean))];
+    const assetIds=[...new Set(value.rows.map(row=>row.assetId).filter(Boolean))];
     const typeCodes=[...new Set(value.rows.map(row=>row.incidentType))];
     const objects=await client.query(`SELECT o.id,o.code,o.name,o.location,o.status,classified.code AS service_area_code,
         CASE WHEN spec.id IS NOT NULL THEN spec.pole_count
@@ -158,52 +171,62 @@ router.post("/incidents/batch",asyncHandler(async(req,res)=>{
           WHERE group_row.organization_id=o.organization_id AND group_row.specification_id=spec.id) lamps ON true
         LEFT JOIN LATERAL(SELECT ${legacyLightingClassificationSql} AS code) classified ON true
         WHERE o.organization_id=$1 AND o.domain='lighting' AND o.id=ANY($2::uuid[])`,[org,objectIds]);
+    const assets=await client.query(`SELECT a.id,a.code,a.name,a.location,a.status,a.allocatable_quantity,
+        a.allocation_unit,'traffic-signal'::text AS service_area_code
+      FROM assets a
+      WHERE a.organization_id=$1 AND a.id=ANY($2::uuid[]) AND a.category='Гэрлэн дохио'
+        AND COALESCE(a.metadata->>'excludedFromAssetMaster','false')<>'true'`,[org,assetIds]);
     const types=await client.query(`SELECT code,name,quantity_unit FROM organization_operational_incident_types
       WHERE organization_id=$1 AND domain='lighting' AND active=true AND code=ANY($2::text[])`,[org,typeCodes]);
     if(objects.rowCount!==objectIds.length)return {status:409,body:{error:"Сонгосон объект олдсонгүй эсвэл гэрэлтүүлгийн объект биш",code:"INVALID_LIGHTING_OBJECT"}};
+    if(assets.rowCount!==assetIds.length)return {status:409,body:{error:"Сонгосон хөрөнгө олдсонгүй эсвэл гэрлэн дохио биш",code:"INVALID_TRAFFIC_SIGNAL_ASSET"}};
     if(objects.rows.some(object=>object.status==='retired'))return {status:409,body:{error:"Ашиглалтаас гарсан объект дээр шинэ гэмтэл бүртгэхгүй",code:"RETIRED_LIGHTING_OBJECT"}};
+    if(assets.rows.some(asset=>asset.status==='retired'))return {status:409,body:{error:"Ашиглалтаас гарсан гэрлэн дохион дээр шинэ гэмтэл бүртгэхгүй",code:"RETIRED_TRAFFIC_SIGNAL_ASSET"}};
     if(types.rowCount!==typeCodes.length)return {status:409,body:{error:"Идэвхтэй reference төрөл олдсонгүй",code:"INVALID_INCIDENT_TYPE"}};
     const objectsById=new Map(objects.rows.map(object=>[object.id,object]));
+    const assetsById=new Map(assets.rows.map(asset=>[asset.id,asset]));
     const typesByCode=new Map(types.rows.map(type=>[type.code,type]));
-    const existingOpen=await client.query(`SELECT i.operational_object_id,
+    const existingOpen=await client.query(`SELECT i.operational_object_id,i.asset_id,
         COALESCE(NULLIF(i.detail->>'quantityUnit',''),type.quantity_unit,'толгой') quantity_unit,
         sum(GREATEST(0,i.affected_quantity-i.resolved_quantity))::bigint open_quantity
       FROM operational_incidents i
       LEFT JOIN organization_operational_incident_types type
         ON type.organization_id=i.organization_id AND type.domain=i.domain AND type.code=i.incident_type
-      WHERE i.organization_id=$1 AND i.domain='lighting' AND i.operational_object_id=ANY($2::uuid[])
+      WHERE i.organization_id=$1 AND i.domain='lighting'
+        AND (i.operational_object_id=ANY($2::uuid[]) OR i.asset_id=ANY($3::uuid[]))
         AND i.status IN('open','in_progress')
-      GROUP BY i.operational_object_id,COALESCE(NULLIF(i.detail->>'quantityUnit',''),type.quantity_unit,'толгой')`,[org,objectIds]);
+      GROUP BY i.operational_object_id,i.asset_id,COALESCE(NULLIF(i.detail->>'quantityUnit',''),type.quantity_unit,'толгой')`,[org,objectIds,assetIds]);
     const reservedByObjectUnit=new Map(existingOpen.rows.map(item=>[
-      `${item.operational_object_id}:${item.quantity_unit}`,Number(item.open_quantity)
+      `${item.operational_object_id||item.asset_id}:${item.quantity_unit}`,Number(item.open_quantity)
     ]));
     for(const row of value.rows){
-      const object=objectsById.get(row.operationalObjectId),type=typesByCode.get(row.incidentType),unit=type.quantity_unit;
-      const capacity=unit==='толгой'?Number(object.head_capacity):unit==='шон'?Number(object.pole_capacity):null;
-      const capacityKnown=unit==='толгой'?object.head_capacity_known:unit==='шон'?object.pole_capacity_known:false;
-      const key=`${object.id}:${unit}`,openQuantity=reservedByObjectUnit.get(key)||0;
+      const target=objectsById.get(row.operationalObjectId)||assetsById.get(row.assetId),type=typesByCode.get(row.incidentType),unit=type.quantity_unit;
+      const fixedAsset=Boolean(row.assetId);
+      const capacity=fixedAsset&&target.allocation_unit===unit?Number(target.allocatable_quantity):unit==='толгой'?Number(target.head_capacity):unit==='шон'?Number(target.pole_capacity):null;
+      const capacityKnown=fixedAsset?target.allocation_unit===unit&&target.allocatable_quantity!==null:unit==='толгой'?target.head_capacity_known:unit==='шон'?target.pole_capacity_known:false;
+      const key=`${target.id}:${unit}`,openQuantity=reservedByObjectUnit.get(key)||0;
       if(capacityKnown&&openQuantity+row.affectedQuantity>capacity){
         return {status:409,body:{error:"Гэмтлийн тоо объектын бүртгэлтэй нийт хэмжээнээс хэтэрлээ",
-          code:"INCIDENT_QUANTITY_EXCEEDS_OBJECT_CAPACITY",operationalObjectId:object.id,quantityUnit:unit,
+          code:"INCIDENT_QUANTITY_EXCEEDS_OBJECT_CAPACITY",operationalObjectId:row.operationalObjectId||null,assetId:row.assetId||null,quantityUnit:unit,
           referenceQuantity:capacity,openQuantity,requestedQuantity:row.affectedQuantity}};
       }
       reservedByObjectUnit.set(key,openQuantity+row.affectedQuantity);
     }
-    const areaCodes=[...new Set(objects.rows.map(object=>object.service_area_code).filter(Boolean))];
+    const areaCodes=[...new Set([...objects.rows,...assets.rows].map(object=>object.service_area_code).filter(Boolean))];
     const areas=areaCodes.length?await client.query(`SELECT id,code FROM organization_work_service_areas
       WHERE organization_id=$1 AND domain='lighting' AND active=true AND code=ANY($2::text[])`,[org,areaCodes]):{rows:[]};
     const areasByCode=new Map(areas.rows.map(area=>[area.code,area.id]));
     const items=[];
     for(const row of value.rows){
-      const object=objectsById.get(row.operationalObjectId),type=typesByCode.get(row.incidentType);
+      const object=objectsById.get(row.operationalObjectId)||assetsById.get(row.assetId),type=typesByCode.get(row.incidentType);
       const detail={captureSurface:"lighting_fault_sheet",rowKey:row.rowKey,quantityUnit:type.quantity_unit,
-        referencePrecision:"aggregate_object",reportedNote:row.note};
+        referencePrecision:row.assetId?"fixed_asset":"aggregate_object",reportedNote:row.note};
       const inserted=await client.query(`INSERT INTO operational_incidents(
-        organization_id,domain,operational_object_id,service_area_id,incident_type,title,location,
+        organization_id,domain,operational_object_id,asset_id,service_area_id,incident_type,title,location,
         affected_quantity,resolved_quantity,status,reported_at,reported_by,detail,version)
-        VALUES($1,'lighting',$2,$3,$4,$5,$6,$7,0,'open',$8,$9,$10::jsonb,1)
-        RETURNING id,operational_object_id,incident_type,title,affected_quantity,resolved_quantity,status,reported_at,version`,
-      [org,object.id,areasByCode.get(object.service_area_code)||null,type.code,`${type.name} — ${object.name}`,
+        VALUES($1,'lighting',$2,$3,$4,$5,$6,$7,$8,0,'open',$9,$10,$11::jsonb,1)
+        RETURNING id,operational_object_id,asset_id,incident_type,title,affected_quantity,resolved_quantity,status,reported_at,version`,
+      [org,row.operationalObjectId||null,row.assetId||null,areasByCode.get(object.service_area_code)||null,type.code,`${type.name} — ${object.name}`,
         object.location||"",row.affectedQuantity,row.reportedAt,req.user.id,JSON.stringify(detail)]);
       const incident=inserted.rows[0];
       await client.query(`INSERT INTO operational_incident_events(
@@ -211,7 +234,7 @@ router.post("/incidents/batch",asyncHandler(async(req,res)=>{
         VALUES($1,$2,$3,'reported',$4,$5,$6::jsonb,1,$7)`,[org,incident.id,req.user.id,row.affectedQuantity,row.note,
         JSON.stringify({rowKey:row.rowKey,incidentType:type.code,quantityUnit:type.quantity_unit}),value.idempotencyKey]);
       await writeAudit(req,"operational_incident.report","operational_incident",incident.id,
-        {operationalObjectId:object.id,incidentType:type.code,affectedQuantity:row.affectedQuantity,
+        {operationalObjectId:row.operationalObjectId||null,assetId:row.assetId||null,incidentType:type.code,affectedQuantity:row.affectedQuantity,
           quantityUnit:type.quantity_unit,idempotencyKey:value.idempotencyKey,rowKey:row.rowKey},client);
       items.push({...incident,rowKey:row.rowKey,quantityUnit:type.quantity_unit});
     }
@@ -220,6 +243,51 @@ router.post("/incidents/batch",asyncHandler(async(req,res)=>{
       organization_id,command_type,idempotency_key,payload_sha256,actor_user_id,result)
       VALUES($1,'report_batch',$2,$3,$4,$5::jsonb)`,[org,value.idempotencyKey,commandHash,req.user.id,JSON.stringify(result)]);
     return {status:201,body:{...result,replayed:false}};
+  });
+  res.status(outcome.status).json(outcome.body);
+}));
+
+router.post("/incidents/:id/cancel",asyncHandler(async(req,res)=>{
+  if(!hasPermission(req,"operational-incidents.cancel"))return deny(res,"operational-incidents.cancel");
+  const incidentId=objectId.safeParse(req.params.id),parsed=incidentCancelSchema.safeParse(req.body);
+  if(!incidentId.success||!parsed.success)return res.status(400).json({error:"Цуцлах хүсэлт буруу байна",issues:parsed.error?.issues});
+  const org=req.user.organization_id,value=parsed.data,commandType=`cancel_lighting_incident:${incidentId.data}`;
+  const commandHash=payloadHash(value);
+  const outcome=await withTenantTransaction(org,async client=>{
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",[`${org}:${commandType}`]);
+    const receipt=(await client.query(`SELECT actor_user_id,payload_sha256,result
+      FROM operational_incident_command_receipts
+      WHERE organization_id=$1 AND command_type=$2 AND idempotency_key=$3`,[org,commandType,value.idempotencyKey])).rows[0];
+    if(receipt){
+      if(receipt.actor_user_id!==req.user.id||String(receipt.payload_sha256).trim()!==commandHash){
+        return {status:409,body:{error:"IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD"}};
+      }
+      return {status:200,body:{...receipt.result,replayed:true}};
+    }
+    const incident=(await client.query(`SELECT id,status,version,affected_quantity,resolved_quantity,title
+      FROM operational_incidents WHERE organization_id=$1 AND id=$2 AND domain='lighting' FOR UPDATE`,[org,incidentId.data])).rows[0];
+    if(!incident)return {status:404,body:{error:"Гэмтлийн бүртгэл олдсонгүй"}};
+    if(!['open','in_progress'].includes(incident.status))return {status:409,body:{error:"Зөвхөн нээлттэй гэмтлийн бүртгэлийг хүчингүй болгож болно",code:"INCIDENT_NOT_CANCELLABLE"}};
+    if(Number(incident.version)!==value.expectedVersion)return {status:409,body:{error:"Гэмтлийн бүртгэл өөрчлөгдсөн байна. Дахин ачаалж шалгана уу",code:"INCIDENT_VERSION_CONFLICT",currentVersion:Number(incident.version)}};
+    const linked=await client.query(`SELECT work.id,work.title,work.status
+      FROM operational_incident_work_orders link
+      JOIN work_orders work ON work.organization_id=link.organization_id AND work.id=link.work_order_id
+      WHERE link.organization_id=$1 AND link.incident_id=$2 LIMIT 1`,[org,incident.id]);
+    if(linked.rowCount)return {status:409,body:{error:"Энэ гэмтэл ажилтай холбогдсон тул эндээс хүчингүй болгохгүй. Холбогдсон ажлын түүхээс шалгана уу",code:"INCIDENT_HAS_LINKED_WORK",workOrder:linked.rows[0]}};
+    const updated=(await client.query(`UPDATE operational_incidents SET status='cancelled',version=version+1,updated_at=now()
+      WHERE organization_id=$1 AND id=$2 RETURNING id,status,version,updated_at`,[org,incident.id])).rows[0];
+    const unresolved=Math.max(0,Number(incident.affected_quantity)-Number(incident.resolved_quantity));
+    await client.query(`INSERT INTO operational_incident_events(
+      organization_id,incident_id,actor_user_id,event_type,quantity,note,detail,incident_version,request_id)
+      VALUES($1,$2,$3,'cancelled',$4,$5,$6::jsonb,$7,$8)`,[org,incident.id,req.user.id,unresolved,value.reason,
+      JSON.stringify({previousStatus:incident.status,reason:value.reason}),updated.version,value.idempotencyKey]);
+    await writeAudit(req,"operational_incident.cancel","operational_incident",incident.id,
+      {previousStatus:incident.status,reason:value.reason,previousVersion:Number(incident.version),version:Number(updated.version),idempotencyKey:value.idempotencyKey},client);
+    const result={item:updated};
+    await client.query(`INSERT INTO operational_incident_command_receipts(
+      organization_id,command_type,idempotency_key,payload_sha256,actor_user_id,result)
+      VALUES($1,$2,$3,$4,$5,$6::jsonb)`,[org,commandType,value.idempotencyKey,commandHash,req.user.id,JSON.stringify(result)]);
+    return {status:200,body:{...result,replayed:false}};
   });
   res.status(outcome.status).json(outcome.body);
 }));
@@ -293,9 +361,10 @@ router.get("/objects/:id/dossier",asyncHandler(async(req,res)=>{
         AND link.relation_type IN('location_scheme','site_photo')
       ORDER BY link.recorded_at DESC`,[org,id.data]),
   ]);
+  const activity=await loadOperationalObjectActivity(client,{organizationId:org,objectId:id.data,user:req.user});
   return {item:object.rows[0],components:components.rows,
     events:events.rows,children:children.rows,assetOptions:assetOptions.rows,
-    lampGroups:lampGroups.rows,supplyPoints:supplyPoints.rows,media:media.rows,capabilities:{
+    lampGroups:lampGroups.rows,supplyPoints:supplyPoints.rows,media:media.rows,activity,capabilities:{
       canManageComponents:hasPermission(req,"operational-objects.components.manage"),
       canCreateNote:hasPermission(req,"operational-objects.notes.create"),
       canUpdate:hasPermission(req,"operational-objects.update"),
@@ -579,10 +648,7 @@ router.get("/workspace",asyncHandler(async(req,res)=>{
       COALESCE(lamps.light_types,NULLIF(o.metadata->>'lightType',''),source.source_snapshot->>'light_type') AS light_type,
       CASE
         WHEN spec.id IS NOT NULL THEN 'canonical'
-        WHEN o.source_table='sl_points' AND COALESCE(
-          NULLIF(o.metadata->>'legacyCode',''),
-          NULLIF(source.source_snapshot->>'code','')
-        ) LIKE 'ГТ-%' THEN 'legacy_candidate'
+        WHEN o.source_table='sl_points' AND classified.code='road-lighting' THEN 'legacy_candidate'
         WHEN o.source_table='sl_points' THEN 'unclassified'
         WHEN o.source_system IS NULL THEN 'canonical'
         ELSE 'legacy_candidate'
@@ -605,12 +671,9 @@ router.get("/workspace",asyncHandler(async(req,res)=>{
       WHERE o.organization_id=$1 AND o.domain='lighting' AND o.status<>'retired'
         -- Legacy GD rows are compatibility copies of the canonical traffic-signal assets
         -- returned below. Keep them for provenance, but never double-list or count them.
-        AND NOT (
-          o.source_table='sl_points' AND COALESCE(
-            NULLIF(o.metadata->>'legacyCode',''),
-            NULLIF(source.source_snapshot->>'code','')
-          ) LIKE chr(1043)||chr(1044)||'-%'
-        )
+        AND NOT (o.source_table='sl_points' AND (
+          COALESCE(NULLIF(o.metadata->>'legacyCode',''),NULLIF(source.source_snapshot->>'code',''),'') LIKE chr(1043)||chr(1044)||'-%'
+          OR COALESCE(o.metadata->>'notes','')='Гэрлэн дохио'))
       ORDER BY o.name LIMIT 1000`,[org]);
     const fixedAssets=await client.query(`SELECT a.id,a.code,a.name,a.category,a.status,a.location,a.metadata,a.allocatable_quantity,a.allocation_unit,
       area.id AS service_area_id,area.code AS service_area_code,area.name AS service_area_name,area.icon AS service_area_icon
@@ -621,10 +684,11 @@ router.get("/workspace",asyncHandler(async(req,res)=>{
       WHERE a.organization_id=$1 AND a.category='Гэрлэн дохио'
         AND a.status<>'retired' AND COALESCE(a.metadata->>'excludedFromAssetMaster','false')<>'true'
       ORDER BY a.name LIMIT 1000`,[org]);
-    const incidents=await client.query(`SELECT i.*,o.code asset_code,o.name asset_name,
+    const incidents=await client.query(`SELECT i.*,COALESCE(o.code,a.code) asset_code,COALESCE(o.name,a.name) asset_name,
       area.code AS service_area_code,area.name AS service_area_name,area.icon AS service_area_icon
       FROM operational_incidents i
       LEFT JOIN operational_objects o ON o.organization_id=i.organization_id AND o.id=i.operational_object_id
+      LEFT JOIN assets a ON a.organization_id=i.organization_id AND a.id=i.asset_id
       LEFT JOIN organization_work_service_areas area
         ON area.organization_id=i.organization_id AND area.id=i.service_area_id AND area.active=true
       WHERE i.organization_id=$1 AND i.domain='lighting' ORDER BY i.reported_at DESC LIMIT 500`,[org]);

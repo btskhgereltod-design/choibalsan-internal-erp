@@ -6,6 +6,7 @@ const { withTenantTransaction } = require("../db");
 const { authenticate, requireModule, requireWorkspace } = require("../middleware/auth");
 const { writeAudit } = require("../services/audit");
 const { payloadHash } = require("../services/workflow-coordination");
+const { loadOperationalObjectActivity } = require("../services/operational-object-activity");
 const { asyncHandler } = require("../utils/async-handler");
 
 const router = express.Router();
@@ -25,6 +26,11 @@ const incidentBatchSchema=z.object({
     affectedQuantity:z.coerce.number().int().min(1).max(1_000_000),
     reportedAt:z.iso.datetime(),note:z.string().trim().max(2000).default("")
   })).min(1).max(100)
+});
+const incidentCancelSchema=z.object({
+  reason:z.string().trim().min(3).max(2000),
+  expectedVersion:z.coerce.number().int().positive(),
+  idempotencyKey:z.string().uuid()
 });
 const nullableNumber=(minimum,maximum)=>z.union([z.number().min(minimum).max(maximum),z.null()]);
 const cameraProfileSchema=z.object({
@@ -152,6 +158,51 @@ router.post("/incidents/batch",asyncHandler(async(req,res)=>{
   res.status(outcome.status).json(outcome.body);
 }));
 
+router.post("/incidents/:id/cancel",asyncHandler(async(req,res)=>{
+  if(!hasPermission(req,"operational-incidents.cancel"))return deny(res,"operational-incidents.cancel");
+  const incidentId=uuid.safeParse(req.params.id),parsed=incidentCancelSchema.safeParse(req.body);
+  if(!incidentId.success||!parsed.success)return res.status(400).json({error:"Цуцлах хүсэлт буруу байна",issues:parsed.error?.issues});
+  const org=req.user.organization_id,value=parsed.data,commandType=`cancel_camera_incident:${incidentId.data}`,
+    commandHash=payloadHash(value);
+  const outcome=await withTenantTransaction(org,async client=>{
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",[`${org}:${commandType}`]);
+    const receipt=(await client.query(`SELECT actor_user_id,payload_sha256,result
+      FROM operational_incident_command_receipts
+      WHERE organization_id=$1 AND command_type=$2 AND idempotency_key=$3`,[org,commandType,value.idempotencyKey])).rows[0];
+    if(receipt){
+      if(receipt.actor_user_id!==req.user.id||String(receipt.payload_sha256).trim()!==commandHash){
+        return {status:409,body:{error:"IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD"}};
+      }
+      return {status:200,body:{...receipt.result,replayed:true}};
+    }
+    const incident=(await client.query(`SELECT id,status,version,affected_quantity,resolved_quantity,title
+      FROM operational_incidents WHERE organization_id=$1 AND id=$2 AND domain='camera' FOR UPDATE`,[org,incidentId.data])).rows[0];
+    if(!incident)return {status:404,body:{error:"Камерын гэмтлийн бүртгэл олдсонгүй"}};
+    if(!['open','in_progress'].includes(incident.status))return {status:409,body:{error:"Зөвхөн нээлттэй гэмтлийн бүртгэлийг хүчингүй болгож болно",code:"INCIDENT_NOT_CANCELLABLE"}};
+    if(Number(incident.version)!==value.expectedVersion)return {status:409,body:{error:"Гэмтлийн бүртгэл өөрчлөгдсөн байна. Дахин ачаалж шалгана уу",code:"INCIDENT_VERSION_CONFLICT",currentVersion:Number(incident.version)}};
+    const linked=await client.query(`SELECT work.id,work.title,work.status
+      FROM operational_incident_work_orders link
+      JOIN work_orders work ON work.organization_id=link.organization_id AND work.id=link.work_order_id
+      WHERE link.organization_id=$1 AND link.incident_id=$2 LIMIT 1`,[org,incident.id]);
+    if(linked.rowCount)return {status:409,body:{error:"Энэ гэмтэл ажилтай холбогдсон тул эндээс хүчингүй болгохгүй. Холбогдсон ажлын түүхээс шалгана уу",code:"INCIDENT_HAS_LINKED_WORK",workOrder:linked.rows[0]}};
+    const updated=(await client.query(`UPDATE operational_incidents SET status='cancelled',version=version+1,updated_at=now()
+      WHERE organization_id=$1 AND id=$2 RETURNING id,status,version,updated_at`,[org,incident.id])).rows[0];
+    const unresolved=Math.max(0,Number(incident.affected_quantity)-Number(incident.resolved_quantity));
+    await client.query(`INSERT INTO operational_incident_events(
+      organization_id,incident_id,actor_user_id,event_type,quantity,note,detail,incident_version,request_id)
+      VALUES($1,$2,$3,'cancelled',$4,$5,$6::jsonb,$7,$8)`,[org,incident.id,req.user.id,unresolved,value.reason,
+      JSON.stringify({previousStatus:incident.status,reason:value.reason}),updated.version,value.idempotencyKey]);
+    await writeAudit(req,"operational_incident.cancel","operational_incident",incident.id,
+      {domain:"camera",previousStatus:incident.status,reason:value.reason,previousVersion:Number(incident.version),version:Number(updated.version),idempotencyKey:value.idempotencyKey},client);
+    const result={item:updated};
+    await client.query(`INSERT INTO operational_incident_command_receipts(
+      organization_id,command_type,idempotency_key,payload_sha256,actor_user_id,result)
+      VALUES($1,$2,$3,$4,$5,$6::jsonb)`,[org,commandType,value.idempotencyKey,commandHash,req.user.id,JSON.stringify(result)]);
+    return {status:200,body:{...result,replayed:false}};
+  });
+  res.status(outcome.status).json(outcome.body);
+}));
+
 router.get("/objects/:id/dossier", asyncHandler(async (req, res) => {
   if(!hasPermission(req,"operational-objects.read"))return deny(res,"operational-objects.read");
   const id = uuid.safeParse(req.params.id);
@@ -185,8 +236,9 @@ router.get("/objects/:id/dossier", asyncHandler(async (req, res) => {
         AND object_row.current_specification_id=device.specification_id
       WHERE object_row.organization_id=$1 AND object_row.id=$2 ORDER BY device.camera_point_id,device.sequence_no`,[org,id.data]),
   ]);
+  const activity=await loadOperationalObjectActivity(client,{organizationId:org,objectId:id.data,user:req.user});
   return {item:object.rows[0],components:components.rows,events:events.rows,children:children.rows,
-    cameraPoints:points.rows,cameraDevices:devices.rows,assetOptions:[],media:[],capabilities:{
+    cameraPoints:points.rows,cameraDevices:devices.rows,assetOptions:[],media:[],activity,capabilities:{
       canManageComponents:false,canCreateNote:false,
       canUpdate:hasPermission(req,"operational-objects.update"),
       canRetire:hasPermission(req,"operational-objects.retire"),canManageMedia:false}};
@@ -436,7 +488,10 @@ router.get("/workspace", asyncHandler(async (req, res) => {
     incidents: incidentRows,
     workOrders: orderRows,
     snapshots: snapshots.rows,
-    capabilities:{canReportIncidents:hasPermission(req,"operational-incidents.report")},
+    capabilities:{
+      canReportIncidents:hasPermission(req,"operational-incidents.report"),
+      canCancelIncidents:hasPermission(req,"operational-incidents.cancel")
+    },
   });
 }));
 

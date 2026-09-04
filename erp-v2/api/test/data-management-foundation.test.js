@@ -23,6 +23,17 @@ test("migration history has one immutable file per version", () => {
   const releaseCheck = read("scripts/release-check.js");
   assert.match(releaseCheck, /expectedLatest/);
   assert.doesNotMatch(releaseCheck, /latest,"0028"/);
+  assert.match(releaseCheck, /finally\(\(\)=>closePool\(\)\)/);
+  assert.match(releaseCheck, /RELEASE_WEB_BASE/);
+  assert.match(releaseCheck, /"\/lighting\.js","\/camera\.js","\/workflow\.css"/);
+});
+
+test("production runtime cannot mutate report schedule evidence", () => {
+  const productionMigrate = read("scripts/production-migrate.js");
+  assert.match(
+    productionMigrate,
+    /REVOKE UPDATE,DELETE,TRUNCATE ON[^;]*report_schedule_events,report_schedule_command_receipts/s
+  );
 });
 
 test("organization and people data have canonical master-data semantics", () => {

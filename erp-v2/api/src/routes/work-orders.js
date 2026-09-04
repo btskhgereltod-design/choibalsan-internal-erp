@@ -35,6 +35,9 @@ const createSchema = z.object({
   incidentId: z.string().uuid().nullable().optional(),
   serviceAreaId: z.string().uuid().nullable().optional(),
   assignedTo: z.string().uuid().nullable().optional(),
+  responsibleEmployeeId:z.string().uuid().nullable().optional(),
+  executorEmployeeIds:z.array(z.string().uuid()).max(50).default([])
+    .refine(items=>new Set(items).size===items.length,"Executor employee ids must be unique"),
   workTypeId: z.string().uuid().nullable().optional(), title: z.string().trim().min(1).max(300),
   operationalStream: z.enum(["core_service", "internal_operation"]).nullable().optional(),
   assignmentKind: z.enum(["normal", "special", "emergency"]).default("normal"),
@@ -69,7 +72,21 @@ const scopeItemSchema = z.object({
   weight:z.number().positive().max(1000000).default(1)
 });
 const scopeProgressSchema=z.object({completedQuantity:z.number().min(0),unresolvedQuantity:z.number().min(0),deferredQuantity:z.number().min(0),exceptionReason:z.string().trim().max(2000).default(""),requestException:z.boolean().default(false)});
-const exceptionDecisionSchema=z.object({decision:z.enum(["accepted","rejected"]),note:z.string().trim().min(1).max(2000)});
+const exceptionDecisionSchema=z.object({
+  decision:z.enum(["accepted","rejected"]),note:z.string().trim().min(1).max(2000),
+  disposition:z.object({
+    type:z.enum(["follow_up","accepted_end"]),
+    reasonCode:z.enum(["material_shortage","access_blocked","weather","safety","equipment","technical_impossibility","out_of_scope","other"]),
+    reason:z.string().trim().min(3).max(2000),dueAt:z.iso.datetime().nullable().optional(),
+    assignedTo:z.string().uuid().nullable().optional(),idempotencyKey:z.string().uuid(),
+  }).optional(),
+}).superRefine((value,ctx)=>{
+  if(value.decision==="accepted"&&!value.disposition)ctx.addIssue({code:"custom",path:["disposition"],message:"Үлдэгдлийг хаах эсвэл дараагийн ажилд шилжүүлэх шийдвэр шаардлагатай"});
+  if(value.disposition?.type==="follow_up"&&!value.disposition.dueAt)ctx.addIssue({code:"custom",path:["disposition","dueAt"],message:"Дараагийн ажлын хугацаа шаардлагатай"});
+  if(value.disposition?.type==="accepted_end"&&!['technical_impossibility','out_of_scope'].includes(value.disposition.reasonCode)){
+    ctx.addIssue({code:"custom",path:["disposition","reasonCode"],message:"Дахин ажил шаардахгүй дуусгалт зөвхөн техникийн боломжгүй эсвэл ажлын хүрээнээс хассан шийдвэрт зөвшөөрөгдөнө"});
+  }
+});
 const materialRequestSchema=z.object({
   inventoryItemId:z.string().uuid(),quantity:z.coerce.number().positive().max(100000000),
   reason:z.string().trim().min(1).max(2000),idempotencyKey:z.string().uuid(),
@@ -82,13 +99,18 @@ const materialDecisionSchema=z.object({
   if(value.decision==="rejected"&&!value.note)ctx.addIssue({code:"custom",path:["note"],message:"Rejection note is required"});
 });
 const materialIssueSchema=z.object({warehouseId:z.string().uuid(),idempotencyKey:z.string().uuid()});
+const attachIncidentSchema=z.object({workOrderId:z.string().uuid(),idempotencyKey:z.string().uuid()});
 
 async function scopeClosure(client,organizationId,workOrderId){
   const result=await client.query(`SELECT count(*)::int item_count,
     count(*) FILTER(WHERE outcome_status NOT IN ('completed','closed_with_exception'))::int blocking_count,
+    count(*) FILTER(WHERE outcome_status='closed_with_exception' AND disposition.id IS NULL)::int undisposed_count,
     COALESCE(sum(planned_quantity),0) planned,COALESCE(sum(completed_quantity),0) completed,
     COALESCE(sum(unresolved_quantity),0) unresolved,COALESCE(sum(deferred_quantity),0) deferred
-    FROM work_order_scope_items WHERE organization_id=$1 AND work_order_id=$2`,[organizationId,workOrderId]);
+    FROM work_order_scope_items scope
+    LEFT JOIN work_order_scope_dispositions disposition
+      ON disposition.organization_id=scope.organization_id AND disposition.source_scope_item_id=scope.id
+    WHERE scope.organization_id=$1 AND scope.work_order_id=$2`,[organizationId,workOrderId]);
   return result.rows[0];
 }
 
@@ -202,7 +224,7 @@ function requireInventory(req,res) {
 router.use(authenticate, requireModule("work-orders"));
 
 router.get("/options", asyncHandler(async(req,res)=>{
-  const [result,serviceAreas,cameraGroups]=await withTenantTransaction(req.user.organization_id,client=>Promise.all([client.query(`SELECT wt.id,wt.code,wt.name,wt.category,wt.operational_stream,r.organization_unit_id AS department_id,
+  const [result,serviceAreas,cameraGroups,employees]=await withTenantTransaction(req.user.organization_id,client=>Promise.all([client.query(`SELECT wt.id,wt.code,wt.name,wt.category,wt.operational_stream,r.organization_unit_id AS department_id,
     d.name AS department_name,r.workflow_policy_id,p.name AS workflow_name
     FROM organization_work_types wt
     LEFT JOIN organization_work_type_routes r ON r.organization_id=wt.organization_id AND r.work_type_id=wt.id AND r.active=true
@@ -222,8 +244,19 @@ router.get("/options", asyncHandler(async(req,res)=>{
     WHERE object_row.organization_id=$1 AND object_row.domain='camera'
       AND object_row.status<>'retired'
       AND NULLIF(btrim(source.source_snapshot->>'bag_no'),'') IS NOT NULL
-    ORDER BY code`,[req.user.organization_id])]));
-  res.json({items:result.rows,serviceAreas:serviceAreas.rows,cameraGroups:cameraGroups.rows});
+    ORDER BY code`,[req.user.organization_id]),
+  client.query(`SELECT employee.id,employee.full_name,employee.job_role,employee.department_id,
+      department.name department_name,position.title position_title,login_user.id login_user_id
+    FROM employees employee
+    LEFT JOIN departments department ON department.organization_id=employee.organization_id
+      AND department.id=employee.department_id
+    LEFT JOIN positions position ON position.organization_id=employee.organization_id
+      AND position.id=employee.position_id
+    LEFT JOIN users login_user ON login_user.organization_id=employee.organization_id
+      AND login_user.employee_id=employee.id AND login_user.active=true AND login_user.can_login=true
+    WHERE employee.organization_id=$1 AND employee.active=true
+    ORDER BY department.name NULLS LAST,COALESCE(position.rank_level,500),employee.full_name`,[req.user.organization_id])]));
+  res.json({items:result.rows,serviceAreas:serviceAreas.rows,cameraGroups:cameraGroups.rows,employees:employees.rows});
 }));
 
 router.get("/intake", asyncHandler(async(req,res)=>{
@@ -282,11 +315,81 @@ router.get("/intake", asyncHandler(async(req,res)=>{
       )
     ORDER BY CASE i.status WHEN 'open' THEN 0 ELSE 1 END,i.reported_at DESC,i.id
     LIMIT 300`,[req.user.organization_id,canReadAll,req.user.department_id||null]));
-  res.json({items:result.rows,capabilities:{canTriage:true,scope:canReadAll?"organization":"department"}});
+  res.json({items:result.rows,capabilities:{canTriage:true,
+    canAttachExisting:hasPermission(req.user,WORK_ORDER_PERMISSIONS.SCOPE_MANAGE),
+    scope:canReadAll?"organization":"department"}});
+}));
+
+router.post("/intake/:incidentId/attach",asyncHandler(async(req,res)=>{
+  if(!hasPermission(req.user,WORK_ORDER_PERMISSIONS.CREATE))return deny(res,WORK_ORDER_PERMISSIONS.CREATE);
+  if(!hasPermission(req.user,WORK_ORDER_PERMISSIONS.SCOPE_MANAGE))return deny(res,WORK_ORDER_PERMISSIONS.SCOPE_MANAGE);
+  const incidentId=z.string().uuid().safeParse(req.params.incidentId),parsed=attachIncidentSchema.safeParse(req.body);
+  if(!incidentId.success||!parsed.success)return res.status(400).json({error:"Ажилтай холбох хүсэлт буруу байна",issues:parsed.error?.issues});
+  const v=parsed.data,org=req.user.organization_id;
+  const outcome=await withTenantTransaction(org,async client=>{
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",[`${org}:incident-work-link:${incidentId.data}`]);
+    const incident=(await client.query(`SELECT * FROM operational_incidents
+      WHERE organization_id=$1 AND id=$2 FOR UPDATE`,[org,incidentId.data])).rows[0];
+    if(!incident)return {status:404,body:{error:"Гэмтлийн бүртгэл олдсонгүй"}};
+    if(!["open","in_progress"].includes(incident.status))return {status:409,body:{error:"Хаагдсан гэмтлийг ажилд нэмж холбохгүй"}};
+    const work=(await client.query(`SELECT id,title,status,department_id,assigned_to,created_by,
+        operational_object_id,asset_id,service_area_id FROM work_orders
+      WHERE organization_id=$1 AND id=$2 FOR UPDATE`,[org,v.workOrderId])).rows[0];
+    if(!work)return {status:404,body:{error:"Холбох ажил олдсонгүй"}};
+    if(["completed","cancelled"].includes(work.status))return {status:409,body:{error:"Хаагдсан ажилд шинэ гэмтэл нэмэхгүй"}};
+    if(!canManageScope(req.user,work))return {status:403,body:{error:"Insufficient permission",permission:WORK_ORDER_PERMISSIONS.SCOPE_MANAGE}};
+    const sameObject=incident.operational_object_id&&work.operational_object_id===incident.operational_object_id;
+    const sameAsset=!incident.operational_object_id&&incident.asset_id&&work.asset_id===incident.asset_id;
+    if(!sameObject&&!sameAsset)return {status:409,body:{error:"Гэмтэл болон ажил нэг объект/хөрөнгөд хамаарахгүй байна",code:"INCIDENT_WORK_TARGET_MISMATCH"}};
+    if(incident.service_area_id&&work.service_area_id&&incident.service_area_id!==work.service_area_id){
+      return {status:409,body:{error:"Гэмтэл болон ажлын үйлчилгээний чиглэл зөрүүтэй байна",code:"INCIDENT_WORK_AREA_MISMATCH"}};
+    }
+    const existing=(await client.query(`SELECT id FROM operational_incident_work_orders
+      WHERE organization_id=$1 AND incident_id=$2 AND work_order_id=$3`,[org,incident.id,work.id])).rows[0];
+    if(existing)return {status:200,body:{linked:true,replayed:true,workOrderId:work.id,incidentId:incident.id}};
+    const otherActive=(await client.query(`SELECT linked.id,linked.work_order_id,other.title
+      FROM operational_incident_work_orders linked
+      JOIN work_orders other ON other.organization_id=linked.organization_id AND other.id=linked.work_order_id
+      WHERE linked.organization_id=$1 AND linked.incident_id=$2
+        AND other.status NOT IN('completed','cancelled') LIMIT 1`,[org,incident.id])).rows[0];
+    if(otherActive)return {status:409,body:{error:"Энэ гэмтэл өөр нээлттэй ажилтай аль хэдийн холбогдсон",
+      code:"INCIDENT_ALREADY_LINKED",workOrderId:otherActive.work_order_id,workOrderTitle:otherActive.title}};
+    const remaining=Math.max(0,Number(incident.affected_quantity)-Number(incident.resolved_quantity));
+    if(!remaining)return {status:409,body:{error:"Шийдвэрлэх үлдэгдэлгүй гэмтлийг ажилд нэмэхгүй"}};
+    await client.query(`INSERT INTO operational_incident_work_orders(
+      organization_id,incident_id,work_order_id,link_role,linked_by,detail)
+      VALUES($1,$2,$3,'related',$4,$5::jsonb)`,[org,incident.id,work.id,req.user.id,
+      JSON.stringify({idempotencyKey:v.idempotencyKey,source:"work_intake_existing_work"})]);
+    const unit=String(incident.detail?.quantityUnit||"тохиолдол");
+    const scope=(await client.query(`INSERT INTO work_order_scope_items(
+      organization_id,work_order_id,operational_object_id,asset_id,item_code,description,unit,
+      planned_quantity,weight,created_by,updated_by)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,1,$9,$9) RETURNING *`,[org,work.id,
+      incident.operational_object_id||null,incident.asset_id||null,`incident:${incident.id}`,
+      incident.title,unit,remaining,req.user.id])).rows[0];
+    await client.query(`INSERT INTO work_order_scope_item_events(
+      organization_id,work_order_id,scope_item_id,actor_user_id,event_type,detail)
+      VALUES($1,$2,$3,$4,'created',$5::jsonb)`,[org,work.id,scope.id,req.user.id,
+      JSON.stringify({plannedQuantity:remaining,unit,incidentId:incident.id})]);
+    const updated=(await client.query(`UPDATE operational_incidents SET status='in_progress',version=version+1,updated_at=now()
+      WHERE organization_id=$1 AND id=$2 RETURNING version`,[org,incident.id])).rows[0];
+    await client.query(`INSERT INTO operational_incident_events(
+      organization_id,incident_id,actor_user_id,event_type,note,detail,incident_version,request_id)
+      VALUES($1,$2,$3,'progress',$4,$5::jsonb,$6,$7)`,[org,incident.id,req.user.id,
+      'Өмнөх нээлттэй ажилд хэмжих мөрөөр нэмэв',JSON.stringify({workOrderId:work.id,scopeItemId:scope.id}),updated.version,v.idempotencyKey]);
+    await client.query(`INSERT INTO work_order_events(organization_id,work_order_id,actor_user_id,event_type,note,detail)
+      VALUES($1,$2,$3,'note',$4,$5::jsonb)`,[org,work.id,req.user.id,
+      'Давтан гэмтлийг ажлын хэмжих мөрд нэмэв',JSON.stringify({incidentId:incident.id,scopeItemId:scope.id})]);
+    await writeAudit(req,"work_order.incident.attach","work_order",work.id,
+      {incidentId:incident.id,scopeItemId:scope.id,plannedQuantity:remaining,unit,idempotencyKey:v.idempotencyKey},client);
+    return {status:201,body:{linked:true,replayed:false,workOrderId:work.id,incidentId:incident.id,scopeItem:scope}};
+  });
+  res.status(outcome.status).json(outcome.body);
 }));
 
 function routingState(item){
   if(["completed","cancelled"].includes(item.status))return "closed";
+  if(Number(item.pending_exception_count)>0)return "exception";
   if(item.assigned_to)return "assigned";
   if(item.status==="new"&&item.department_id&&item.work_type_id&&item.operational_stream&&item.assignment_kind==="normal")return "team_backlog";
   return "exception";
@@ -301,6 +404,10 @@ router.get("/", asyncHandler(async(req,res)=>{
     NULLIF(btrim(object_source.source_snapshot->>'bag_no'),'') AS camera_source_group_code,
     a.code AS fixed_asset_code,a.name AS fixed_asset_name,wt.code AS work_type_code,wt.name AS work_type_name,d.name AS department_name,
     p.name AS workflow_name,p.config AS workflow_config,assignee.full_name AS assigned_name,
+    COALESCE(scope.pending_exception_count,0)::int pending_exception_count,
+    team.responsible_employee_id,team.responsible_employee_name,team.responsible_position_title,
+    COALESCE(team.executor_employee_ids,'{}'::uuid[]) executor_employee_ids,
+    COALESCE(team.executor_employee_names,'{}'::text[]) executor_employee_names,
     assignee.role AS assigned_role,creator.full_name AS created_by_name
     FROM work_orders w
     LEFT JOIN organization_work_service_areas area
@@ -317,6 +424,18 @@ router.get("/", asyncHandler(async(req,res)=>{
     LEFT JOIN organization_workflow_policies p ON p.organization_id=w.organization_id AND p.id=w.workflow_policy_id
     LEFT JOIN users assignee ON assignee.organization_id=w.organization_id AND assignee.id=w.assigned_to
     LEFT JOIN users creator ON creator.organization_id=w.organization_id AND creator.id=w.created_by
+    LEFT JOIN LATERAL(SELECT count(*) FILTER(WHERE item.exception_status='requested') pending_exception_count
+      FROM work_order_scope_items item WHERE item.organization_id=w.organization_id AND item.work_order_id=w.id) scope ON true
+    LEFT JOIN LATERAL(SELECT
+        (max(employee.id::text) FILTER(WHERE participant.participant_role='responsible'))::uuid responsible_employee_id,
+        max(employee.full_name) FILTER(WHERE participant.participant_role='responsible') responsible_employee_name,
+        max(position.title) FILTER(WHERE participant.participant_role='responsible') responsible_position_title,
+        array_agg(employee.id ORDER BY employee.full_name) FILTER(WHERE participant.participant_role='executor') executor_employee_ids,
+        array_agg(employee.full_name ORDER BY employee.full_name) FILTER(WHERE participant.participant_role='executor') executor_employee_names
+      FROM work_order_participants participant
+      JOIN employees employee ON employee.organization_id=participant.organization_id AND employee.id=participant.employee_id
+      LEFT JOIN positions position ON position.organization_id=employee.organization_id AND position.id=employee.position_id
+      WHERE participant.organization_id=w.organization_id AND participant.work_order_id=w.id AND participant.removed_at IS NULL) team ON true
     WHERE w.organization_id=$1 AND ($2::boolean OR w.department_id IS NULL OR w.department_id=$3 OR w.assigned_to=$4 OR w.created_by=$4)
     ORDER BY w.created_at DESC LIMIT 500`,[req.user.organization_id,hasPermission(req.user,WORK_ORDER_PERMISSIONS.READ_ALL),req.user.department_id||null,req.user.id]));
   res.json({items:result.rows.map(item=>({...item,
@@ -337,7 +456,7 @@ router.get("/:id/history", asyncHandler(async(req,res)=>{
   if(!canReadOrder(req.user,order.rows[0]))return deny(res,WORK_ORDER_PERMISSIONS.READ_ALL);
   const inventoryEnabled=(req.user.enabled_modules||[]).includes("inventory");
   const canRequestMaterial=inventoryEnabled&&hasPermission(req.user,WORK_ORDER_PERMISSIONS.MATERIAL_REQUEST)&&canManageScope(req.user,order.rows[0])&&!['completed','cancelled'].includes(order.rows[0].status);
-  const [events,scopeItems,materials,materialOptions,safetyReviews]=await Promise.all([getPool().query(`SELECT e.id,e.event_type,e.from_status,e.to_status,e.note,e.detail,e.created_at,
+  const [events,scopeItems,materials,materialOptions,safetyReviews,scopeDispositions,participants]=await Promise.all([getPool().query(`SELECT e.id,e.event_type,e.from_status,e.to_status,e.note,e.detail,e.created_at,
     e.assignment_history_version,e.assignment_operation,e.assignment_source,
     e.from_assignee_user_id,e.to_assignee_user_id,e.from_assignee_employee_id,e.to_assignee_employee_id,
     e.assignment_reason,
@@ -375,9 +494,33 @@ router.get("/:id/history", asyncHandler(async(req,res)=>{
       FROM work_order_safety_reviews r
       JOIN organization_work_safety_templates t ON t.organization_id=r.organization_id AND t.id=r.safety_template_id
       JOIN users u ON u.organization_id=r.organization_id AND u.id=r.actor_user_id
-      WHERE r.organization_id=$1 AND r.work_order_id=$2 ORDER BY r.created_at,r.id`,[req.user.organization_id,id.data]))]);
+      WHERE r.organization_id=$1 AND r.work_order_id=$2 ORDER BY r.created_at,r.id`,[req.user.organization_id,id.data])),
+    withTenantTransaction(req.user.organization_id,client=>client.query(`SELECT disposition.*,
+      source_work.title source_work_title,source_work.status source_work_status,
+      follow_up.title follow_up_title,follow_up.status follow_up_status,approver.full_name approved_by_name
+      FROM work_order_scope_dispositions disposition
+      JOIN work_orders source_work ON source_work.organization_id=disposition.organization_id
+        AND source_work.id=disposition.source_work_order_id
+      LEFT JOIN work_orders follow_up ON follow_up.organization_id=disposition.organization_id
+        AND follow_up.id=disposition.follow_up_work_order_id
+      LEFT JOIN users approver ON approver.organization_id=disposition.organization_id AND approver.id=disposition.approved_by
+      WHERE disposition.organization_id=$1
+        AND (disposition.source_work_order_id=$2 OR disposition.follow_up_work_order_id=$2)
+      ORDER BY disposition.created_at,disposition.id`,[req.user.organization_id,id.data])),
+    withTenantTransaction(req.user.organization_id,client=>client.query(`SELECT participant.id,participant.employee_id,
+      participant.participant_role,participant.assigned_at,employee.full_name,employee.job_role,
+      department.name department_name,position.title position_title,assigner.full_name assigned_by_name
+      FROM work_order_participants participant
+      JOIN employees employee ON employee.organization_id=participant.organization_id AND employee.id=participant.employee_id
+      LEFT JOIN departments department ON department.organization_id=employee.organization_id AND department.id=employee.department_id
+      LEFT JOIN positions position ON position.organization_id=employee.organization_id AND position.id=employee.position_id
+      JOIN users assigner ON assigner.organization_id=participant.organization_id AND assigner.id=participant.assigned_by
+      WHERE participant.organization_id=$1 AND participant.work_order_id=$2 AND participant.removed_at IS NULL
+      ORDER BY CASE participant.participant_role WHEN 'responsible' THEN 0 ELSE 1 END,employee.full_name`,[req.user.organization_id,id.data]))]);
   res.json({item:order.rows[0],events:events.rows,scopeItems:scopeItems.rows,materials:materials.rows,materialOptions:materialOptions.rows,
-    safetyReviews:safetyReviews.rows,
+    safetyReviews:safetyReviews.rows,scopeDispositions:scopeDispositions.rows,participants:participants.rows,
+    scopeCapabilities:{canManage:canManageScope(req.user,order.rows[0])&&!['completed','cancelled'].includes(order.rows[0].status),
+      canDecide:hasPermission(req.user,WORK_ORDER_PERMISSIONS.EXCEPTION_DECIDE)},
     materialCapabilities:{canRequest:canRequestMaterial,canApprove:hasPermission(req.user,WORK_ORDER_PERMISSIONS.MATERIAL_APPROVE),canConsume:hasPermission(req.user,WORK_ORDER_PERMISSIONS.MATERIAL_CONSUME)&&canManageScope(req.user,order.rows[0])}});
 }));
 
@@ -519,6 +662,21 @@ router.post("/",asyncHandler(async(req,res)=>{
       if(!routed.rowCount){await client.query("ROLLBACK");return res.status(400).json({error:"Ажлын төрөл олдсонгүй"});}
       workType=routed.rows[0];
       if(workType.organization_unit_id&&assignee&&assignee.department_id!==workType.organization_unit_id){await client.query("ROLLBACK");return res.status(400).json({error:"Хариуцагч ажилтан энэ ажлын нэгжид харьяалагдахгүй байна"});}
+      if(incident&&['lighting','camera'].includes(incident.domain)&&['lighting','camera'].includes(workType.category)
+        &&workType.category!==incident.domain){await client.query("ROLLBACK");return res.status(409).json({
+          error:"Гэмтлийн чиглэл болон сонгосон ажлын төрөл зөрүүтэй байна",code:"INCIDENT_WORK_TYPE_DOMAIN_MISMATCH"});}
+    }
+    const participantIds=[value.responsibleEmployeeId,...value.executorEmployeeIds].filter(Boolean);
+    let participants=[];
+    if(participantIds.length){
+      const participantResult=await client.query(`SELECT id,full_name,job_role,department_id
+        FROM employees WHERE organization_id=$1 AND id=ANY($2::uuid[]) AND active=true`,
+      [req.user.organization_id,[...new Set(participantIds)]]);
+      participants=participantResult.rows;
+      if(participants.length!==new Set(participantIds).size){await client.query("ROLLBACK");return res.status(400).json({error:"Сонгосон ажилтан идэвхтэй үндсэн бүртгэлээс олдсонгүй"});}
+      if(workType?.organization_unit_id&&participants.some(employee=>employee.department_id!==workType.organization_unit_id)){
+        await client.query("ROLLBACK");return res.status(409).json({error:"Хариуцах болон гүйцэтгэх ажилтан сонгосон ажлын тасагт харьяалагдах ёстой",code:"WORK_PARTICIPANT_DEPARTMENT_MISMATCH"});
+      }
     }
     if(incident&&!hasPermission(req.user,WORK_ORDER_PERMISSIONS.READ_ALL)){
       const ownRoute=workType&&workType.organization_unit_id===req.user.department_id
@@ -558,6 +716,19 @@ router.post("/",asyncHandler(async(req,res)=>{
     [req.user.organization_id,assetId,operationalObjectId,workType?.id||null,workType?.organization_unit_id||null,workType?.workflow_policy_id||null,
       workflowStage,operationalStream,assignmentKind,serviceAreaId,value.title,value.description,workType?.category||value.category,value.priority,status,assignee?.id||null,value.dueAt||null,req.user.id]);
     const item=result.rows[0];
+    const participantRoles=[
+      ...(value.responsibleEmployeeId?[{employeeId:value.responsibleEmployeeId,role:'responsible'}]:[]),
+      ...value.executorEmployeeIds.map(employeeId=>({employeeId,role:'executor'})),
+    ];
+    for(const participant of participantRoles){
+      const membership=(await client.query(`INSERT INTO work_order_participants(
+        organization_id,work_order_id,employee_id,participant_role,assigned_by)
+        VALUES($1,$2,$3,$4,$5) RETURNING *`,[req.user.organization_id,item.id,participant.employeeId,participant.role,req.user.id])).rows[0];
+      await client.query(`INSERT INTO work_order_participant_events(
+        organization_id,work_order_id,participant_id,employee_id,participant_role,event_type,actor_user_id,detail)
+        VALUES($1,$2,$3,$4,$5,'assigned',$6,$7::jsonb)`,[req.user.organization_id,item.id,membership.id,
+        participant.employeeId,participant.role,req.user.id,JSON.stringify({source:'work_order_create'})]);
+    }
     if(incident){
       await client.query(`INSERT INTO operational_incident_work_orders(organization_id,incident_id,work_order_id,link_role,linked_by,detail)
         VALUES($1,$2,$3,'origin',$4,$5::jsonb)`,[req.user.organization_id,incident.id,item.id,req.user.id,
@@ -577,7 +748,9 @@ router.post("/",asyncHandler(async(req,res)=>{
     });
     if(assignee&&assignee.id!==req.user.id)await notifyUser(client,{organizationId:req.user.organization_id,userId:assignee.id,type:"work_assigned",title:"Шинэ ажил хуваарилагдлаа",message:value.title,entityId:item.id});
     if(workflowStage){const policy=await client.query("SELECT config FROM organization_workflow_policies WHERE organization_id=$1 AND id=$2",[req.user.organization_id,item.workflow_policy_id]);const config=policy.rows[0]?.config||{};await notifyAuthority(client,{organizationId:req.user.organization_id,permission:config.startSafetyPermission,excludeUserId:req.user.id,title:"Ажил эхлүүлэх зөвшөөрөл хүлээгдэж байна",message:value.title,entityId:item.id});}
-    await writeAudit(req,"work_order.create","work_order",item.id,{title:value.title,assignedTo:assignee?.id||null,workflowStage,operationalStream,assignmentKind,serviceAreaId,incidentId:incident?.id||null},client);
+    await writeAudit(req,"work_order.create","work_order",item.id,{title:value.title,assignedTo:assignee?.id||null,
+      responsibleEmployeeId:value.responsibleEmployeeId||null,executorEmployeeIds:value.executorEmployeeIds,
+      workflowStage,operationalStream,assignmentKind,serviceAreaId,incidentId:incident?.id||null},client);
     await client.query("COMMIT");
     await emitAutomationEvent({organizationId:req.user.organization_id,eventType:"work_order.created",payload:{id:item.id,title:item.title,priority:item.priority,status:item.status,category:item.category},sourceEntityType:"work_order",sourceEntityId:item.id,sourceDeliveryKey:`work-order.created:${item.id}`}).catch(error=>console.error("[automation]",error));
     res.status(201).json({item});
@@ -687,7 +860,7 @@ router.patch("/:id/status",asyncHandler(async(req,res)=>{
     if(!canProgressOrder(req.user,current)){await client.query("ROLLBACK");return deny(res,WORK_ORDER_PERMISSIONS.PROGRESS);}
     if(!canTransition(current.status,parsed.data.status)){await client.query("ROLLBACK");return res.status(409).json({error:`Transition ${current.status} -> ${parsed.data.status} is not allowed`});}
     if(parsed.data.status==="completed"&&!hasPermission(req.user,WORK_ORDER_PERMISSIONS.WORKFLOW_APPROVE)){await client.query("ROLLBACK");return deny(res,WORK_ORDER_PERMISSIONS.WORKFLOW_APPROVE);}
-    if(parsed.data.status==="completed"){const closure=await scopeClosure(client,req.user.organization_id,id.data);if(closure.item_count&&closure.blocking_count){await client.query("ROLLBACK");return res.status(409).json({error:"Хэмжигдэх үр дүн бүрэн хаагдаагүй байна",outcome:closure});}}
+    if(parsed.data.status==="completed"){const closure=await scopeClosure(client,req.user.organization_id,id.data);if(closure.item_count&&(closure.blocking_count||closure.undisposed_count)){await client.query("ROLLBACK");return res.status(409).json({error:"Хэмжигдэх үр дүн эсвэл үлдэгдлийн дараагийн шийдвэр бүрэн хаагдаагүй байна",outcome:closure});}}
     const updated=await client.query("UPDATE work_orders SET status=$1,updated_at=now() WHERE organization_id=$2 AND id=$3 RETURNING *",[parsed.data.status,req.user.organization_id,id.data]);
     await client.query("INSERT INTO work_order_events(organization_id,actor_user_id,work_order_id,event_type,from_status,to_status) VALUES($1,$2,$3,'status_changed',$4,$5)",[req.user.organization_id,req.user.id,id.data,current.status,parsed.data.status]);
     if(parsed.data.status==="pending_review")await notifyManagement(client,{organizationId:req.user.organization_id,excludeUserId:req.user.id,type:"review_requested",title:"Ажил хянуулах хүсэлт ирлээ",message:`Ажлын дугаар: ${id.data}`,entityId:id.data});
@@ -733,7 +906,7 @@ router.post("/:id/workflow-action",asyncHandler(async(req,res)=>{
       if(permitError){await client.query("ROLLBACK");return res.status(409).json({error:permitError,code:"SAFETY_PERMIT_INVALID"});}
     }
     const nextStatus=rule.status||current.status;
-    if(rule.to==="completed"){const closure=await scopeClosure(client,req.user.organization_id,id.data);if(closure.item_count&&closure.blocking_count){await client.query("ROLLBACK");return res.status(409).json({error:"Шийдэгдээгүй эсвэл хойшлуулсан хэмжээг зөвшөөрөлгүйгээр ажил хаах боломжгүй",outcome:closure});}}
+    if(rule.to==="completed"){const closure=await scopeClosure(client,req.user.organization_id,id.data);if(closure.item_count&&(closure.blocking_count||closure.undisposed_count)){await client.query("ROLLBACK");return res.status(409).json({error:"Шийдэгдээгүй үлдэгдлийг дараагийн ажилд шилжүүлэх эсвэл үндэслэлтэй дуусгах шийдвэр шаардлагатай",outcome:closure});}}
     const updated=await client.query("UPDATE work_orders SET workflow_stage=$1,status=$2,updated_at=now() WHERE organization_id=$3 AND id=$4 RETURNING *",[rule.to,nextStatus,req.user.organization_id,id.data]);
     const detail={action,fromStage:current.workflow_stage,toStage:rule.to,fromStatus:current.status,toStatus:nextStatus,
       safetyReviewId:safetyReview?.item?.id||null,riskScore:safetyReview?.item?.risk_score||null,templateVersion:safetyReview?.item?.template_version||null};
@@ -790,11 +963,125 @@ router.patch("/:id/scope-items/:scopeId",asyncHandler(async(req,res)=>{
 
 router.post("/:id/scope-items/:scopeId/exception",asyncHandler(async(req,res)=>{
   if(!hasPermission(req.user,WORK_ORDER_PERMISSIONS.EXCEPTION_DECIDE))return deny(res,WORK_ORDER_PERMISSIONS.EXCEPTION_DECIDE);
-  const id=z.string().uuid().safeParse(req.params.id),scopeId=z.string().uuid().safeParse(req.params.scopeId),parsed=exceptionDecisionSchema.safeParse(req.body);if(!id.success||!scopeId.success||!parsed.success)return res.status(400).json({error:"Үл хамаарах нөхцөлийн шийдвэр буруу байна"});
-  const client=await getPool().connect();try{await client.query("BEGIN");const found=await client.query("SELECT * FROM work_order_scope_items WHERE organization_id=$1 AND work_order_id=$2 AND id=$3 FOR UPDATE",[req.user.organization_id,id.data,scopeId.data]);const item=found.rows[0];if(!item){await client.query("ROLLBACK");return res.status(404).json({error:"Хэмжих мөр олдсонгүй"});}if(item.exception_status!=='requested'){await client.query("ROLLBACK");return res.status(409).json({error:"Шийдвэр хүлээж буй хүсэлт алга"});}
-    const accepted=parsed.data.decision==='accepted',accounted=Number(item.completed_quantity)+Number(item.unresolved_quantity)+Number(item.deferred_quantity),outcome=accepted&&accounted===Number(item.planned_quantity)?'closed_with_exception':item.outcome_status;
-    const updated=await client.query(`UPDATE work_order_scope_items SET exception_status=$1,exception_accepted_by=$2,exception_accepted_at=$3,outcome_status=$4,updated_by=$5,updated_at=now() WHERE organization_id=$6 AND id=$7 RETURNING *`,[parsed.data.decision,accepted?req.user.id:null,accepted?new Date():null,outcome,req.user.id,req.user.organization_id,scopeId.data]);
-    await client.query(`INSERT INTO work_order_scope_item_events(organization_id,work_order_id,scope_item_id,actor_user_id,event_type,detail) VALUES($1,$2,$3,$4,'exception_decided',$5::jsonb)`,[req.user.organization_id,id.data,scopeId.data,req.user.id,JSON.stringify({decision:parsed.data.decision,note:parsed.data.note})]);await writeAudit(req,"work_order.scope_item.exception_decided","work_order_scope_item",scopeId.data,{workOrderId:id.data,decision:parsed.data.decision,note:parsed.data.note},client);await client.query("COMMIT");res.json({item:updated.rows[0]});
+  const id=z.string().uuid().safeParse(req.params.id),scopeId=z.string().uuid().safeParse(req.params.scopeId),parsed=exceptionDecisionSchema.safeParse(req.body);
+  if(!id.success||!scopeId.success||!parsed.success)return res.status(400).json({error:"Үл хамаарах нөхцөлийн шийдвэр буруу байна",issues:parsed.error?.issues});
+  const client=await getPool().connect();try{
+    await client.query("BEGIN");await setTenantContext(client,req.user.organization_id);
+    const found=await client.query(`SELECT scope.*,work.title work_title,work.description work_description,
+      work.asset_id work_asset_id,work.operational_object_id work_operational_object_id,work.work_type_id,
+      work.department_id,work.workflow_policy_id,work.operational_stream,work.assignment_kind,work.service_area_id,
+      work.category work_category,work.priority work_priority,work.assigned_to work_assigned_to
+      FROM work_order_scope_items scope JOIN work_orders work
+        ON work.organization_id=scope.organization_id AND work.id=scope.work_order_id
+      WHERE scope.organization_id=$1 AND scope.work_order_id=$2 AND scope.id=$3 FOR UPDATE OF scope,work`,
+    [req.user.organization_id,id.data,scopeId.data]);
+    const item=found.rows[0];if(!item){await client.query("ROLLBACK");return res.status(404).json({error:"Хэмжих мөр олдсонгүй"});}
+    const accepted=parsed.data.decision==='accepted',dispositionInput=parsed.data.disposition||null;
+    if(accepted){
+      const commandHash=payloadHash({workOrderId:id.data,scopeItemId:scopeId.data,decision:parsed.data.decision,note:parsed.data.note,disposition:dispositionInput});
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",[`${req.user.organization_id}:scope-disposition:${dispositionInput.idempotencyKey}`]);
+      const replay=(await client.query(`SELECT * FROM work_order_scope_dispositions
+        WHERE organization_id=$1 AND idempotency_key=$2`,[req.user.organization_id,dispositionInput.idempotencyKey])).rows[0];
+      if(replay){
+        if(replay.source_scope_item_id!==scopeId.data||replay.approved_by!==req.user.id||String(replay.payload_sha256).trim()!==commandHash){
+          await client.query("ROLLBACK");return res.status(409).json({error:"IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD"});
+        }
+        const current=(await client.query("SELECT * FROM work_order_scope_items WHERE organization_id=$1 AND id=$2",[req.user.organization_id,scopeId.data])).rows[0];
+        await client.query("COMMIT");return res.json({item:current,disposition:replay,replayed:true});
+      }
+      if(item.exception_status!=='requested'){await client.query("ROLLBACK");return res.status(409).json({error:"Шийдвэр хүлээж буй хүсэлт алга"});}
+      const accounted=Number(item.completed_quantity)+Number(item.unresolved_quantity)+Number(item.deferred_quantity);
+      const remaining=Number(item.unresolved_quantity)+Number(item.deferred_quantity);
+      if(accounted!==Number(item.planned_quantity)||remaining<=0){await client.query("ROLLBACK");return res.status(409).json({error:"Үлдэгдлийн бүх тоо хэмжээ тодорхой болоогүй байна"});}
+      let followUp=null,followUpScope=null;
+      if(dispositionInput.type==='follow_up'){
+        if(new Date(dispositionInput.dueAt).getTime()<=Date.now()){await client.query("ROLLBACK");return res.status(400).json({error:"Дараагийн ажлын хугацаа ирээдүйд байна"});}
+        const requestedAssignee=Object.hasOwn(dispositionInput,"assignedTo")?dispositionInput.assignedTo:item.work_assigned_to;
+        const assignee=await activeAssignee(client,req.user.organization_id,requestedAssignee||null);
+        if(requestedAssignee&&!assignee){await client.query("ROLLBACK");return res.status(400).json({error:"Дараагийн ажлын хариуцагч олдсонгүй"});}
+        const status=assignee?'assigned':'new',workflowStage=item.workflow_policy_id&&assignee?'awaiting_safety_start':null;
+        followUp=(await client.query(`INSERT INTO work_orders(organization_id,asset_id,operational_object_id,work_type_id,
+          department_id,workflow_policy_id,workflow_stage,operational_stream,assignment_kind,service_area_id,title,description,
+          category,priority,status,assigned_to,due_at,created_by)
+          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
+        [req.user.organization_id,item.work_asset_id,item.work_operational_object_id,item.work_type_id,item.department_id,
+          item.workflow_policy_id,workflowStage,item.operational_stream,item.assignment_kind,item.service_area_id,
+          `Үргэлжлүүлэх — ${item.work_title}`,`${dispositionInput.reason}\n\nЭх ажил: ${item.work_title}`,
+          item.work_category,item.work_priority,status,assignee?.id||null,dispositionInput.dueAt,req.user.id])).rows[0];
+        followUpScope=(await client.query(`INSERT INTO work_order_scope_items(organization_id,work_order_id,operational_object_id,
+          asset_id,item_code,description,unit,planned_quantity,weight,created_by,updated_by)
+          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10) RETURNING *`,
+        [req.user.organization_id,followUp.id,item.operational_object_id,item.asset_id,item.item_code,
+          item.description,item.unit,remaining,item.weight,req.user.id])).rows[0];
+        await client.query(`INSERT INTO work_order_events(organization_id,work_order_id,actor_user_id,event_type,to_status,note,detail)
+          VALUES($1,$2,$3,'created',$4,$5,$6::jsonb)`,[req.user.organization_id,followUp.id,req.user.id,status,
+          `Эх ажлын үлдэгдэл ${remaining} ${item.unit}-ээр үргэлжлүүлэв`,
+          JSON.stringify({followUpOfWorkOrderId:id.data,sourceScopeItemId:scopeId.data,workflowStage,reasonCode:dispositionInput.reasonCode})]);
+        await recordInitialAssignment(client,{organizationId:req.user.organization_id,workOrderId:followUp.id,actorUserId:req.user.id,
+          assignee,status,source:"scope_follow_up",reason:dispositionInput.reason,idempotencyKey:dispositionInput.idempotencyKey});
+        await client.query(`WITH copied AS (
+          INSERT INTO work_order_participants(organization_id,work_order_id,employee_id,participant_role,assigned_by)
+          SELECT participant.organization_id,$3,participant.employee_id,participant.participant_role,$4
+          FROM work_order_participants participant
+          WHERE participant.organization_id=$1 AND participant.work_order_id=$2 AND participant.removed_at IS NULL
+          RETURNING *
+        ) INSERT INTO work_order_participant_events(organization_id,work_order_id,participant_id,employee_id,
+            participant_role,event_type,actor_user_id,detail)
+          SELECT organization_id,work_order_id,id,employee_id,participant_role,'assigned',$4,$5::jsonb FROM copied`,
+        [req.user.organization_id,id.data,followUp.id,req.user.id,JSON.stringify({source:'scope_follow_up',sourceWorkOrderId:id.data})]);
+        await client.query(`INSERT INTO work_order_scope_item_events(organization_id,work_order_id,scope_item_id,actor_user_id,event_type,detail)
+          VALUES($1,$2,$3,$4,'created',$5::jsonb)`,[req.user.organization_id,followUp.id,followUpScope.id,req.user.id,
+          JSON.stringify({plannedQuantity:remaining,unit:item.unit,sourceScopeItemId:scopeId.data})]);
+        const linked=await client.query(`INSERT INTO operational_incident_work_orders(organization_id,incident_id,work_order_id,link_role,linked_by,detail)
+          SELECT link.organization_id,link.incident_id,$3,'related',$4,$5::jsonb
+          FROM operational_incident_work_orders link
+          WHERE link.organization_id=$1 AND link.work_order_id=$2
+          ON CONFLICT(organization_id,incident_id,work_order_id) DO NOTHING RETURNING incident_id`,
+        [req.user.organization_id,id.data,followUp.id,req.user.id,JSON.stringify({followUpOfWorkOrderId:id.data,sourceScopeItemId:scopeId.data})]);
+        for(const row of linked.rows){
+          const changed=await client.query(`UPDATE operational_incidents SET status='in_progress',version=version+1,updated_at=now()
+            WHERE organization_id=$1 AND id=$2 AND status IN('open','in_progress') RETURNING version`,[req.user.organization_id,row.incident_id]);
+          if(changed.rowCount)await client.query(`INSERT INTO operational_incident_events(organization_id,incident_id,actor_user_id,event_type,
+            quantity,note,detail,incident_version) VALUES($1,$2,$3,'progress',$4,$5,$6::jsonb,$7)`,
+          [req.user.organization_id,row.incident_id,req.user.id,remaining,"Үлдэгдлийг дараагийн ажилд шилжүүлэв",
+            JSON.stringify({sourceWorkOrderId:id.data,followUpWorkOrderId:followUp.id,sourceScopeItemId:scopeId.data}),changed.rows[0].version]);
+        }
+        if(assignee&&assignee.id!==req.user.id)await notifyUser(client,{organizationId:req.user.organization_id,userId:assignee.id,
+          type:"work_assigned",title:"Үлдэгдэл ажил хуваарилагдлаа",message:followUp.title,entityId:followUp.id});
+        if(workflowStage){
+          const policy=(await client.query("SELECT config FROM organization_workflow_policies WHERE organization_id=$1 AND id=$2",
+            [req.user.organization_id,item.workflow_policy_id])).rows[0];
+          await notifyAuthority(client,{organizationId:req.user.organization_id,permission:policy?.config?.startSafetyPermission,
+            excludeUserId:req.user.id,title:"Үргэлжлэл ажил эхлүүлэх зөвшөөрөл хүлээгдэж байна",message:followUp.title,entityId:followUp.id});
+        }
+      }
+      const disposition=(await client.query(`INSERT INTO work_order_scope_dispositions(organization_id,source_work_order_id,
+        source_scope_item_id,disposition_type,reason_code,reason,due_at,follow_up_work_order_id,follow_up_scope_item_id,
+        approved_by,idempotency_key,payload_sha256) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+      [req.user.organization_id,id.data,scopeId.data,dispositionInput.type,dispositionInput.reasonCode,dispositionInput.reason,
+        dispositionInput.type==='follow_up'?dispositionInput.dueAt:null,followUp?.id||null,followUpScope?.id||null,
+        req.user.id,dispositionInput.idempotencyKey,commandHash])).rows[0];
+      const updated=(await client.query(`UPDATE work_order_scope_items SET exception_status='accepted',exception_accepted_by=$1,
+        exception_accepted_at=now(),outcome_status='closed_with_exception',updated_by=$1,updated_at=now()
+        WHERE organization_id=$2 AND id=$3 RETURNING *`,[req.user.id,req.user.organization_id,scopeId.data])).rows[0];
+      await client.query(`INSERT INTO work_order_scope_item_events(organization_id,work_order_id,scope_item_id,actor_user_id,event_type,detail)
+        VALUES($1,$2,$3,$4,'exception_decided',$5::jsonb)`,[req.user.organization_id,id.data,scopeId.data,req.user.id,
+        JSON.stringify({decision:'accepted',note:parsed.data.note,dispositionType:dispositionInput.type,reasonCode:dispositionInput.reasonCode,
+          followUpWorkOrderId:followUp?.id||null,followUpScopeItemId:followUpScope?.id||null})]);
+      await writeAudit(req,"work_order.scope_item.exception_decided","work_order_scope_item",scopeId.data,
+        {workOrderId:id.data,decision:'accepted',dispositionType:dispositionInput.type,followUpWorkOrderId:followUp?.id||null},client);
+      await client.query("COMMIT");return res.json({item:updated,disposition,followUpWorkOrder:followUp,replayed:false});
+    }
+    if(item.exception_status!=='requested'){await client.query("ROLLBACK");return res.status(409).json({error:"Шийдвэр хүлээж буй хүсэлт алга"});}
+    const updated=(await client.query(`UPDATE work_order_scope_items SET exception_status='rejected',exception_accepted_by=NULL,
+      exception_accepted_at=NULL,updated_by=$1,updated_at=now() WHERE organization_id=$2 AND id=$3 RETURNING *`,
+    [req.user.id,req.user.organization_id,scopeId.data])).rows[0];
+    await client.query(`INSERT INTO work_order_scope_item_events(organization_id,work_order_id,scope_item_id,actor_user_id,event_type,detail)
+      VALUES($1,$2,$3,$4,'exception_decided',$5::jsonb)`,[req.user.organization_id,id.data,scopeId.data,req.user.id,
+      JSON.stringify({decision:'rejected',note:parsed.data.note})]);
+    await writeAudit(req,"work_order.scope_item.exception_decided","work_order_scope_item",scopeId.data,
+      {workOrderId:id.data,decision:'rejected',note:parsed.data.note},client);
+    await client.query("COMMIT");res.json({item:updated});
   }catch(error){await client.query("ROLLBACK").catch(()=>{});throw error}finally{client.release()}
 }));
 

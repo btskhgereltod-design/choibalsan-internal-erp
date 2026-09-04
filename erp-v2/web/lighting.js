@@ -4,9 +4,11 @@ state.lightingLoading = false;
 state.lightingTab = "overview";
 state.lightingAreaFilter = "all";
 state.lightingFaultDrafts = {};
+state.lightingFaultEditors = {};
 state.lightingFaultDensity = "compact";
 state.lightingFaultZoom = 100;
 state.lightingFaultExpanded = false;
+state.lightingFaultView = "all";
 state.lightingFaultSaving = false;
 state.lightingFaultBatchKey = null;
 state.lightingFaultBatchReportedAt = null;
@@ -62,6 +64,10 @@ function lightingScoped(d) {
     workOrders: (d.workOrders || []).filter(lightingAreaMatches),
   };
 }
+function lightingFaultTargets(d){return [...(d.assets||[]).map(item=>({...item,faultTargetKind:"object"})),
+  ...(d.fixedAssets||[]).map(item=>({...item,faultTargetKind:"asset",light_type:item.category,pole_count:null,head_count:null}))]}
+function lightingDefaultIncidentType(target,d){return target?.faultTargetKind==="asset"&&
+  (d.incidentTypes||[]).some(type=>type.code==="traffic_signal_fault")?"traffic_signal_fault":d.incidentTypes?.[0]?.code||""}
 function lightingAreaMetrics(d, code) {
   const matches = (item) =>
     code === "all" ||
@@ -166,10 +172,10 @@ function lightingAssets(d) {
     replacements:sum.replacements+Number(x.replacement_pole_count??x.metadata?.replacementPoleCount??0)
   }),{poles:0,heads:0,replacements:0});
   const objectTable = d.assets.length
-    ? `<div class="lighting-object-summary"><span><b>${d.assets.length}</b> объект</span><span><b>${totals.poles}</b> шон</span><span><b>${totals.heads}</b> толгой</span><span><b>${totals.replacements}</b> нөхөх шон</span></div><div class="table-panel"><table class="data-table lighting-object-table"><thead><tr><th>Код / гэрэлтүүлгийн объект</th><th>Ангилал</th><th>Байршил</th><th>Шон</th><th>Нийт толгой</th><th>Нэг шон дахь толгой</th><th>Нөхөх шон</th><th>Төлөв</th><th>Үйлдэл</th></tr></thead><tbody>${d.assets.map((x) => `<tr><td><button class="object-dossier-link" data-object-dossier="${x.id}">${esc(x.name)}</button><small>${esc(x.display_code || x.code)} · ${esc(x.service_area_name || "Чиглэл тодорхойгүй")}</small></td><td><span class="classification-state ${esc(x.classification_state)}">${x.classification_state === "unclassified" ? "Хянах шаардлагатай" : x.classification_state === "legacy_candidate" ? "Эх кодоор таарсан" : "Canonical"}</span><small>${esc(x.light_type || x.object_type)}</small></td><td>${esc(x.location || "—")}</td><td>${esc(x.pole_count ?? x.metadata?.poleCount ?? x.metadata?.lampCount ?? "—")}</td><td>${esc(x.head_count ?? x.metadata?.totalHeadCount ?? x.metadata?.headCount ?? "—")}</td><td>${esc(x.head_count_per_pole ?? x.metadata?.headCountPerPole ?? "—")}</td><td>${esc(x.replacement_pole_count ?? x.metadata?.replacementPoleCount ?? "—")}</td><td><span class="badge ${esc(x.status)}">${lightingStatus(x.status)}</span></td><td><button class="secondary dossier-open-action" data-object-dossier="${x.id}">Нээх / засах</button></td></tr>`).join("")}</tbody></table></div>`
+    ? `<div class="lighting-object-summary"><span><b>${d.assets.length}</b> объект</span><span><b>${totals.poles}</b> шон</span><span><b>${totals.heads}</b> толгой</span><span><b>${totals.replacements}</b> нөхөх шон</span></div><div class="table-panel"><table class="data-table lighting-object-table"><thead><tr><th>Код / гэрэлтүүлгийн объект</th><th>Ангилал</th><th>Байршил</th><th>Шон</th><th>Нийт толгой</th><th>Нэг шон дахь толгой</th><th>Нөхөх шон</th><th>Төлөв</th><th>Үйлдэл</th></tr></thead><tbody>${d.assets.map((x) => `<tr><td><button class="object-dossier-link" data-object-dossier="${x.id}">${esc(x.name)}</button><small>${esc(x.display_code || x.code)} · ${esc(x.service_area_name || "Чиглэл тодорхойгүй")}</small></td><td><span class="classification-state ${esc(x.classification_state)}">${x.classification_state === "unclassified" ? "Хянах шаардлагатай" : x.classification_state === "legacy_candidate" ? "Эх кодоор таарсан" : "Canonical"}</span><small>${esc(x.light_type || x.object_type)}</small></td><td>${esc(x.location || "—")}</td><td>${esc(x.pole_count ?? x.metadata?.poleCount ?? x.metadata?.lampCount ?? "—")}</td><td>${esc(x.head_count ?? x.metadata?.totalHeadCount ?? x.metadata?.headCount ?? "—")}</td><td>${esc(x.head_count_per_pole ?? x.metadata?.headCountPerPole ?? "—")}</td><td>${esc(x.replacement_pole_count ?? x.metadata?.replacementPoleCount ?? "—")}</td><td><span class="badge ${esc(x.status)}">${lightingStatus(x.status)}</span></td><td><button class="secondary dossier-open-action" data-object-dossier="${x.id}">Хувийн хэрэг</button></td></tr>`).join("")}</tbody></table></div>`
     : "";
   const equipmentTable = d.fixedAssets.length
-    ? `<div class="table-panel"><table class="data-table"><thead><tr><th>Код / тоноглол</th><th>Ангилал</th><th>Байршил</th><th>Тоо хэмжээ</th><th>Төлөв</th></tr></thead><tbody>${d.fixedAssets.map((x) => `<tr><td><button class="object-dossier-link" data-asset-id="${x.id}">${esc(x.name)}</button><small>${esc(x.code)} · Үндсэн хөрөнгийн бүртгэл</small></td><td>${esc(x.category)}</td><td>${esc(x.location || "—")}</td><td>${esc(x.allocatable_quantity ?? "—")} ${esc(x.allocation_unit || "")}</td><td><span class="badge ${esc(x.status)}">${lightingStatus(x.status)}</span></td></tr>`).join("")}</tbody></table></div>`
+    ? `<div class="table-panel"><table class="data-table"><thead><tr><th>Код / тоноглол</th><th>Ангилал</th><th>Байршил</th><th>Тоо хэмжээ</th><th>Төлөв</th><th>Үйлдэл</th></tr></thead><tbody>${d.fixedAssets.map((x) => `<tr><td><button class="object-dossier-link" data-asset-id="${x.id}">${esc(x.name)}</button><small>${esc(x.code)} · Үндсэн хөрөнгийн бүртгэл</small></td><td>${esc(x.category)}</td><td>${esc(x.location || "—")}</td><td>${esc(x.allocatable_quantity ?? "—")} ${esc(x.allocation_unit || "")}</td><td><span class="badge ${esc(x.status)}">${lightingStatus(x.status)}</span></td><td><button class="secondary dossier-open-action" data-asset-id="${x.id}">Хувийн хэрэг</button></td></tr>`).join("")}</tbody></table></div>`
     : "";
   if(!d.assets.length&&!d.fixedAssets.length)return empty(
     "Бүртгэл алга",
@@ -184,18 +190,20 @@ function lightingAssets(d) {
     : "";
   return `<div class="lighting-section-stack">${objectSection}${equipmentSection}</div>`;
 }
-function lightingIncidents(d) {
+function lightingIncidentsLegacy(d) {
   const types=d.incidentTypes||[],canReport=Boolean(d.capabilities?.canReportIncidents),typeByCode=new Map(types.map(type=>[type.code,type])),
-    openByObjectUnit=new Map();
+    openByObjectUnit=new Map(),faultTargets=lightingFaultTargets(d);
   const incidentUnit=incident=>String(incident.detail?.quantityUnit||typeByCode.get(incident.incident_type)?.quantity_unit||"толгой");
   for(const incident of d.incidents){
-    if(!incident.operational_object_id||!["open","in_progress"].includes(incident.status))continue;
-    const key=`${incident.operational_object_id}:${incidentUnit(incident)}`;
+    const targetId=incident.operational_object_id||incident.asset_id;
+    if(!targetId||!["open","in_progress"].includes(incident.status))continue;
+    const key=`${targetId}:${incidentUnit(incident)}`;
     openByObjectUnit.set(key,(openByObjectUnit.get(key)||0)+Math.max(0,Number(incident.affected_quantity)-Number(incident.resolved_quantity)));
   }
   const quantity=value=>value===null||value===undefined||value===""?null:Number.isFinite(Number(value))?Number(value):null;
-  const rows=d.assets.map(object=>{
-    const draft=state.lightingFaultDrafts[object.id]||{},selected=draft.incidentType||types[0]?.code||"",selectedType=typeByCode.get(selected)||types[0]||{},unit=selectedType.quantity_unit||"тохиолдол";
+  const assetOnly=faultTargets.length>0&&faultTargets.every(target=>target.faultTargetKind==="asset");
+  const rows=faultTargets.map(object=>{
+    const draft=state.lightingFaultDrafts[object.id]||{},selected=draft.incidentType||lightingDefaultIncidentType(object,d),selectedType=typeByCode.get(selected)||types[0]||{},unit=selectedType.quantity_unit||"тохиолдол";
     const poleCount=quantity(object.pole_count),headCount=quantity(object.head_count),basis=unit==="толгой"?headCount:unit==="шон"?poleCount:null;
     const open=openByObjectUnit.get(`${object.id}:${unit}`)||0,newQuantity=Math.max(0,Number(draft.affectedQuantity)||0),projected=open+newQuantity;
     const availability=basis!==null&&basis>0?Math.max(0,Math.round(((basis-projected)/basis)*100)):null,
@@ -203,13 +211,69 @@ function lightingIncidents(d) {
     const availabilityClass=availability===null?"unknown":availability>=90?"good":availability>=70?"warning":"bad";
     const remaining=basis===null?1000000:Math.max(0,basis-open);
     const typeOptions=types.map(type=>`<option value="${esc(type.code)}" ${type.code===selected?"selected":""}>${esc(type.name)} · ${esc(type.quantity_unit)}</option>`).join("");
-    return `<tr data-fault-row="${object.id}"><td class="fault-object-cell"><button type="button" class="object-dossier-link" data-object-dossier="${object.id}">${esc(object.name)}</button><small>${esc(object.display_code||object.code)} · ${esc(object.service_area_name||"Чиглэл тодорхойгүй")}</small></td><td class="numeric"><b>${poleCount??"—"}</b></td><td class="numeric"><b>${headCount??"—"}</b></td><td><small>${esc(object.light_type||"Төрөл бүртгээгүй")}</small></td><td class="quick-fault-cell"><select class="fault-type-select" aria-label="Гэмтлийн төрөл" data-fault-field="incidentType" data-object-id="${object.id}" ${canReport?"":"disabled"}>${typeOptions}</select><div class="fault-count-line"><span>Одоо <b class="fault-open-value">${open}</b> ${esc(unit)}</span><span>Шинээр нэмэх</span></div><div class="fault-stepper"><button type="button" data-fault-step="-1" data-object-id="${object.id}" ${canReport?"":"disabled"}>−</button><input class="fault-quantity-input" type="number" min="0" max="${remaining}" step="1" inputmode="numeric" value="${esc(draft.affectedQuantity??"")}" placeholder="0" data-fault-field="affectedQuantity" data-object-id="${object.id}" ${canReport?"":"disabled"}><button type="button" data-fault-step="1" data-object-id="${object.id}" ${canReport&&remaining>0?"":"disabled"}>+</button><span class="fault-availability ${availabilityClass}">${availabilityText}</span></div></td>${state.lightingFaultExpanded?`<td><input class="fault-note-input" value="${esc(draft.note||"")}" maxlength="2000" placeholder="Шаардлагатай бол тайлбар бичнэ" data-fault-field="note" data-object-id="${object.id}" ${canReport?"":"disabled"}></td>`:""}<td><button type="button" class="icon-button fault-clear" data-clear-fault="${object.id}" title="Хадгалаагүй мөрийг цэвэрлэх" ${draft.affectedQuantity||draft.note?"":"disabled"}>×</button></td></tr>`;
+    const dossierAttribute=object.faultTargetKind==="asset"?`data-asset-id="${object.id}"`:`data-object-dossier="${object.id}"`;
+    return `<tr data-fault-row="${object.id}"><td class="fault-object-cell"><button type="button" class="object-dossier-link" ${dossierAttribute}>${esc(object.name)}</button><small>${esc(object.display_code||object.code)} · ${esc(object.service_area_name||"Чиглэл тодорхойгүй")}</small></td><td class="numeric"><b>${object.faultTargetKind==="asset"?esc(object.allocatable_quantity??"—"):(poleCount??"—")}</b></td><td class="numeric"><b>${object.faultTargetKind==="asset"?esc(object.allocation_unit||"—"):(headCount??"—")}</b></td><td><small>${esc(object.light_type||"Төрөл бүртгээгүй")}</small></td><td class="quick-fault-cell"><select class="fault-type-select" aria-label="Гэмтлийн төрөл" data-fault-field="incidentType" data-object-id="${object.id}" ${canReport?"":"disabled"}>${typeOptions}</select><div class="fault-count-line"><span>Одоо <b class="fault-open-value">${open}</b> ${esc(unit)}</span><span>Шинээр нэмэх</span></div><div class="fault-stepper"><button type="button" data-fault-step="-1" data-object-id="${object.id}" ${canReport?"":"disabled"}>−</button><input class="fault-quantity-input" type="number" min="0" max="${remaining}" step="1" inputmode="numeric" value="${esc(draft.affectedQuantity??"")}" placeholder="0" data-fault-field="affectedQuantity" data-object-id="${object.id}" ${canReport?"":"disabled"}><button type="button" data-fault-step="1" data-object-id="${object.id}" ${canReport&&remaining>0?"":"disabled"}>+</button><span class="fault-availability ${availabilityClass}">${availabilityText}</span></div></td>${state.lightingFaultExpanded?`<td><input class="fault-note-input" value="${esc(draft.note||"")}" maxlength="2000" placeholder="Шаардлагатай бол тайлбар бичнэ" data-fault-field="note" data-object-id="${object.id}" ${canReport?"":"disabled"}></td>`:""}<td><button type="button" class="icon-button fault-clear" data-clear-fault="${object.id}" title="Хадгалаагүй мөрийг цэвэрлэх" ${draft.affectedQuantity||draft.note?"":"disabled"}>×</button></td></tr>`;
   }).join("");
-  const visibleObjectIds=new Set(d.assets.map(object=>object.id)),draftCount=Object.entries(state.lightingFaultDrafts).filter(([id,item])=>visibleObjectIds.has(id)&&Number(item.affectedQuantity)>0).length;
+  const visibleObjectIds=new Set(faultTargets.map(object=>object.id)),draftCount=Object.entries(state.lightingFaultDrafts).filter(([id,item])=>visibleObjectIds.has(id)&&Number(item.affectedQuantity)>0).length;
   const typeNames=new Map(types.map(type=>[type.code,type.name]));
   const history=d.incidents.length?`<details class="lighting-incident-history"><summary>Бүртгэгдсэн гэмтлийн түүх (${d.incidents.length})</summary><div class="table-panel"><table class="data-table"><thead><tr><th>Гэмтэл</th><th>Объект / байршил</th><th>Нөлөөлсөн</th><th>Зассан</th><th>Огноо</th><th>Төлөв</th></tr></thead><tbody>${d.incidents.map((x)=>`<tr><td><strong>${esc(typeNames.get(x.incident_type)||x.incident_type)}</strong><small>${esc(x.title)}</small></td><td>${esc(x.asset_name||x.location||"—")}</td><td>${x.affected_quantity}</td><td>${x.resolved_quantity}</td><td>${date(x.reported_at)}</td><td><span class="badge ${esc(x.status)}">${lightingStatus(x.status)}</span></td></tr>`).join("")}</tbody></table></div></details>`:"";
-  return `<section class="lighting-fault-sheet quick"><div class="lighting-fault-toolbar"><div><h2>Гэмтлийг тоогоор хурдан бүртгэх</h2><small>Нийт шон, гэрлийн толгойгоо харж байгаад гэмтсэн нэгж болон тоог шууд сонгоно.</small></div><div class="lighting-fault-controls"><button type="button" class="secondary" data-fault-expanded>${state.lightingFaultExpanded?"Тайлбар нуух":"Тайлбар нэмэх"}</button></div></div>${canReport?"":`<div class="lighting-permission-note">Танд бүртгэлийг харах эрх байна. Шинэ гэмтэл хадгалах <code>operational-incidents.report</code> эрх олгогдоогүй.</div>`}<form id="lightingFaultBatchForm"><div class="lighting-fault-scroll"><table class="data-table lighting-fault-table lighting-quick-fault-table"><thead><tr><th class="fault-object-cell">Код / объект</th><th>Нийт шон</th><th>Нийт толгой</th><th>Гэрлийн төрөл</th><th>Гэмтэл</th>${state.lightingFaultExpanded?"<th>Тайлбар</th>":""}<th></th></tr></thead><tbody>${rows}</tbody></table></div>${canReport?`<div class="lighting-fault-save"><span><b>${draftCount}</b> мөр бэлэн</span><small>0 бол шинэ гэмтэл нэмэхгүй. Хадгалах үед эрх, нийт тоо, давхардал дахин шалгагдаж audit үүснэ.</small><button class="primary" ${!draftCount||state.lightingFaultSaving?"disabled":""}>${state.lightingFaultSaving?"Хадгалж байна…":"Шалгаж хадгалах"}</button></div>`:""}</form></section>${history}`;
+  return `<section class="lighting-fault-sheet quick"><div class="lighting-fault-toolbar"><div><h2>Шинэ гэмтэл бүртгэх</h2><small>Объектоо олоод гэмтлийн төрөл, шинээр нэмэх тоо, шаардлагатай бол тайлбараа оруулна.</small></div><div class="lighting-fault-controls">${canReport?`<span class="lighting-fault-draft-status" aria-live="polite"><b data-lighting-fault-draft-count>${draftCount}</b> мөр бэлэн</span>`:""}<button type="button" class="secondary" data-fault-expanded>${state.lightingFaultExpanded?"Тайлбар нуух":"Тайлбар нэмэх"}</button>${canReport?`<button type="submit" form="lightingFaultBatchForm" class="primary" data-lighting-fault-save ${!draftCount||state.lightingFaultSaving?"disabled":""}>${state.lightingFaultSaving?"Хадгалж байна…":"Гэмтэл хадгалах"}</button>`:""}</div></div>${canReport?"":`<div class="lighting-permission-note">Танд бүртгэлийг харах эрх байна. Шинэ гэмтэл хадгалах <code>operational-incidents.report</code> эрх олгогдоогүй.</div>`}<form id="lightingFaultBatchForm"><div class="lighting-fault-scroll"><table class="data-table lighting-fault-table lighting-quick-fault-table"><thead><tr><th class="fault-object-cell">Код / объект</th><th>${assetOnly?"Тоо хэмжээ":"Нийт шон"}</th><th>${assetOnly?"Нэгж":"Нийт толгой"}</th><th>${assetOnly?"Ангилал":"Гэрлийн төрөл"}</th><th>Гэмтэл</th>${state.lightingFaultExpanded?"<th>Тайлбар</th>":""}<th></th></tr></thead><tbody>${rows}</tbody></table></div>${canReport?`<div class="lighting-fault-save"><small>0 тоотой мөр хадгалагдахгүй. Хадгалах үед эрх, нийт тоо, давхардлыг сервер дахин шалгаж аудит үүсгэнэ.</small></div>`:""}</form></section>${history}`;
 }
+function lightingIncidents(d){
+  const types=d.incidentTypes||[],canReport=Boolean(d.capabilities?.canReportIncidents),canCancel=Boolean(d.capabilities?.canCancelIncidents),
+    typeByCode=new Map(types.map(type=>[type.code,type])),allTargets=lightingFaultTargets(d.all||d),targetById=new Map(allTargets.map(target=>[target.id,target])),
+    visibleTargets=lightingFaultTargets(d),openIncidents=(d.all?.incidents||d.incidents||[]).filter(item=>['open','in_progress'].includes(item.status)&&Number(item.affected_quantity)>Number(item.resolved_quantity)),
+    drafts=Object.values(state.lightingFaultDrafts),openByTargetType=new Map(),openByTargetUnit=new Map();
+  const incidentUnit=incident=>String(incident.detail?.quantityUnit||typeByCode.get(incident.incident_type)?.quantity_unit||'толгой');
+  for(const incident of openIncidents){
+    const targetId=incident.operational_object_id||incident.asset_id,remaining=Math.max(0,Number(incident.affected_quantity)-Number(incident.resolved_quantity)),unit=incidentUnit(incident);
+    if(!targetId)continue;
+    const typeKey=`${targetId}:${incident.incident_type}`,unitKey=`${targetId}:${unit}`;
+    openByTargetType.set(typeKey,(openByTargetType.get(typeKey)||0)+remaining);
+    openByTargetUnit.set(unitKey,(openByTargetUnit.get(unitKey)||0)+remaining);
+  }
+  const targetHasOpen=target=>openIncidents.some(item=>(item.operational_object_id||item.asset_id)===target.id),
+    faultyTargetCount=visibleTargets.filter(targetHasOpen).length,
+    displayedTargets=visibleTargets.map((target,index)=>({target,index,hasOpen:targetHasOpen(target)}))
+      .filter(item=>state.lightingFaultView!=="faulty"||item.hasOpen)
+      .sort((left,right)=>Number(right.hasOpen)-Number(left.hasOpen)||left.index-right.index);
+  const capacity=(target,unit)=>{
+    if(target.faultTargetKind==='asset')return target.allocation_unit===unit?Number(target.allocatable_quantity):null;
+    if(unit==='толгой')return target.head_count===''||target.head_count===null||target.head_count===undefined?null:Number(target.head_count);
+    if(unit==='шон')return target.pole_count===''||target.pole_count===null||target.pole_count===undefined?null:Number(target.pole_count);
+    return null;
+  };
+  const openSummary=target=>{
+    const records=openIncidents.filter(item=>(item.operational_object_id||item.asset_id)===target.id),
+      incidentCodes=[...new Set(records.map(item=>item.incident_type))],
+      items=incidentCodes.map(code=>{const record=records.find(item=>item.incident_type===code),known=typeByCode.get(code);return {type:known||{code,name:'Өмнөх бүртгэлийн гэмтэл',quantity_unit:incidentUnit(record)},legacyLabel:known?'':code,count:openByTargetType.get(`${target.id}:${code}`)||0}}).filter(item=>item.count>0);
+    if(!items.length)return '<span class="fault-none-chip">Одоогоор нээлттэй гэмтэлгүй</span>';
+    const totals=items.map(item=>`<span class="fault-open-chip"><b>${esc(item.type.name)}</b>${item.count} ${esc(item.type.quantity_unit)}${item.legacyLabel?`<small>${esc(item.legacyLabel)}</small>`:''}</span>`).join('');
+    const details=records.map(item=>{const type=typeByCode.get(item.incident_type),remaining=Math.max(0,Number(item.affected_quantity)-Number(item.resolved_quantity));return `<div class="fault-open-record"><span><b>${esc(type?.name||'Өмнөх бүртгэлийн гэмтэл')}</b><small>${type?'':`${esc(item.incident_type)} · `}${dateTime(item.reported_at)} · үлдсэн ${remaining} ${esc(incidentUnit(item))}</small></span>${canCancel?`<button type="button" class="secondary incident-cancel" data-cancel-lighting-incident="${item.id}" data-version="${item.version}">Хүчингүй болгох</button>`:'<small>Зөвхөн харах эрхтэй</small>'}</div>`}).join('');
+    return `${totals}<details class="fault-object-history"><summary>${canCancel?'Буруу бүртгэл засах / хүчингүй болгох':'Бүртгэл тус бүрийг харах'} (${records.length})</summary><div>${details}</div></details>`;
+  };
+  const draftSummary=drafts.map(draft=>{
+    const target=targetById.get(draft.objectId),type=typeByCode.get(draft.incidentType);
+    if(!target||!type)return '';
+    return `<div class="fault-review-item"><span><b>${esc(target.name)}</b><small>${esc(type.name)} · шинээр +${draft.affectedQuantity} ${esc(type.quantity_unit)}${draft.note?` · ${esc(draft.note)}`:''}</small></span><button type="button" class="icon-button" data-remove-fault-draft="${draft.rowKey}" title="Энэ өөрчлөлтийг хасах">×</button></div>`;
+  }).join('');
+  const rows=displayedTargets.map(({target,hasOpen})=>{
+    const allowedTypes=target.faultTargetKind==='asset'?types.filter(type=>['traffic_signal_fault','inspection_finding'].includes(type.code)):types.filter(type=>type.code!=='traffic_signal_fault');
+    const fallback=lightingDefaultIncidentType(target,{incidentTypes:allowedTypes}),editor=state.lightingFaultEditors[target.id]||{incidentType:fallback,affectedQuantity:'',note:''};
+    if(!allowedTypes.some(type=>type.code===editor.incidentType))editor.incidentType=fallback;
+    const selectedType=typeByCode.get(editor.incidentType)||allowedTypes[0]||{},unit=selectedType.quantity_unit||'тохиолдол',total=capacity(target,unit),
+      open=openByTargetUnit.get(`${target.id}:${unit}`)||0,pending=drafts.filter(item=>item.objectId===target.id&&typeByCode.get(item.incidentType)?.quantity_unit===unit).reduce((sum,item)=>sum+Number(item.affectedQuantity||0),0),
+      remaining=total===null?1000000:Math.max(0,total-open-pending),prepared=drafts.filter(item=>item.objectId===target.id),
+      typeOptions=allowedTypes.map(type=>`<option value="${esc(type.code)}" ${type.code===editor.incidentType?'selected':''}>${esc(type.name)} · ${esc(type.quantity_unit)}</option>`).join(''),
+      inventory=target.faultTargetKind==='asset'?`${target.allocatable_quantity??'—'} ${esc(target.allocation_unit||'нэгж')} · ${esc(target.category||'тоноглол')}`:
+        `Шон ${target.pole_count??'—'} · Толгой ${target.head_count??'—'} · ${esc(target.light_type||'төрөл бүртгээгүй')}`,
+      preparedHtml=prepared.length?`<div class="fault-row-drafts">${prepared.map(item=>{const type=typeByCode.get(item.incidentType);return `<span><b>${esc(type?.name||item.incidentType)}</b> +${item.affectedQuantity} ${esc(type?.quantity_unit||'')}<button type="button" data-remove-fault-draft="${item.rowKey}" aria-label="Бэлтгэсэн мөр хасах">×</button></span>`}).join('')}</div>`:'';
+    return `<tr class="${hasOpen?'fault-row-current':''}" data-fault-row="${target.id}"><td class="fault-object-cell"><button type="button" class="object-dossier-link" ${target.faultTargetKind==='asset'?`data-asset-id="${target.id}"`:`data-object-dossier="${target.id}"`}>${esc(target.name)}</button><small>${esc(target.display_code||target.code)} · ${esc(target.service_area_name||'Чиглэл тодорхойгүй')}</small></td><td><span class="fault-inventory">${inventory}</span></td><td><div class="fault-open-list">${openSummary(target)}</div></td><td class="quick-fault-cell"><select class="fault-type-select" data-fault-field="incidentType" data-object-id="${target.id}" ${canReport?'':'disabled'}>${typeOptions}</select><div class="fault-entry-line"><label><small>Шинээр нэмэх (${esc(unit)})</small><input class="fault-quantity-input" type="number" min="0" max="${remaining}" step="1" value="${esc(editor.affectedQuantity||'')}" placeholder="0" data-fault-field="affectedQuantity" data-object-id="${target.id}" ${canReport?'':'disabled'}></label><button type="button" class="secondary fault-prepare" data-add-fault="${target.id}" ${canReport&&remaining>0?'':'disabled'}>+ Бэлтгэх</button></div>${state.lightingFaultExpanded?`<input class="fault-note-input" value="${esc(editor.note||'')}" maxlength="2000" placeholder="Тайлбар" data-fault-field="note" data-object-id="${target.id}" ${canReport?'':'disabled'}>`:''}${preparedHtml}</td></tr>`;
+  }).join('')||'<tr><td colspan="4" class="fault-filter-empty">Энэ чиглэлд одоогоор нээлттэй гэмтэлтэй объект алга.</td></tr>';
+  const historyItems=d.incidents||[],history=historyItems.length?`<details class="lighting-incident-history"><summary>Бүртгэгдсэн гэмтлийн түүх (${historyItems.length})</summary><div class="table-panel"><table class="data-table"><thead><tr><th>Гэмтэл</th><th>Объект / байршил</th><th>Нөлөөлсөн</th><th>Зассан</th><th>Огноо</th><th>Төлөв</th><th>Үйлдэл</th></tr></thead><tbody>${historyItems.map(item=>`<tr><td><strong>${esc(typeByCode.get(item.incident_type)?.name||item.incident_type)}</strong><small>${esc(item.title)}</small></td><td>${esc(item.asset_name||item.location||'—')}</td><td>${item.affected_quantity}</td><td>${item.resolved_quantity}</td><td>${date(item.reported_at)}</td><td><span class="badge ${esc(item.status)}">${lightingStatus(item.status)}</span></td><td>${canCancel&&['open','in_progress'].includes(item.status)?`<button type="button" class="secondary incident-cancel" data-cancel-lighting-incident="${item.id}" data-version="${item.version}">Хүчингүй болгох</button>`:'—'}</td></tr>`).join('')}</tbody></table></div></details>`:'';
+  return `<section class="lighting-fault-sheet quick"><div class="lighting-fault-toolbar"><div><h2>Шинэ гэмтэл бүртгэх</h2><small>${faultyTargetCount} гэмтэлтэй объект эхэнд байна. Эрүүл объектод шинэ гэмтэл нэмэх бол “Бүгд”-ээс олно.</small></div><div class="lighting-fault-controls"><div class="fault-view-filter"><button type="button" class="${state.lightingFaultView==='all'?'active':''}" data-lighting-fault-view="all">Бүгд ${visibleTargets.length}</button><button type="button" class="${state.lightingFaultView==='faulty'?'active':''}" data-lighting-fault-view="faulty">Зөвхөн гэмтэлтэй ${faultyTargetCount}</button></div><button type="button" class="secondary" data-fault-expanded>${state.lightingFaultExpanded?'Тайлбар нуух':'Тайлбар нэмэх'}</button></div></div>${drafts.length?`<section class="fault-change-review"><div><strong>Хадгалах өөрчлөлт — ${drafts.length} мөр</strong><small>Энд байгаа бүх мөр нэг удаагийн хадгалалтаар тус тусын объект, гэмтлийн төрөлд нэмэгдэнэ.</small></div><div class="fault-review-list">${draftSummary}</div><div class="fault-review-actions"><button type="button" class="secondary" data-clear-all-fault-drafts>Бүгдийг цэвэрлэх</button><button type="submit" form="lightingFaultBatchForm" class="primary" data-lighting-fault-save ${state.lightingFaultSaving?'disabled':''}>${state.lightingFaultSaving?'Хадгалж байна…':`${drafts.length} өөрчлөлт хадгалах`}</button></div></section>`:''}${canReport?'':`<div class="lighting-permission-note">Танд бүртгэлийг харах эрх байна. Шинэ гэмтэл хадгалах эрх олгогдоогүй.</div>`}<form id="lightingFaultBatchForm"><div class="lighting-fault-scroll"><table class="data-table lighting-fault-table lighting-fault-understandable"><thead><tr><th class="fault-object-cell">Объект</th><th>Бүртгэлтэй тоноглол</th><th>Одоогийн нээлттэй гэмтэл</th><th>Шинэ өөрчлөлт бэлтгэх</th></tr></thead><tbody>${rows}</tbody></table></div><div class="lighting-fault-save"><small>Бэлтгэсэн мөр хадгалахаас өмнө × товчоор хасагдана. Хадгалсан алдаатай мөрийг тухайн объектын нээлттэй гэмтлээс шалтгаантай хүчингүй болгоно; аудитын түүх устахгүй.</small></div></form></section>${history}`;
+}
+
 function lightingOutcome(x) {
   if (!Number(x.measurement_item_count))
     return `<span class="lighting-outcome unknown">Хэмжилт тодорхойлоогүй</span>`;
@@ -329,6 +393,36 @@ function cameraPointRow(item={},allDevices=[]) {
   const pointId=item.id||item.clientId||"",devices=allDevices.filter(device=>(device.camera_point_id||device.cameraPointId)===pointId);
   return `<div class="camera-point-row"><div class="camera-point-head"><strong>Камерын шон / цэг</strong><button type="button" class="icon-button" data-remove-camera-point title="Цэг хасах">×</button></div><div class="camera-point-fields"><label>Цэгийн нэр<input data-camera-point-field="name" maxlength="200" value="${esc(item.name||"")}" placeholder="Жишээ: Уулзварын баруун шон" required></label><label>Шон / цэгийн код<input data-camera-point-field="poleReference" maxlength="200" value="${esc(item.pole_reference||item.poleReference||"")}"></label><label>Өргөрөг (latitude)<input data-camera-point-field="latitude" type="number" min="-90" max="90" step="0.000001" value="${esc(item.latitude??"")}"></label><label>Уртраг (longitude)<input data-camera-point-field="longitude" type="number" min="-180" max="180" step="0.000001" value="${esc(item.longitude??"")}"></label><label class="wide-field">Байршлын тайлбар<input data-camera-point-field="locationNote" maxlength="500" value="${esc(item.location_note||item.locationNote||"")}"></label></div><div class="camera-device-head"><div><b>Энэ шон / цэг дээрх камер</b><small>Ижил үзүүлэлттэй камерыг нэг мөрөнд тоогоор бүртгэнэ.</small></div><button type="button" class="secondary" data-add-camera-device>+ Камерын мөр</button></div><div class="camera-device-rows">${devices.length?devices.map(cameraDeviceRow).join(""):cameraDeviceRow()}</div></div>`;
 }
+function operationalDossierActivity(d) {
+  const activity=d.activity||{},incidents=activity.incidents||[],works=activity.workOrders||[],
+    incidentEvents=activity.incidentEvents||[],workEvents=activity.workEvents||[],scopeItems=activity.scopeItems||[],safetyReviews=activity.safetyReviews||[];
+  const incidentRows=incidents.map(item=>`<tr><td>${dateTime(item.reported_at)}</td><td><strong>${esc(item.incident_type_name||item.incident_type)}</strong><small>${esc(item.reported_by_name||"Систем / эх өгөгдөл")}${item.reported_note?` · ${esc(item.reported_note)}`:""}</small></td><td>${esc(item.affected_quantity)} ${esc(item.quantity_unit)}</td><td>${esc(item.resolved_quantity)} ${esc(item.quantity_unit)}</td><td><span class="badge ${esc(item.status)}">${lightingStatus(item.status)}</span></td></tr>`).join("");
+  const workRows=works.map(item=>{
+    const rows=scopeItems.filter(scope=>scope.work_order_id===item.id),planned=rows.reduce((sum,row)=>sum+Number(row.planned_quantity||0),0),completed=rows.reduce((sum,row)=>sum+Number(row.completed_quantity||0),0);
+    return `<tr><td><button type="button" class="object-dossier-link" data-object-work="${item.id}">${esc(item.title)}</button><small>${dateTime(item.created_at)} · ${esc(item.created_by_name||"Систем")}</small></td><td>${esc(item.assigned_name||item.department_name||"Оноогоогүй")}</td><td>${rows.length?`${completed}/${planned} (${rows.length} мөр)`:"Хэмжилтгүй"}</td><td><span class="badge ${esc(item.status)}">${lightingStatus(item.workflow_stage||item.status)}</span></td></tr>`;
+  }).join("");
+  const incidentById=new Map(incidents.map(item=>[item.id,item])),eventIncidentIds=new Set(incidentEvents.map(item=>item.incident_id));
+  const incidentEventNames={reported:"Гэмтэл бүртгэсэн",progress:"Гэмтлийн гүйцэтгэл шинэчилсэн",resolved:"Гэмтэл шийдвэрлэсэн",note:"Гэмтэлд тэмдэглэл нэмсэн",legacy_import:"Хуучин мэдээлэл импортолсон",corrected:"Гэмтлийн бүртгэл зассан",cancelled:"Гэмтлийн бүртгэл хүчингүй болгосон"};
+  const timeline=[
+    ...incidentEvents.map(event=>{const incident=incidentById.get(event.incident_id),quantity=event.quantity===null||event.quantity===undefined?"":` · ${event.quantity} ${incident?.quantity_unit||""}`;return {at:event.occurred_at||event.created_at,type:incidentEventNames[event.event_type]||"Гэмтлийн бүртгэл шинэчилсэн",actor:event.actor_name||"Систем",text:`${incident?.incident_type_name||incident?.incident_type||"Гэмтэл"}${quantity}${event.note?` · ${event.note}`:""}`}}),
+    ...incidents.filter(item=>!eventIncidentIds.has(item.id)).map(item=>({at:item.reported_at,type:"Гэмтэл бүртгэсэн",actor:item.reported_by_name||"Систем / эх өгөгдөл",text:`${item.incident_type_name||item.incident_type} · ${item.affected_quantity} ${item.quantity_unit}${item.reported_note?` · ${item.reported_note}`:""}`})),
+    ...workEvents.map(item=>({at:item.created_at,type:item.event_type==="created"?"Ажил үүсгэсэн":"Ажлын төлөв өөрчилсөн",actor:item.actor_name||"Систем",text:[item.from_status&&lightingStatus(item.from_status),item.to_status&&lightingStatus(item.to_status),item.note].filter(Boolean).join(" → ")})),
+    ...safetyReviews.map(item=>({at:item.created_at,type:item.review_type==="start"?"ХАБЭА эхлэхийн өмнөх хяналт":"ХАБЭА дуусгалтын хяналт",actor:item.actor_name||"ХАБЭА",text:`${item.decision==="approved"?"Зөвшөөрсөн":item.decision==="returned"?"Буцаасан":"Хүчингүй болгосон"}${item.risk_score?` · эрсдэл ${item.risk_score}`:""}${item.note?` · ${item.note}`:""}${Array.isArray(item.controls)&&item.controls.length?` · арга хэмжээ: ${item.controls.join(", ")}`:""}`})),
+  ].sort((a,b)=>new Date(b.at)-new Date(a.at));
+  const timelineRows=timeline.slice(0,300).map(item=>`<div class="dossier-event"><i></i><div><strong>${esc(item.type)}</strong><small>${esc(item.actor)} · ${dateTime(item.at)}</small>${item.text?`<p>${esc(item.text)}</p>`:""}</div></div>`).join("");
+  return `<section class="dossier-section dossier-operations"><div class="dossier-section-heading"><div><h3>Гэмтэл ба ажлын түүх</h3><p>Гэмтэл нь эх бүртгэл, ажил нь гүйцэтгэлийн эх сурвалж хэвээрээ. Энд зөвхөн тухайн объектын холбоотой мэдээллийг нэг дор харуулна.</p></div><span class="classification-state">${incidents.length} гэмтэл · ${works.length} ажил</span></div><h4>Гэмтлийн бүртгэл</h4>${incidentRows?`<div class="table-panel"><table class="data-table"><thead><tr><th>Огноо</th><th>Гэмтэл</th><th>Бүртгэсэн</th><th>Шийдсэн</th><th>Төлөв</th></tr></thead><tbody>${incidentRows}</tbody></table></div>`:empty("Гэмтлийн түүх алга","Энэ объектод гэмтэл бүртгэгдээгүй байна.")}<h4>Холбоотой ажил</h4>${workRows?`<div class="table-panel"><table class="data-table"><thead><tr><th>Ажил</th><th>Хариуцагч</th><th>Гүйцэтгэл</th><th>Төлөв</th></tr></thead><tbody>${workRows}</tbody></table></div>`:empty("Харах эрхтэй холбоотой ажил алга","Ажил үүсээгүй эсвэл таны эрхийн хүрээнд харагдахгүй байна.")}<h4>Үйл ажиллагааны цагийн дараалал</h4><div class="dossier-events">${timelineRows||"<p>Үйл ажиллагааны түүх алга.</p>"}</div>${activity.safetyDetailVisible?"":`<p class="dossier-restriction-note">ХАБЭА-н дэлгэрэнгүй нотолгоо зөвхөн эрх бүхий ХАБЭА болон батлах хэрэглэгчид харагдана.</p>`}</section>`;
+}
+function dossierDownloadSnapshot() {
+  const d=state.lightingDossier;if(!d)return;
+  const snapshot={generatedAt:new Date().toISOString(),object:d.item,technical:{lampGroups:d.lampGroups||[],supplyPoints:d.supplyPoints||[],cameraPoints:d.cameraPoints||[],cameraDevices:d.cameraDevices||[]},components:d.components||[],media:(d.media||[]).map(({id,title,document_type,status,relation_type,original_name,mime_type,size_bytes,created_at})=>({id,title,document_type,status,relation_type,original_name,mime_type,size_bytes,created_at})),activity:d.activity||{}};
+  const blob=new Blob([JSON.stringify(snapshot,null,2)],{type:"application/json;charset=utf-8"}),url=URL.createObjectURL(blob),link=document.createElement("a");
+  link.href=url;link.download=`${String(d.item.display_code||d.item.code||"object").replace(/[^a-zA-Z0-9_-]+/g,"-")}-huviin-hereg.json`;document.body.appendChild(link);link.click();link.remove();URL.revokeObjectURL(url);
+}
+function printOperationalDossier() {
+  document.body.classList.add("printing-dossier");
+  const cleanup=()=>document.body.classList.remove("printing-dossier");
+  window.addEventListener("afterprint",cleanup,{once:true});window.print();setTimeout(cleanup,1000);
+}
 function lightingDossierHtml(d) {
   const o = d.item,
     active = d.components.filter((x) => !x.removed_at),
@@ -374,7 +468,7 @@ function lightingDossierHtml(d) {
   const retire = d.capabilities.canRetire && o.status !== "retired"
     ? `<section class="dossier-section dossier-retire"><h3>Объектыг бүртгэлээс хасах</h3><p>Өгөгдлийг бүр мөсөн устгахгүй. Идэвхтэй бүрэлдэхүүн холбоос болон дуусаагүй ажиллагааны бүртгэл байхгүй үед объектыг audit түүхтэй нь архивлана.</p><form id="dossierObjectRetireForm" class="dossier-note-form"><input name="reason" minlength="3" maxlength="2000" required placeholder="Архивлах шалтгаан"><input name="expectedVersion" type="hidden" value="${esc(o.version)}"><button class="danger">Архивлах</button></form></section>`
     : "";
-  return `<div class="dossier-summary"><div><span>Код</span><strong>${esc(o.display_code || o.code)}</strong></div><div><span>Төрөл</span><strong>${esc(o.object_type)}</strong></div><div><span>Байршил</span><strong>${esc(o.location || "—")}</strong></div><div><span>${o.domain==="camera"?"Шон / цэг":"Шугамын урт"}</span><strong>${o.domain==="camera"?(d.cameraPoints||[]).length:(o.linear_length_m?`${esc(o.linear_length_m)} м`:"—")}</strong></div></div>${edit}${technical}
+  return `<div class="dossier-document-actions"><span>Хувийн хэрэг · ${dateTime(new Date().toISOString())}</span><div><button type="button" class="secondary" data-dossier-download>JSON татах</button><button type="button" class="primary" data-dossier-print>Хэвлэх / PDF</button></div></div><div class="dossier-summary"><div><span>Код</span><strong>${esc(o.display_code || o.code)}</strong></div><div><span>Төрөл</span><strong>${esc(o.object_type)}</strong></div><div><span>Байршил</span><strong>${esc(o.location || "—")}</strong></div><div><span>${o.domain==="camera"?"Шон / цэг":"Шугамын урт"}</span><strong>${o.domain==="camera"?(d.cameraPoints||[]).length:(o.linear_length_m?`${esc(o.linear_length_m)} м`:"—")}</strong></div></div>${operationalDossierActivity(d)}${edit}${technical}
     <section class="dossier-section"><h3>Бүрэлдэхүүн хөрөнгө</h3><p>Хөрөнгийн мастер бүртгэлийг нүүлгэхгүй. Энд тухайн хөрөнгийн ямар хэсэг, хэдэн нэгж энэ объектод ашиглагдаж байгааг хугацаатай холбоно.</p>${componentRows ? `<div class="table-panel"><table class="data-table"><thead><tr><th>Хөрөнгө</th><th>Үүрэг</th><th>Хэмжээ</th><th>Суурилуулсан</th><th>Үйлдэл</th></tr></thead><tbody>${componentRows}</tbody></table></div>` : empty("Бүрэлдэхүүн оноогоогүй", o.domain==="camera"?"Камерын үндсэн хөрөнгийн холбоос энд харагдана.":"Шон, кабель, тоолуур, гэрлийн толгой зэрэг хөрөнгийг доорх маягтаар холбоно.")}${allocate}${history.length ? `<details><summary>Өмнө нь хассан холбоос (${history.length})</summary>${history.map((x) => `<p>${esc(x.asset_name)} · ${esc(x.quantity)} ${esc(x.unit)} · ${date(x.removed_at)}</p>`).join("")}</details>` : ""}</section>
     ${media}${retire}<section class="dossier-section"><h3>Өөрчлөлтийн audit түүх</h3><div class="dossier-events">${events || "<p>Өөрчлөлтийн түүх алга.</p>"}</div></section>`;
 }
@@ -427,6 +521,11 @@ document.addEventListener("click", async (event) => {
     zoom = event.target.closest("[data-lighting-zoom]"),
     faultStep = event.target.closest("[data-fault-step]"),
     clearFault = event.target.closest("[data-clear-fault]"),
+    addFault = event.target.closest("[data-add-fault]"),
+    removeFaultDraft = event.target.closest("[data-remove-fault-draft]"),
+    clearAllFaultDrafts = event.target.closest("[data-clear-all-fault-drafts]"),
+    cancelLightingIncident = event.target.closest("[data-cancel-lighting-incident]"),
+    faultView = event.target.closest("[data-lighting-fault-view]"),
     expanded = event.target.closest("[data-fault-expanded]"),
     addLamp = event.target.closest("[data-add-lamp-row]"),
     addSupply = event.target.closest("[data-add-supply-row]"),
@@ -435,7 +534,9 @@ document.addEventListener("click", async (event) => {
     removeCameraPoint = event.target.closest("[data-remove-camera-point]"),
     removeCameraDevice = event.target.closest("[data-remove-camera-device]"),
     removeSpecRow = event.target.closest("[data-remove-spec-row]"),
-    mediaDownload = event.target.closest("[data-object-media-download]");
+    mediaDownload = event.target.closest("[data-object-media-download]"),
+    dossierDownload = event.target.closest("[data-dossier-download]"),
+    dossierPrint = event.target.closest("[data-dossier-print]");
   if (tab) {
     state.lightingTab = tab.dataset.lightingTab;
     render();
@@ -457,6 +558,10 @@ document.addEventListener("click", async (event) => {
     state.lightingFaultExpanded = !state.lightingFaultExpanded;
     render();
   }
+  if (faultView) {
+    state.lightingFaultView = faultView.dataset.lightingFaultView;
+    render();
+  }
   if (faultStep) {
     const input=document.querySelector(`[data-fault-field="affectedQuantity"][data-object-id="${faultStep.dataset.objectId}"]`);
     if(input){
@@ -472,6 +577,35 @@ document.addEventListener("click", async (event) => {
     state.lightingFaultBatchReportedAt = null;
     render();
   }
+  if(addFault){
+    const objectId=addFault.dataset.addFault,row=addFault.closest('[data-fault-row]'),typeInput=row?.querySelector('[data-fault-field="incidentType"]'),quantityInput=row?.querySelector('[data-fault-field="affectedQuantity"]'),noteInput=row?.querySelector('[data-fault-field="note"]'),
+      incidentType=typeInput?.value||'',quantity=Number(quantityInput?.value||0),maximum=Number(quantityInput?.max||1000000);
+    if(!incidentType||!Number.isInteger(quantity)||quantity<1)return toast('Гэмтлийн төрөл болон шинээр нэмэх тоог оруулна уу',true);
+    if(quantity>maximum)return toast(`Энэ төрлийн үлдсэн боломжит тоо ${maximum}`,true);
+    const key=`${objectId}:${incidentType}`,existing=state.lightingFaultDrafts[key];
+    state.lightingFaultDrafts[key]={rowKey:existing?.rowKey||crypto.randomUUID(),objectId,incidentType,
+      affectedQuantity:Number(existing?.affectedQuantity||0)+quantity,note:String(noteInput?.value||existing?.note||'').trim()};
+    state.lightingFaultEditors[objectId]={incidentType,affectedQuantity:'',note:''};
+    state.lightingFaultBatchKey=null;state.lightingFaultBatchReportedAt=null;render();
+  }
+  if(removeFaultDraft){
+    const entry=Object.entries(state.lightingFaultDrafts).find(([,item])=>item.rowKey===removeFaultDraft.dataset.removeFaultDraft);
+    if(entry)delete state.lightingFaultDrafts[entry[0]];
+    state.lightingFaultBatchKey=null;state.lightingFaultBatchReportedAt=null;render();
+  }
+  if(clearAllFaultDrafts){
+    state.lightingFaultDrafts={};state.lightingFaultBatchKey=null;state.lightingFaultBatchReportedAt=null;render();
+  }
+  if(cancelLightingIncident){
+    const reason=prompt('Яагаад энэ гэмтлийн бүртгэлийг хүчингүй болгож байгааг бичнэ үү. Түүх устахгүй.','Буруу бүртгэсэн');
+    if(!reason?.trim())return;
+    cancelLightingIncident.disabled=true;
+    try{
+      await api(`/api/lighting/incidents/${cancelLightingIncident.dataset.cancelLightingIncident}/cancel`,{method:'POST',body:JSON.stringify({
+        reason:reason.trim(),expectedVersion:Number(cancelLightingIncident.dataset.version),idempotencyKey:crypto.randomUUID()})});
+      await loadLighting(true);toast('Алдаатай бүртгэлийг түүхтэй нь хүчингүй болголоо');
+    }catch(error){cancelLightingIncident.disabled=false;toast(error.message,true)}
+  }
   if(addLamp)$("#lightingLampRows").insertAdjacentHTML("beforeend",lightingLampRow());
   if(addSupply){
     const assets=(state.lightingDossier.components||[]).filter((item,index,list)=>!item.removed_at&&list.findIndex(other=>!other.removed_at&&other.asset_id===item.asset_id)===index);
@@ -483,6 +617,8 @@ document.addEventListener("click", async (event) => {
   if(removeCameraDevice)removeCameraDevice.closest(".camera-device-row")?.remove();
   if(removeSpecRow)(removeSpecRow.closest(".lighting-supply-row")||removeSpecRow.closest(".lamp-spec-row"))?.remove();
   if(mediaDownload)downloadLightingObjectMedia(mediaDownload);
+  if(dossierDownload)dossierDownloadSnapshot();
+  if(dossierPrint)printOperationalDossier();
   if (object) openLightingDossier(object.dataset.objectDossier);
   if (work) {
     $("#lightingDossierDialog").close();
@@ -510,39 +646,33 @@ document.addEventListener("change", (event) => {
     form.elements.unit.value = option?.dataset.unit || "";
     form.elements.quantity.max = option?.dataset.available || "";
   }
-  if(event.target.matches('[data-fault-field="incidentType"],[data-fault-field="affectedQuantity"]'))render();
+  if(event.target.matches('[data-fault-field="incidentType"]'))render();
 });
 document.addEventListener("input", (event) => {
   if (!event.target.matches("[data-fault-field]")) return;
   const objectId=event.target.dataset.objectId,field=event.target.dataset.faultField;
-  const current=state.lightingFaultDrafts[objectId]||{
-    rowKey:crypto.randomUUID(),
-    incidentType:state.lightingWorkspace?.incidentTypes?.[0]?.code||"",
+  const current=state.lightingFaultEditors[objectId]||{
+    incidentType:event.target.closest("[data-fault-row]")?.querySelector('[data-fault-field="incidentType"]')?.value||"",
     affectedQuantity:"",
     note:""
   };
   current[field]=event.target.value;
-  state.lightingFaultDrafts[objectId]=current;
+  state.lightingFaultEditors[objectId]=current;
   state.lightingFaultBatchKey=null;
   state.lightingFaultBatchReportedAt=null;
-  const form=event.target.closest("form"),button=form?.querySelector("button.primary"),visibleObjectIds=new Set(lightingScoped(state.lightingWorkspace).assets.map(object=>object.id)),count=Object.entries(state.lightingFaultDrafts).filter(([id,item])=>visibleObjectIds.has(id)&&Number(item.affectedQuantity)>0).length;
-  if(button)button.disabled=!count;
-  const countElement=form?.querySelector(".lighting-fault-save span b");
-  if(countElement)countElement.textContent=String(count);
-  const clear=form?.querySelector(`[data-clear-fault="${objectId}"]`);
-  if(clear)clear.disabled=!(current.affectedQuantity||current.note);
 });
 document.addEventListener("submit", async (event) => {
   if (event.target.id === "lightingFaultBatchForm") {
     event.preventDefault();
     state.lightingFaultBatchReportedAt=state.lightingFaultBatchReportedAt||new Date().toISOString();
-    const visibleObjectIds=new Set(lightingScoped(state.lightingWorkspace).assets.map(object=>object.id));
-    const rows=Object.entries(state.lightingFaultDrafts)
-      .filter(([id,item])=>visibleObjectIds.has(id)&&Number(item.affectedQuantity)>0)
-      .map(([operationalObjectId,item])=>({
+    const allTargets=lightingFaultTargets(state.lightingWorkspace),targetById=new Map(allTargets.map(object=>[object.id,object]));
+    const rows=Object.values(state.lightingFaultDrafts)
+      .filter(item=>targetById.has(item.objectId)&&Number(item.affectedQuantity)>0)
+      .map(item=>({
         rowKey:item.rowKey,
-        operationalObjectId,
-        incidentType:item.incidentType||state.lightingWorkspace?.incidentTypes?.[0]?.code||"",
+        operationalObjectId:targetById.get(item.objectId)?.faultTargetKind==="object"?item.objectId:null,
+        assetId:targetById.get(item.objectId)?.faultTargetKind==="asset"?item.objectId:null,
+        incidentType:item.incidentType,
         affectedQuantity:Number(item.affectedQuantity),
         reportedAt:state.lightingFaultBatchReportedAt,
         note:String(item.note||"").trim()
@@ -556,7 +686,10 @@ document.addEventListener("submit", async (event) => {
         method:"POST",
         body:JSON.stringify({idempotencyKey:state.lightingFaultBatchKey,rows})
       });
-      for(const item of result.items||[])delete state.lightingFaultDrafts[item.operational_object_id];
+      for(const saved of result.items||[]){
+        const entry=Object.entries(state.lightingFaultDrafts).find(([,draft])=>draft.rowKey===saved.rowKey);
+        if(entry)delete state.lightingFaultDrafts[entry[0]];
+      }
       state.lightingFaultBatchKey=null;
       state.lightingFaultBatchReportedAt=null;
       await loadLighting(true);

@@ -33,16 +33,15 @@ test("lighting object edit and retirement are tenant scoped, audited and depende
   assert.doesNotMatch(route,/DELETE FROM operational_objects/i);
 });
 
-test("object registry keeps master data actions and excludes fault and work panels from the dossier",()=>{
+test("object registry keeps master writes separate and labels the activity projection as a dossier",()=>{
   const web=read("..","web","lighting.js");
   const start=web.indexOf("function lightingDossierHtml");
   const end=web.indexOf("async function openLightingDossier",start);
   const dossier=web.slice(start,end);
   assert.match(web,/objectRegistry=state\.lightingTab==="assets"/);
-  assert.match(web,/Нээх \/ засах/);
+  assert.match(web,/Хувийн хэрэг/);
   assert.match(dossier,/dossierObjectEditForm/);
   assert.match(dossier,/dossierObjectRetireForm/);
   assert.match(dossier,/Бүрэлдэхүүн хөрөнгө/);
-  assert.doesNotMatch(dossier,/d\.incidents/);
-  assert.doesNotMatch(dossier,/d\.workOrders/);
+  assert.match(dossier,/operationalDossierActivity\(d\)/);
 });
