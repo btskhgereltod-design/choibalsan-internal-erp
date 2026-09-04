@@ -7,7 +7,7 @@ decision. It does not authorize or record a production deployment.
 
 ## Candidate identity
 
-- Source baseline before the uncommitted candidate work: `77d3bc3`.
+- Reviewed implementation commit: `7d31ef9`.
 - API image: `overva-production-go-candidate:20260904`
   (`sha256:667949a3a632b523c2b8028f96f50795da6e1b78337b0b500422ba5a546d5eb4`).
 - Web image: `overva-production-go-web-candidate:20260904`
@@ -19,10 +19,9 @@ decision. It does not authorize or record a production deployment.
 - Production and LAN containers were not rebuilt, restarted, migrated or
   switched during this preparation.
 
-The candidate must be committed and rebuilt from that exact reviewed commit
-before promotion. The image digests above are verification artifacts for the
-current working-tree candidate, not sufficient immutable source provenance for
-production by themselves.
+The image digests above were working-tree rehearsal artifacts. The candidate
+must now be rebuilt from implementation commit `7d31ef9`; only the rebuilt
+digests are eligible for promotion.
 
 ## Included capability scope
 
@@ -105,8 +104,9 @@ or create an Employee.
 
 ## Required Go sequence
 
-1. Review the complete working-tree diff, exclude unrelated files, commit it,
-   and rebuild both images from the exact commit. Record new immutable digests.
+1. Rebuild both images from implementation commit `7d31ef9` and record their
+   new immutable digests. The unrelated `OVERVA.code-workspace` remains outside
+   this release.
 2. Repeat syntax, full tests, dependency audit, clean `0001`–`0110` migration,
    release check and live domain rehearsals against those exact images.
 3. Obtain explicit user authorization for production deployment and agree a

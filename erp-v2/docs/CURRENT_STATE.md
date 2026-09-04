@@ -9,8 +9,9 @@ validated at enterprise scale.
 ## 2026-09-04 production-go preparation (not deployed)
 
 - The dashboard, report-schedule, Work follow-up/team, and lighting/camera fault
-  changes are assembled as a local release candidate. Production and LAN remain
-  untouched. `PRODUCTION_GO_CANDIDATE_20260904.md` records the exact candidate
+  changes are committed as implementation commit `7d31ef9` and assembled as a
+  local release candidate. Production and LAN remain untouched.
+  `PRODUCTION_GO_CANDIDATE_20260904.md` records the exact candidate
   images, schema transition, verification evidence, rollback identity and
   remaining Go gates.
 - Production is read-only verified healthy at schema `0105`; the candidate adds

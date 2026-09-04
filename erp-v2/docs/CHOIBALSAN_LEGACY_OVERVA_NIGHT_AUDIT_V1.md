@@ -1,7 +1,7 @@
 # Choibalsan Legacy ERP to OVERVA Night Audit V1
 
-Date: 2026-09-03  
-Repository commit at audit start: `77d3bc3`  
+Date: 2026-09-03
+Repository commit at audit start: `77d3bc3`
 Scope: local/demo and repository only; production was not connected, migrated,
 written, restarted, or deployed.
 
