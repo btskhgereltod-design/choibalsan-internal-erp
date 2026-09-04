@@ -6,6 +6,23 @@ This document answers one question: **what exists in the repository now?** It
 does not claim that every implemented foundation is complete or production-
 validated at enterprise scale.
 
+## 2026-09-04 local demo parity refresh
+
+- A verified local backup `overva-20260904T113313Z` was created before changing
+  the demo environment. The `localhost:4200` Web and its isolated
+  `overva-local-demo-api` were rebuilt from commit `8cade7e`; recursive content
+  hashes now show zero Web or API source-file differences from production.
+- The demo `choibalsan-hugjil` tenant previously exposed 14 of the 25 modules
+  enabled in production. The 11 missing modules (`ai-director`, `archive`,
+  `automation`, `developer`, `fleet`, `integration-lab`, `iot`, `maintenance`,
+  `map`, `procurement`, and `records`) were enabled through the authenticated
+  tenant module API, producing 11 attributable `developer.module_toggle` audit
+  rows. Session/report/CSV smoke passes with 25 modules and 102 permissions.
+- Production data was not copied into the demo. The local database remains a
+  separate one-tenant test boundary at schema `0110`. Its one pre-existing
+  unlinked bootstrap login still prevents a production-grade release check and
+  requires a separate identity decision; it was not silently linked or removed.
+
 ## 2026-09-04 connected-operations production release
 
 - Production Web hotfix `8cade7e` corrects the fault-intake empty state found
