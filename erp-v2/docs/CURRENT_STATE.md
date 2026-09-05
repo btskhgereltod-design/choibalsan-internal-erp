@@ -6,6 +6,24 @@ This document answers one question: **what exists in the repository now?** It
 does not claim that every implemented foundation is complete or production-
 validated at enterprise scale.
 
+## 2026-09-05 host-retirement migration preparation
+
+- Local `main` and GitHub `origin/main` now both point to `47d9c47`; 42
+  previously local-only commits were pushed after a secret-pattern and large
+  blob preflight. Real production secrets remain ignored and were not uploaded.
+- Production backup `overva-20260905T032053Z` passed checksums, archive listing,
+  and an isolated restore through schema `0110` with four organizations and 106
+  Work Orders. The disposable restore database was removed after verification.
+- Exact current API/Web images, a recovered capture of the running public-site
+  image, the verified database/uploads backup, and a complete verified Git
+  bundle are staged with SHA-256 evidence under
+  `D:\OVERVA-Server-Migration`. This remains the same physical SSD and is not an
+  off-site backup.
+- Retirement is NO-GO until a Linux destination server, approved encrypted
+  off-device secret/data transfer, independent backup/restore proof, and
+  Cloudflare cutover pass while this workstation is powered off. See
+  `HOST_RETIREMENT_MIGRATION_READINESS_20260905.md`.
+
 ## 2026-09-05 governed human-workflow demo rehearsal
 
 - The isolated `localhost:4200` demo now runs schema `0111`; production remains
